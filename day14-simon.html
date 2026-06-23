@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 14 — Simon</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* Simon board */
+  #simon { position:relative; width:300px; height:300px; border-radius:50%; background:#0f172a; padding:14px; box-shadow:0 18px 40px rgba(0,0,0,.25); }
+  .pad { position:absolute; width:130px; height:130px; cursor:pointer; transition:filter .08s, transform .08s; filter:brightness(.55); }
+  .pad:active { transform:scale(.985); }
+  .pad.lit { filter:brightness(1.55); }
+  #pad-green  { top:14px;  left:14px;  border-radius:130px 8px 8px 8px; background:#16a34a; }
+  #pad-red    { top:14px;  right:14px; border-radius:8px 130px 8px 8px; background:#dc2626; }
+  #pad-yellow { bottom:14px;left:14px;  border-radius:8px 8px 8px 130px; background:#eab308; }
+  #pad-blue   { bottom:14px;right:14px; border-radius:8px 8px 130px 8px; background:#2563eb; }
+  #hub { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:96px; height:96px; border-radius:50%; background:#020617; border:6px solid #1e293b; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#e2e8f0; }
+  #hub .num { font-size:26px; font-weight:800; line-height:1; }
+  #hub .lab { font-size:9px; letter-spacing:.12em; color:#64748b; text-transform:uppercase; margin-top:2px; }
+  .simon-disabled { pointer-events:none; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 14</div>
+      <h1 class="text-xl font-bold">🟢 Simon — Watch, Remember, Repeat</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Watch the sequence, then play it back.</h2>
+      <p class="text-slate-500 mb-4">Press Start. Each round the board flashes a colour pattern with its own tone, growing by one every time. When it stops, repeat the pattern by clicking the pads in the same order. Get the whole sequence right and the next round adds another step — and speeds up a touch. One wrong pad ends the game.</p>
+      <div class="flex justify-center"><div id="simon" class="simon-disabled">
+        <div id="pad-green"  class="pad" data-pad="0"></div>
+        <div id="pad-red"    class="pad" data-pad="1"></div>
+        <div id="pad-yellow" class="pad" data-pad="2"></div>
+        <div id="pad-blue"   class="pad" data-pad="3"></div>
+        <div id="hub"><div class="num" id="round">0</div><div class="lab" id="hubLabel">round</div></div>
+      </div></div>
+      <div class="flex justify-center items-center gap-6 mt-5 text-sm">
+        <button id="start" class="bg-emerald-600 text-white px-6 py-2 rounded-lg font-semibold">Start</button>
+        <span class="text-slate-500">Best: <span id="best" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500" id="msg">Press Start to play.</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Each pad has a distinct beep so you can follow the pattern by ear as well as by colour. Your turn the board lights and sounds on every press. Sound is generated live — if your browser blocks audio the colours still work on their own.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Simon works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Four pads, a growing array, a timed flash loop, live beeps from the Web Audio API, and a compare-as-you-go input check. ~90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The four pads</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Simon has four coloured pads. We give each one an index — 0 green, 1 red, 2 yellow, 3 blue — and pair it with a musical note in hertz. The index is what we store and compare; the colour and tone are just how we show it. Keeping pads as plain numbers makes the sequence trivial to record and replay.</p>
+        <div class="relative">
+          <pre>const PADS = [
+  { id: "pad-green",  freq: 392 },  // 0  G
+  { id: "pad-red",    freq: 330 },  // 1  E
+  { id: "pad-yellow", freq: 277 },  // 2  C#
+  { id: "pad-blue",   freq: 247 },  // 3  B
+];</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The sequence is just an array</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole game state is one array of pad indexes, like <code>[2, 0, 3]</code>. Each new round we push one more random pad onto the end, so the pattern grows by exactly one. The length of that array is the round number and, when you lose, your score. Everything else reads from this single list.</p>
+        <div class="relative">
+          <pre>let sequence = [];
+
+function addStep(){
+  const pad = Math.floor(Math.random() * 4);  // 0..3
+  sequence.push(pad);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Lighting and beeping one pad</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A flash is simple: add a <code>lit</code> class so the pad brightens, play its tone, then remove the class a moment later. We return a Promise that resolves after the flash so the caller can wait for it. The same function is reused when you press a pad, so playback and input look and sound identical.</p>
+        <div class="relative">
+          <pre>function flash(pad, ms = 400){
+  const el = document.getElementById(PADS[pad].id);
+  el.classList.add("lit");
+  beep(PADS[pad].freq, ms);
+  return new Promise(res =&gt; setTimeout(() =&gt; {
+    el.classList.remove("lit");
+    res();
+  }, ms));
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Real beeps with the Web Audio API</h3></div>
+        <p class="text-sm text-slate-600 mb-3">No sound files — the browser makes the tone for us. We create one <code>AudioContext</code>, then for each beep spin up an oscillator at the pad's frequency and a gain node to fade it out so it doesn't click. A tiny try/catch means that if audio is blocked, the game keeps running silently instead of crashing.</p>
+        <div class="relative">
+          <pre>let ac;
+function beep(freq, ms){
+  try {
+    ac = ac || new (window.AudioContext || webkitAudioContext)();
+    const osc = ac.createOscillator(), gain = ac.createGain();
+    osc.type = "sine"; osc.frequency.value = freq;
+    osc.connect(gain); gain.connect(ac.destination);
+    gain.gain.setValueAtTime(0.3, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + ms/1000);
+    osc.start(); osc.stop(ac.currentTime + ms/1000);
+  } catch (e) { /* audio blocked → stay silent */ }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Playing back the whole sequence</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To show the pattern we walk the array and <code>await</code> each flash, with a short gap between them. Because <code>flash</code> returns a Promise, <code>await</code> lines the flashes up one after another instead of all at once. The flash time shrinks as rounds grow, so the game speeds up. While it plays, input is locked.</p>
+        <div class="relative">
+          <pre>async function playback(){
+  state = "showing";
+  const speed = Math.max(200, 460 - sequence.length * 18);
+  for (const pad of sequence){
+    await flash(pad, speed);
+    await wait(speed * 0.4);          // gap between flashes
+  }
+  state = "input"; expected = 0;      // now it's the player's turn
+}
+const wait = ms =&gt; new Promise(r =&gt; setTimeout(r, ms));</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Capturing input and comparing</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When it's your turn, each pad click is checked immediately against <code>sequence[expected]</code> — the next pad we expect. A match advances the pointer; a mismatch ends the game at once. We don't wait for the whole pattern, so a wrong tap fails fast. Clicks are ignored unless the state is <code>input</code>.</p>
+        <div class="relative">
+          <pre>function press(pad){
+  if (state !== "input") return;      // ignore clicks while showing
+  flash(pad, 220);
+  if (pad !== sequence[expected]) return gameOver();
+  expected++;
+  if (expected === sequence.length)   // whole pattern repeated!
+    setTimeout(nextRound, 700);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Next round, game over, and best score</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Clearing a round adds one step and replays the longer pattern. Losing plays a low buzzer, shows the length you reached as the score, and — if it beats your record — saves it to <code>localStorage</code> so your best survives a refresh. The round number is just the sequence length all the way through.</p>
+        <div class="relative">
+          <pre>function nextRound(){ addStep(); playback(); }
+
+function gameOver(){
+  state = "over";
+  beep(110, 600);                                   // buzzer
+  const score = sequence.length - 1;
+  best = Math.max(best, score);
+  localStorage.setItem("simonBest", best);
+  showResult(score, best);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Wire up the pads</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Give every pad a click handler that calls <code>press</code> with its index, and a Start button that resets the sequence and kicks off round one. The state variable (<code>idle → showing → input → over</code>) decides what each click does. Double-click the file — no server needed.</p>
+        <div class="relative">
+          <pre>let state = "idle", expected = 0;
+let best = +localStorage.getItem("simonBest") || 0;
+
+PADS.forEach((p, i) =&gt;
+  document.getElementById(p.id).onclick = () =&gt; press(i));
+
+document.getElementById("start").onclick = () =&gt; {
+  sequence = []; state = "showing";
+  nextRound();                         // round 1
+};</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 14 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Simon with a growing sequence array, an async flash-playback loop, live Web Audio tones, and compare-as-you-go input. Try adding a strict mode, a countdown timer per pad, or a two-player "pass the pattern" twist.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== SIMON =====
+const PADS = [
+  { id: "pad-green",  freq: 392 },  // 0  G
+  { id: "pad-red",    freq: 330 },  // 1  E
+  { id: "pad-yellow", freq: 277 },  // 2  C#
+  { id: "pad-blue",   freq: 247 },  // 3  B
+];
+const boardEl  = document.getElementById("simon");
+const roundEl  = document.getElementById("round");
+const hubLabel = document.getElementById("hubLabel");
+const bestEl   = document.getElementById("best");
+const msgEl    = document.getElementById("msg");
+
+let sequence = [];
+let state = "idle";          // idle · showing · input · over
+let expected = 0;
+let best = +localStorage.getItem("simonBest") || 0;
+bestEl.textContent = best;
+
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+// --- Web Audio API: real beeps, graceful no-op if blocked ---
+let ac = null;
+function beep(freq, ms){
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === "suspended") ac.resume();
+    const osc = ac.createOscillator(), gain = ac.createGain();
+    osc.type = "sine"; osc.frequency.value = freq;
+    osc.connect(gain); gain.connect(ac.destination);
+    gain.gain.setValueAtTime(0.0001, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + ms / 1000);
+    osc.start();
+    osc.stop(ac.currentTime + ms / 1000);
+  } catch (e) { /* audio blocked → stay silent */ }
+}
+
+function flash(pad, ms = 400){
+  const el = document.getElementById(PADS[pad].id);
+  el.classList.add("lit");
+  beep(PADS[pad].freq, ms);
+  return new Promise(res => setTimeout(() => {
+    el.classList.remove("lit");
+    res();
+  }, ms));
+}
+
+function addStep(){
+  sequence.push(Math.floor(Math.random() * 4));
+}
+
+async function playback(){
+  state = "showing";
+  boardEl.classList.add("simon-disabled");
+  roundEl.textContent = sequence.length;
+  hubLabel.textContent = "watch";
+  msgEl.textContent = "Watch the pattern…";
+  await wait(500);
+  const speed = Math.max(200, 460 - sequence.length * 18);   // speeds up
+  for (const pad of sequence){
+    await flash(pad, speed);
+    await wait(speed * 0.4);
+  }
+  state = "input";
+  expected = 0;
+  boardEl.classList.remove("simon-disabled");
+  hubLabel.textContent = "your turn";
+  msgEl.textContent = "Your turn — repeat it.";
+}
+
+function nextRound(){
+  addStep();
+  playback();
+}
+
+function press(pad){
+  if (state !== "input") return;
+  flash(pad, 220);
+  if (pad !== sequence[expected]) return gameOver();
+  expected++;
+  if (expected === sequence.length){
+    state = "showing";
+    boardEl.classList.add("simon-disabled");
+    hubLabel.textContent = "nice!";
+    msgEl.textContent = "Correct! Next round…";
+    setTimeout(nextRound, 800);
+  }
+}
+
+function gameOver(){
+  state = "over";
+  boardEl.classList.add("simon-disabled");
+  beep(110, 600);   // buzzer
+  const score = sequence.length - 1;
+  if (score > best){
+    best = score;
+    localStorage.setItem("simonBest", best);
+    bestEl.textContent = best;
+  }
+  roundEl.textContent = score;
+  hubLabel.textContent = "game over";
+  msgEl.textContent = "❌ Wrong pad! Score: " + score + ". Press Start to retry.";
+  document.getElementById("start").textContent = "Restart";
+}
+
+PADS.forEach((p, i) =>
+  document.getElementById(p.id).onclick = () => press(i));
+
+document.getElementById("start").onclick = () => {
+  if (state === "showing") return;   // don't interrupt a flashing pattern
+  sequence = [];
+  expected = 0;
+  document.getElementById("start").textContent = "Start";
+  beep(330, 120);                    // unlock audio on user gesture
+  nextRound();
+};
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The game is remember + repeat", why:"Simon is a memory test, not a strategy game. The machine shows you a pattern of colours, and your only job is to play that exact pattern back. Each round it adds one more colour to the end, so the pattern keeps growing and gets harder to hold in your head. Strip away the lights and sound and the whole game is: show a list, then check that the player can reproduce it in order.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">machine shows → 🟢🔴🟡<br>you repeat → 🟢🔴🟡 ✓</div>`, code:`// the game in one sentence:
+// 1) machine flashes a growing colour pattern
+// 2) player must click the same pads in the same order
+// 3) right → longer pattern · wrong → game over` },
+  { title:"2. Storing the pattern as an array", why:"We don't need anything fancy to remember the pattern — a single array of numbers does it. Each pad is a number from 0 to 3, so a pattern like green-red-yellow is just [0, 1, 2]. The array's length is the round number, and when you lose it's your score. Because the whole game lives in one list, growing it, replaying it, and comparing against it are all one-liners.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">0 green · 1 red · 2 yellow · 3 blue<br>sequence = [2, 0, 3, 0]</div>`, code:`let sequence = [];
+// each round, append one random pad (0..3)
+sequence.push(Math.floor(Math.random() * 4));` },
+  { title:"3. Flashing one pad", why:"A single flash is the building block of everything. We brighten the pad by adding a CSS class, play its tone, then remove the class a moment later so it dims again. Wrapping that in a Promise lets the rest of the game 'wait' for the flash to finish before moving on. The exact same flash is used when the machine shows the pattern and when you press a pad, so they feel identical.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">add .lit + beep → wait → remove .lit</div>`, code:`function flash(pad, ms){
+  el.classList.add("lit");     // brighten
+  beep(PADS[pad].freq, ms);    // sound
+  return new Promise(res =>
+    setTimeout(() => { el.classList.remove("lit"); res(); }, ms));
+}` },
+  { title:"4. The playback loop with timed delays", why:"Showing the pattern means flashing each pad in turn, with a small pause between them so they read as separate beats. If we fired them all at once they would blur into a single blink. The trick is timing: each flash lasts a set number of milliseconds, then a gap, then the next one. This timed loop is what turns a plain array into a pattern the eye and ear can follow.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">flash · gap · flash · gap · flash …</div>`, code:`for (const pad of sequence){
+  await flash(pad, speed);     // light + beep this pad
+  await wait(speed * 0.4);     // short gap before the next
+}` },
+  { title:"5. Chaining flashes with async / await", why:"JavaScript runs without waiting by default, so a normal loop would start all the flashes in the same instant. We need them to happen one after another. Because flash returns a Promise, putting await in front of it pauses the loop until that flash is done, then continues to the next. await inside an async function is the clean way to say 'do this, then this, then this' with real time passing in between.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">await = do this, THEN the next — not all at once</div>`, code:`async function playback(){
+  for (const pad of sequence){
+    await flash(pad, speed);   // <-- pause here until done
+  }
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));` },
+  { title:"6. Capturing and comparing player input", why:"When it's your turn we track a pointer called 'expected' — the index of the next pad we're waiting for. Every click is checked against sequence[expected] the instant it happens. If it matches we move the pointer forward; if it doesn't, the game ends straight away. We compare as you go rather than waiting for the whole pattern, so a wrong tap fails immediately and fairly.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click == sequence[expected] ? advance : game over</div>`, code:`function press(pad){
+  if (pad !== sequence[expected]) return gameOver();
+  expected++;
+  if (expected === sequence.length) nextRound();  // all correct!
+}` },
+  { title:"7. Making sound with the Web Audio API", why:"There are no audio files here — the browser synthesises each tone live. We create one AudioContext, then for every beep make an oscillator set to the pad's frequency and route it through a gain node that fades the volume out so it doesn't click. Different frequencies give each pad its own voice, so you can follow the pattern by ear. The whole thing sits in a try/catch, so if a browser blocks audio the game simply plays silently.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">oscillator(freq) → gain(fade) → speakers</div>`, code:`const osc = ac.createOscillator(), gain = ac.createGain();
+osc.frequency.value = freq;          // each pad = a note
+osc.connect(gain); gain.connect(ac.destination);
+osc.start(); osc.stop(ac.currentTime + ms/1000);` },
+  { title:"8. The state machine: showing vs input vs over", why:"At any moment the game is in exactly one state: idle, showing the pattern, taking your input, or over. That single word decides what a click means — during 'showing' clicks are ignored, during 'input' they're checked. Without this you could tap pads while the machine is still flashing and confuse everything. A tiny state variable keeps the turns clean and stops the game from ever getting stuck.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">idle → showing → input → (correct) → showing … → over</div>`, code:`let state = "idle";
+// clicks only count while it's your turn:
+function press(pad){ if (state !== "input") return; /* … */ }` },
+  { title:"9. Increasing difficulty and speed", why:"Each cleared round pushes one more pad onto the array, so the pattern you must remember grows by one every time. We also shorten the flash time as the sequence lengthens, so later rounds play faster and leave less time to react. The two together — more to recall and less time to do it — are what makes Simon ramp from trivial to genuinely hard within a dozen rounds.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">length +1 each round · flash time shrinks</div>`, code:`const speed = Math.max(200, 460 - sequence.length * 18);
+// round 1 ≈ 440ms per flash · round 12 ≈ 244ms · floor at 200ms` },
+  { title:"10. Scoring, best score, and accessibility", why:"Your score is simply how long a pattern you reproduced before slipping. We keep the highest score in localStorage so your best survives closing the tab. For accessibility we never rely on colour alone: every pad also has a distinct tone, and the state shows as text in the centre hub, so the game is followable by ear and by reading, not just by sight. Small touches, but they make it playable for far more people.", concept:`<div class="text-center w-full"><div class="text-4xl mb-2">🟢🔴🟡🔵</div><p class="font-bold text-slate-700">Growing array + flash loop + Web Audio + compare = Simon.</p></div>`, code:`best = Math.max(best, score);
+localStorage.setItem("simonBest", best);   // survives refresh
+// colour + tone + text label → not colour alone` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>

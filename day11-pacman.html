@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 11 — Pac-Man</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  canvas { background:#020617; border:1px solid #1e293b; border-radius:10px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 11</div>
+      <h1 class="text-xl font-bold">🟡 Pac-Man — a Maze, Pellets, and Ghosts That Chase</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Arrow keys. Eat every pellet. Don't get caught.</h2>
+      <p class="text-slate-500 mb-4">A grid maze, dots to eat, and ghosts that hunt you down by stepping toward you each move. Clear the maze to win.</p>
+      <div class="flex justify-center"><canvas id="c" width="448" height="496" tabindex="0"></canvas></div>
+      <div class="flex justify-center gap-6 mt-3 text-sm">
+        <span class="text-slate-500">Score: <span id="score" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Lives: <span id="lives" class="font-bold text-rose-500">3</span></span>
+        <span class="text-slate-500" id="msg"></span>
+        <button id="restart" class="text-slate-500 underline">restart</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Click the board, then use ← ↑ → ↓. Eat all the dots to win; touch a ghost and you lose a life.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Pac-Man works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A maze in a string array, grid movement, and ghosts that step toward you. ~150 lines.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The maze is just text</h3></div><pre>const MAZE = [
+  "#############",
+  "#...........#",
+  "#.###.#.###.#",
+  "#...........#",
+  "############# ",
+];   // # = wall, . = pellet</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Move on the grid, blocked by walls</h3></div><pre>const nx = pac.x + dir.x, ny = pac.y + dir.y;
+if (MAZE[ny][nx] !== "#") { pac.x = nx; pac.y = ny; }</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Eat pellets, count them down</h3></div><pre>if (grid[pac.y][pac.x] === ".") { grid[pac.y][pac.x] = " "; score += 10; pellets--; }
+if (pellets === 0) win();</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Ghosts step toward Pac-Man</h3></div><pre>// pick the legal move that reduces distance to pac the most
+const moves = legalMoves(ghost).sort((a,b) => dist(a,pac) - dist(b,pac));
+ghost.pos = moves[0];   // greedy chase (add randomness for fairness)</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Same cell = caught</h3></div><pre>if (ghosts.some(g => g.x === pac.x && g.y === pac.y)) loseLife();</pre></li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 11 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">Tomorrow: Minesweeper.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== PAC-MAN =====
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const RAW = [
+  "##############",
+  "#............#",
+  "#.##.####.##.#",
+  "#.##.####.##.#",
+  "#............#",
+  "#.##.#..#.##.#",
+  "#....#..#....#",
+  "####.#..#.####",
+  "#....####....#",
+  "#.##......##.#",
+  "#.##.####.##.#",
+  "#............#",
+  "##############",
+];
+const COLS = RAW[0].length, ROWS = RAW.length, T = Math.floor(c.width / COLS);
+let grid, pac, ghosts, score, lives, pellets, dir, want, raf, over, tick;
+
+function reset(){
+  grid = RAW.map(r => r.split(""));
+  pellets = 0; grid.forEach(r => r.forEach(ch => { if (ch === ".") pellets++; }));
+  pac = { x: 6, y: 11 }; dir = {x:0,y:0}; want = {x:0,y:0};
+  ghosts = [ {x:6,y:6,c:"#f43f5e"}, {x:7,y:6,c:"#22d3ee"}, {x:6,y:8,c:"#fb923c"} ];
+  score = 0; lives = 3; over = false; tick = 0;
+  upd(); cancelAnimationFrame(raf); loop();
+}
+function upd(){ document.getElementById("score").textContent=score; document.getElementById("lives").textContent=lives; }
+function end(t){ over = true; document.getElementById("msg").textContent = t; draw(); }
+const wall = (x,y) => y<0||y>=ROWS||x<0||x>=COLS||grid[y][x]==="#";
+function stepGhost(g){
+  const opts = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]
+    .map(d=>({x:g.x+d.x,y:g.y+d.y})).filter(p=>!wall(p.x,p.y));
+  if (!opts.length) return;
+  opts.sort((a,b)=> (Math.hypot(a.x-pac.x,a.y-pac.y)) - (Math.hypot(b.x-pac.x,b.y-pac.y)));
+  const pick = Math.random()<0.7 ? opts[0] : opts[Math.floor(Math.random()*opts.length)];
+  g.x=pick.x; g.y=pick.y;
+}
+function loop(){
+  if (over) return;
+  tick++;
+  if (tick % 8 === 0){   // step ~7.5 times/sec
+    if (!wall(pac.x+want.x, pac.y+want.y)) dir = {...want};
+    if (!wall(pac.x+dir.x, pac.y+dir.y)){ pac.x+=dir.x; pac.y+=dir.y; }
+    if (grid[pac.y][pac.x] === "."){ grid[pac.y][pac.x]=" "; score+=10; pellets--; upd(); }
+    if (pellets===0){ end("🏆 Maze cleared!"); }
+    ghosts.forEach(stepGhost);
+    if (ghosts.some(g=>g.x===pac.x&&g.y===pac.y)){ lives--; upd(); if(lives<=0) end("💀 Game Over"); else { pac={x:6,y:11}; dir={x:0,y:0}; want={x:0,y:0}; } }
+  }
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+function draw(){
+  ctx.clearRect(0,0,c.width,c.height); ctx.fillStyle="#020617"; ctx.fillRect(0,0,c.width,c.height);
+  for (let y=0;y<ROWS;y++) for (let x=0;x<COLS;x++){
+    if (grid[y][x]==="#"){ ctx.fillStyle="#1e3a8a"; ctx.fillRect(x*T+1,y*T+1,T-2,T-2); }
+    else if (grid[y][x]==="."){ ctx.fillStyle="#fde68a"; ctx.beginPath(); ctx.arc(x*T+T/2,y*T+T/2,2.5,0,Math.PI*2); ctx.fill(); }
+  }
+  // pac
+  ctx.fillStyle="#facc15"; ctx.beginPath();
+  const mouth = (tick%16<8)?0.25:0.02;
+  ctx.arc(pac.x*T+T/2, pac.y*T+T/2, T/2-2, mouth*Math.PI, (2-mouth)*Math.PI); ctx.lineTo(pac.x*T+T/2,pac.y*T+T/2); ctx.fill();
+  // ghosts
+  for (const g of ghosts){ ctx.fillStyle=g.c; ctx.beginPath(); ctx.arc(g.x*T+T/2,g.y*T+T/2,T/2-2,Math.PI,0); ctx.lineTo(g.x*T+T-2,g.y*T+T-2); ctx.lineTo(g.x*T+2,g.y*T+T-2); ctx.fill();
+    ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(g.x*T+T/2-3,g.y*T+T/2,2,0,Math.PI*2); ctx.arc(g.x*T+T/2+3,g.y*T+T/2,2,0,Math.PI*2); ctx.fill(); }
+}
+document.addEventListener("keydown", e=>{
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  const m={ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1}};
+  if (m[e.key]){ e.preventDefault(); want=m[e.key]; }
+});
+document.getElementById("restart").onclick = reset;
+c.addEventListener("click", ()=>c.focus());
+reset();
+
+const STEPS = [
+  { title:"1. The maze is a grid of text", why:"Don't model walls as shapes — model the maze as an array of strings where '#' is a wall and '.' is a pellet. Everything (movement, collision, pellet-eating, ghost legal moves) becomes a simple lookup into that grid. The whole level is data you can edit by typing.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-left font-mono">#####<br>#...#<br>#.#.#</div>`, code:`const MAZE = ["#####","#...#","#.#.#"];` },
+  { title:"2. Grid movement, blocked by walls", why:"Pac-Man snaps cell to cell. Each step, look at the target cell in the grid; if it's not a wall, move there. That single check is your entire collision system — no pixel math, no overlap tests. The maze data IS the physics.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">target cell is '#'? → blocked, else → move</div>`, code:`if (MAZE[pac.y+dy][pac.x+dx] !== "#") { pac.x += dx; pac.y += dy; }` },
+  { title:"3. Buffered input feels right", why:"Press a direction before you reach the turn and it should 'remember' it. Store a WANTED direction separately from the current one; at each step, switch to wanted if that way is open. This tiny buffer is what makes the controls feel responsive instead of stiff.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">key → want · at each step: if path open, dir = want</div>`, code:`if (!wall(pac.x+want.x, pac.y+want.y)) dir = want;` },
+  { title:"4. Eating pellets = changing the grid", why:"When Pac-Man enters a pellet cell, overwrite that cell with empty space and add to the score. Count the pellets at the start; when the count hits zero, the maze is cleared. The grid is both the level and the game state.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">on a '.' → set ' ', score+10, pellets-- → 0 = win</div>`, code:`if (grid[y][x] === ".") { grid[y][x] = " "; score += 10; pellets--; }` },
+  { title:"5. Ghosts: greedy chase", why:"Real Pac-Man ghosts have famous personalities, but the core is simple: from a ghost's legal moves, pick the one that gets CLOSEST to Pac-Man. Add a little randomness so they don't all clump and so you can escape. Greedy distance-minimising is surprisingly menacing.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">legal moves → sort by distance to pac → take the nearest</div>`, code:`moves.sort((a,b) => dist(a,pac) - dist(b,pac));
+ghost.pos = Math.random()<0.7 ? moves[0] : randomMove;` },
+  { title:"6. Caught = same cell", why:"Collision is trivial on a grid: if a ghost occupies Pac-Man's cell, lose a life and respawn. Win when pellets reach zero, lose when lives hit zero. A maze of text + grid steps + greedy ghosts = the whole arcade icon.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🎉</div><p class="font-bold text-slate-700">Text maze + grid movement + greedy ghosts = Pac-Man.</p></div>`, code:`if (ghosts.some(g => g.x===pac.x && g.y===pac.y)) loseLife();` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 2 — Pong</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .copy-btn:hover { background:#1e293b; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .pong-canvas { background:#020617; border:2px solid #334155; border-radius:8px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back to GameFromZero" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 2</div>
+      <h1 class="text-xl font-bold">🏓 Pong on Canvas</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<!-- LOOK -->
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] flex flex-col items-center justify-center p-8 bg-slate-100">
+    <h2 class="text-4xl font-bold mb-2">🏓 Pong</h2>
+    <p class="text-slate-500 mb-1">W / S to move · CPU controls the right paddle · Space to restart</p>
+    <div class="text-3xl my-3 font-mono"><span id="scoreL" class="text-emerald-600">0</span> · <span id="scoreR" class="text-rose-600">0</span></div>
+    <canvas id="c" width="600" height="400" class="pong-canvas"></canvas>
+    <p class="text-xs text-slate-400 mt-6">↑ Open <b>UNDERSTAND</b> for the step-by-step.</p>
+  </div>
+</section>
+
+<!-- UNDERSTAND -->
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">Build it step by step</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step. Read the WHY.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div>
+        <div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step on the left →</div></div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div>
+        <div id="why" class="text-slate-700">—</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div>
+        <pre id="code"></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BUILD -->
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Estimated time: <b>20 minutes</b>. One HTML file.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Make an empty file</h3></div>
+<pre>mkdir my-pong && cd my-pong
+touch index.html</pre>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Paste this in index.html</h3></div>
+        <div class="relative">
+<pre>&lt;!DOCTYPE html&gt;
+&lt;html&gt;&lt;body style="background:#0f172a;color:#e2e8f0;text-align:center;font-family:system-ui;"&gt;
+  &lt;h1&gt;🏓 Pong&lt;/h1&gt;
+  &lt;div&gt;&lt;span id="scoreL"&gt;0&lt;/span&gt; · &lt;span id="scoreR"&gt;0&lt;/span&gt;&lt;/div&gt;
+  &lt;canvas id="c" width="600" height="400" style="background:#020617;border:2px solid #334155;"&gt;&lt;/canvas&gt;
+  &lt;p&gt;W / S to move · Space to restart&lt;/p&gt;
+&lt;script&gt;
+const c=document.getElementById('c'), ctx=c.getContext('2d');
+const SL=document.getElementById('scoreL'), SR=document.getElementById('scoreR');
+const PH=80, PW=10, BR=8;
+let ly,ry,bx,by,vx,vy,scoreL,scoreR;
+const keys={};
+function reset(){ ly=ry=c.height/2-PH/2; bx=c.width/2; by=c.height/2; vx=(Math.random()&gt;.5?1:-1)*4; vy=(Math.random()*4)-2; }
+function newGame(){ scoreL=scoreR=0; SL.textContent=0; SR.textContent=0; reset(); }
+function step(){
+  if(keys.w) ly-=6; if(keys.s) ly+=6;
+  ly=Math.max(0,Math.min(c.height-PH,ly));
+  // CPU: track ball with cap
+  const target=by-PH/2;
+  if(ry+5&lt;target) ry+=4; else if(ry-5&gt;target) ry-=4;
+  ry=Math.max(0,Math.min(c.height-PH,ry));
+  bx+=vx; by+=vy;
+  if(by&lt;BR||by&gt;c.height-BR) vy=-vy;
+  if(bx&lt;PW+BR &amp;&amp; by&gt;ly &amp;&amp; by&lt;ly+PH){ vx=Math.abs(vx)*1.05; vy+=((by-(ly+PH/2))/PH)*3; }
+  if(bx&gt;c.width-PW-BR &amp;&amp; by&gt;ry &amp;&amp; by&lt;ry+PH){ vx=-Math.abs(vx)*1.05; vy+=((by-(ry+PH/2))/PH)*3; }
+  if(bx&lt;0){ scoreR++; SR.textContent=scoreR; reset(); }
+  if(bx&gt;c.width){ scoreL++; SL.textContent=scoreL; reset(); }
+}
+function draw(){
+  ctx.fillStyle='#020617'; ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle='#fff'; for(let i=0;i&lt;c.height;i+=20) ctx.fillRect(c.width/2-1,i,2,10);
+  ctx.fillStyle='#22c55e'; ctx.fillRect(0,ly,PW,PH);
+  ctx.fillStyle='#f43f5e'; ctx.fillRect(c.width-PW,ry,PW,PH);
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(bx,by,BR,0,Math.PI*2); ctx.fill();
+}
+addEventListener('keydown',e=&gt;{ keys[e.key.toLowerCase()]=true; if(e.key===' ')newGame(); });
+addEventListener('keyup',  e=&gt;{ keys[e.key.toLowerCase()]=false; });
+newGame();
+setInterval(()=&gt;{ step(); draw(); }, 16);
+&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Open in browser</h3></div>
+        <p class="text-sm text-slate-600">Double-click <code>index.html</code>. W/S to move. CPU is the right paddle.</p>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Tweaks</h3></div>
+        <ul class="text-sm text-slate-600 space-y-2 ml-4 list-disc">
+          <li>Two players: replace CPU with arrow keys (Up/Down).</li>
+          <li>Slower CPU: drop the <code>4</code> in tracking to <code>2</code>.</li>
+          <li>Spin: stop adding the <code>(by-paddleMid)/PH * 3</code> deflection.</li>
+          <li>Sound: <code>new Audio('beep.wav').play()</code> on each paddle hit.</li>
+        </ul>
+      </li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
+      <h3 class="font-bold text-lg text-emerald-900">🎉 Day 2 of GameFromZero done.</h3>
+      <p class="text-sm text-emerald-700 mt-2">Tomorrow: Tetris.</p>
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// PONG GAME
+const c = document.getElementById('c'), ctx = c.getContext('2d');
+const SL = document.getElementById('scoreL'), SR = document.getElementById('scoreR');
+const PH = 80, PW = 10, BR = 8;
+let ly, ry, bx, by, vx, vy, scoreL, scoreR;
+const keys = {};
+function reset() {
+  ly = ry = c.height / 2 - PH / 2;
+  bx = c.width / 2; by = c.height / 2;
+  vx = (Math.random() > .5 ? 1 : -1) * 4;
+  vy = (Math.random() * 4) - 2;
+}
+function newGame() { scoreL = scoreR = 0; SL.textContent = 0; SR.textContent = 0; reset(); }
+function step() {
+  if (keys.w) ly -= 6;
+  if (keys.s) ly += 6;
+  ly = Math.max(0, Math.min(c.height - PH, ly));
+  const target = by - PH / 2;
+  if (ry + 5 < target) ry += 4; else if (ry - 5 > target) ry -= 4;
+  ry = Math.max(0, Math.min(c.height - PH, ry));
+  bx += vx; by += vy;
+  if (by < BR || by > c.height - BR) vy = -vy;
+  if (bx < PW + BR && by > ly && by < ly + PH) { vx = Math.abs(vx) * 1.05; vy += ((by - (ly + PH / 2)) / PH) * 3; }
+  if (bx > c.width - PW - BR && by > ry && by < ry + PH) { vx = -Math.abs(vx) * 1.05; vy += ((by - (ry + PH / 2)) / PH) * 3; }
+  if (bx < 0) { scoreR++; SR.textContent = scoreR; reset(); }
+  if (bx > c.width) { scoreL++; SL.textContent = scoreL; reset(); }
+}
+function draw() {
+  ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < c.height; i += 20) ctx.fillRect(c.width / 2 - 1, i, 2, 10);
+  ctx.fillStyle = '#22c55e'; ctx.fillRect(0, ly, PW, PH);
+  ctx.fillStyle = '#f43f5e'; ctx.fillRect(c.width - PW, ry, PW, PH);
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx, by, BR, 0, Math.PI * 2); ctx.fill();
+}
+addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key === ' ') newGame(); });
+addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
+newGame();
+setInterval(() => { step(); draw(); }, 16);
+
+// UNDERSTAND STEPS
+const STEPS = [
+  { title:"1. Game state = a few numbers", why:"Pong has 5 state vars: left paddle y, right paddle y, ball x, ball y, ball velocity (vx, vy). That's the whole world. Everything else is rendering.", concept:`<div class="font-mono text-sm bg-slate-100 p-4 rounded space-y-1"><div>ly = 160  <span class="text-slate-500">// left paddle y</span></div><div>ry = 160  <span class="text-slate-500">// right paddle y</span></div><div>bx = 300, by = 200</div><div>vx = 4, vy = -2</div></div>`, code:`let ly, ry, bx, by, vx, vy, scoreL, scoreR;` },
+  { title:"2. Move paddles by input", why:"Listen to keydown / keyup → flip a flag in a keys object. Every tick, read the flags and adjust paddle Y. clamp to canvas bounds so paddles never escape.", concept:`<div class="bg-slate-100 p-4 rounded text-sm font-mono space-y-1"><div>keys.w pressed → ly -= 6</div><div>keys.s pressed → ly += 6</div><div>clamp 0..(height - PH)</div></div>`, code:`if (keys.w) ly -= 6;
+if (keys.s) ly += 6;
+ly = Math.max(0, Math.min(c.height - PH, ly));` },
+  { title:"3. CPU paddle follows the ball", why:"Move the right paddle towards the ball's Y, capped at a speed slower than human reflexes. Tune the cap to scale difficulty. ry += 4 means the CPU lags slightly = beatable.", concept:`<div class="bg-slate-100 p-4 rounded text-sm space-y-2"><div class="font-mono text-xs">target = ball.y</div><div class="font-mono text-xs">if paddle below target: paddle += 4</div><div class="font-mono text-xs">if paddle above target: paddle -= 4</div><div class="text-slate-500 text-xs italic">Difficulty knob: change 4.</div></div>`, code:`const target = by - PH / 2;
+if (ry + 5 < target) ry += 4;
+else if (ry - 5 > target) ry -= 4;` },
+  { title:"4. Ball moves with velocity", why:"Each tick add velocity to position. bx += vx; by += vy. Constant motion until something deflects it.", concept:`<div class="bg-slate-100 p-4 rounded text-sm font-mono space-y-1"><div>bx += vx  <span class="text-slate-500">// ball.x moves right</span></div><div>by += vy</div></div>`, code:`bx += vx;
+by += vy;` },
+  { title:"5. Top/bottom wall bounce", why:"When ball Y hits top or bottom, flip vy. Now vy points the other direction so the next tick moves the ball away from the wall.", concept:`<div class="bg-slate-100 p-4 rounded text-sm space-y-2"><div>ball.y &lt; 8 OR ball.y &gt; height-8</div><div class="text-emerald-600 font-mono">vy = -vy</div><div class="text-slate-500 text-xs italic">No bounce on left/right walls — those are score events.</div></div>`, code:`if (by < BR || by > c.height - BR) vy = -vy;` },
+  { title:"6. Paddle collision + spin", why:"On paddle hit: reverse vx (back the other way) AND tweak vy based on WHERE on the paddle it hit. Hit near top edge = ball goes up. Hit near bottom = goes down. This is the 'spin' that lets players steer the ball.", concept:`<div class="bg-slate-100 p-4 rounded text-sm font-mono space-y-1"><div>vx = -vx * 1.05  <span class="text-slate-500">// reverse + 5% speed</span></div><div>vy += offsetFromCenter * 3</div></div>`, code:`if (bx < PW + BR && by > ly && by < ly + PH) {
+  vx = Math.abs(vx) * 1.05;            // bounce + speed up 5%
+  vy += ((by - (ly + PH/2)) / PH) * 3; // angle adjustment
+}` },
+  { title:"7. Score + reset", why:"When ball passes left edge, right player scores. When it passes right edge, left scores. Reset ball to center with random direction. Update score DOM.", concept:`<div class="bg-slate-100 p-4 rounded text-sm space-y-1"><div>bx &lt; 0 → right scores</div><div>bx &gt; width → left scores</div><div class="text-emerald-600 font-mono">reset()  // ball back to center</div></div>`, code:`if (bx < 0)         { scoreR++; SR.textContent = scoreR; reset(); }
+if (bx > c.width)   { scoreL++; SL.textContent = scoreL; reset(); }` },
+  { title:"8. The game loop", why:"setInterval at 16ms = ~60 FPS. Call step() to advance state, draw() to render. Same loop pattern as Day 1 (Snake), Tetris, Breakout — every arcade game.", concept:`<div class="bg-slate-100 p-4 rounded text-sm font-mono space-y-1"><div>every 16ms tick:</div><div class="ml-4">step()  <span class="text-slate-500">// update positions</span></div><div class="ml-4">draw()  <span class="text-slate-500">// repaint canvas</span></div></div>`, code:`setInterval(() => { step(); draw(); }, 16);` },
+  { title:"9. Done!", why:"Pong is 5 state variables + 8 lines of physics + a render loop. Same skeleton makes Breakout (one paddle, bricks instead of CPU), Air Hockey (two paddles, walls), Brick-Out — every paddle game.", concept:`<div class="text-center"><div class="text-5xl mb-3">🎉</div><p class="font-bold text-slate-700">You understand paddle-game physics.</p></div>`, code:`// next: replace right paddle with a brick wall = Breakout.` }
+];
+const stepsEl = document.getElementById("steps");
+const prev = document.getElementById("prev");
+const next = document.getElementById("next");
+const auto = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  b.innerHTML = `<div class="font-semibold">${s.title}</div>`;
+  b.onclick = () => show(i);
+  stepsEl.appendChild(b);
+});
+function show(i) {
+  cur = i;
+  const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((b, idx) => {
+    b.className = idx === i
+      ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold"
+      : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  });
+}
+prev.onclick = () => show(Math.max(0, cur - 1));
+next.onclick = () => show(Math.min(STEPS.length - 1, cur + 1));
+let timer = null;
+auto.onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; auto.textContent = "▶ Auto-play"; return; }
+  auto.textContent = "⏸ Pause";
+  show(0);
+  timer = setInterval(() => {
+    if (cur >= STEPS.length - 1) { clearInterval(timer); timer = null; auto.textContent = "▶ Replay"; return; }
+    show(cur + 1);
+  }, 2500);
+};
+show(0);
+
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>

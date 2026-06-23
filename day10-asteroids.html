@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 10 — Asteroids</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  canvas { background:#020617; border:1px solid #1e293b; border-radius:10px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 10</div>
+      <h1 class="text-xl font-bold">☄️ Asteroids — Momentum, Rotation, and Splitting Rocks</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">← → rotate · ↑ thrust · Space shoot. You drift.</h2>
+      <p class="text-slate-500 mb-4">No brakes — thrust adds momentum and you coast. Shots split big rocks into smaller, faster ones. Clear them all without colliding. Everything wraps around the edges.</p>
+      <div class="flex justify-center"><canvas id="c" width="480" height="440" tabindex="0"></canvas></div>
+      <div class="flex justify-center gap-6 mt-3 text-sm">
+        <span class="text-slate-500">Score: <span id="score" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Lives: <span id="lives" class="font-bold text-rose-500">3</span></span>
+        <span class="text-slate-500" id="msg"></span>
+        <button id="restart" class="text-slate-500 underline">restart</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Click the board first, then ← ↑ → and Space. Clear every rock to spawn the next wave.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Asteroids works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Velocity vectors, an angle, and a screen that wraps. ~120 lines.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A ship with an angle + a velocity</h3></div><pre>const ship = { x, y, angle: 0, vx: 0, vy: 0 };
+if (left)  ship.angle -= 0.07;
+if (right) ship.angle += 0.07;</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Thrust adds momentum (you coast)</h3></div><pre>if (up) { ship.vx += Math.cos(ship.angle)*0.12;
+          ship.vy += Math.sin(ship.angle)*0.12; }
+ship.x += ship.vx; ship.y += ship.vy;
+ship.vx *= 0.99; ship.vy *= 0.99;   // a little drag</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Wrap everything around the edges</h3></div><pre>const wrap = o =&gt; { if(o.x&lt;0)o.x+=W; if(o.x&gt;W)o.x-=W;
+                    if(o.y&lt;0)o.y+=H; if(o.y&gt;H)o.y-=H; };</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Bullets fly along the ship's heading</h3></div><pre>bullets.push({ x: ship.x, y: ship.y,
+  vx: Math.cos(ship.angle)*6, vy: Math.sin(ship.angle)*6, life: 60 });</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Hit a rock → split it in two</h3></div><pre>if (dist(bullet, rock) &lt; rock.r) {
+  if (rock.r &gt; 14) spawnTwo(rock, rock.r/1.7);  // smaller + faster
+  rocks.splice(i,1); score += 20;
+}</pre></li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 10 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">Tomorrow: Pac-Man.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== ASTEROIDS =====
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const W = c.width, H = c.height;
+let ship, bullets, rocks, keys, score, lives, raf, over, wave;
+const wrap = o => { if(o.x<0)o.x+=W; if(o.x>W)o.x-=W; if(o.y<0)o.y+=H; if(o.y>H)o.y-=H; };
+const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
+function spawnWave(n){
+  rocks = [];
+  for (let i=0;i<n;i++){
+    let x,y; do { x=Math.random()*W; y=Math.random()*H; } while (Math.hypot(x-W/2,y-H/2) < 120);
+    const a = Math.random()*Math.PI*2, sp = 0.6 + Math.random()*0.8;
+    rocks.push({ x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, r:34 });
+  }
+}
+function start(){
+  ship = { x:W/2, y:H/2, angle:-Math.PI/2, vx:0, vy:0 };
+  bullets = []; keys = {}; score = 0; lives = 3; over = false; wave = 1;
+  spawnWave(4); upd(); cancelAnimationFrame(raf); loop();
+}
+function upd(){ document.getElementById("score").textContent=score; document.getElementById("lives").textContent=lives; }
+function end(t){ over = true; document.getElementById("msg").textContent = t; draw(); }
+function respawn(){ ship.x=W/2; ship.y=H/2; ship.vx=0; ship.vy=0; ship.angle=-Math.PI/2; }
+
+function loop(){
+  if (over) return;
+  if (keys["ArrowLeft"]) ship.angle -= 0.07;
+  if (keys["ArrowRight"]) ship.angle += 0.07;
+  if (keys["ArrowUp"]){ ship.vx += Math.cos(ship.angle)*0.13; ship.vy += Math.sin(ship.angle)*0.13; }
+  ship.x += ship.vx; ship.y += ship.vy; ship.vx *= 0.99; ship.vy *= 0.99; wrap(ship);
+  bullets = bullets.filter(b => b.life > 0);
+  for (const b of bullets){ b.x += b.vx; b.y += b.vy; b.life--; wrap(b); }
+  for (const r of rocks){ r.x += r.vx; r.y += r.vy; wrap(r); }
+  // bullet vs rock
+  for (let i=rocks.length-1;i>=0;i--){
+    const r = rocks[i];
+    for (let j=bullets.length-1;j>=0;j--){
+      if (dist(bullets[j], r) < r.r){
+        bullets.splice(j,1);
+        if (r.r > 14){ for (let k=0;k<2;k++){ const a=Math.random()*Math.PI*2, sp=1+Math.random(); rocks.push({x:r.x,y:r.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:r.r/1.8}); } }
+        rocks.splice(i,1); score += 20; upd(); break;
+      }
+    }
+  }
+  // ship vs rock
+  for (const r of rocks){ if (dist(ship, r) < r.r + 8){ lives--; upd(); if (lives<=0){ end("💥 Game Over"); } else respawn(); break; } }
+  if (rocks.length === 0){ wave++; spawnWave(3+wave); }
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // ship (triangle)
+  ctx.save(); ctx.translate(ship.x, ship.y); ctx.rotate(ship.angle);
+  ctx.strokeStyle="#34d399"; ctx.lineWidth=2; ctx.beginPath();
+  ctx.moveTo(12,0); ctx.lineTo(-9,-7); ctx.lineTo(-5,0); ctx.lineTo(-9,7); ctx.closePath(); ctx.stroke();
+  if (keys["ArrowUp"] && !over){ ctx.strokeStyle="#fbbf24"; ctx.beginPath(); ctx.moveTo(-5,0); ctx.lineTo(-13,0); ctx.stroke(); }
+  ctx.restore();
+  ctx.fillStyle="#fbbf24"; for (const b of bullets){ ctx.beginPath(); ctx.arc(b.x,b.y,2,0,Math.PI*2); ctx.fill(); }
+  ctx.strokeStyle="#94a3b8"; ctx.lineWidth=1.5;
+  for (const r of rocks){ ctx.beginPath(); ctx.arc(r.x,r.y,r.r,0,Math.PI*2); ctx.stroke(); }
+}
+document.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  if (["ArrowLeft","ArrowRight","ArrowUp"," "].includes(e.key)) e.preventDefault();
+  keys[e.key] = true;
+  if (e.key === " " && !over && bullets.length < 5) bullets.push({ x:ship.x, y:ship.y, vx:Math.cos(ship.angle)*6, vy:Math.sin(ship.angle)*6, life:55 });
+});
+document.addEventListener("keyup", e => keys[e.key] = false);
+document.getElementById("restart").onclick = start;
+c.addEventListener("click", ()=>c.focus());
+start();
+
+const STEPS = [
+  { title:"1. Rotation is just an angle", why:"The ship doesn't move left/right — it ROTATES. Left and right arrows nudge a single number, ship.angle, a few hundredths of a radian per frame. Everything else (which way you thrust, where bullets go) is derived from that one angle with sin and cos.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">← / → change ship.angle · the heading is one number</div>`, code:`if (left)  ship.angle -= 0.07;
+if (right) ship.angle += 0.07;` },
+  { title:"2. Thrust adds momentum — you never stop", why:"This is what makes Asteroids feel like space. Thrust doesn't set your position; it adds to your VELOCITY in the direction you're facing. Let go and you keep drifting. A tiny multiplier (×0.99) each frame is gentle 'space friction' so you eventually slow.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full"><div>↑ → velocity += heading × accel</div><div class="text-emerald-700">position += velocity, every frame (you coast)</div></div>`, code:`ship.vx += Math.cos(angle)*0.13;
+ship.x  += ship.vx;  ship.vx *= 0.99;` },
+  { title:"3. Trig turns an angle into movement", why:"To move 'forward' you need x and y components of the heading. That's exactly what cosine and sine give you: cos(angle) is the x part, sin(angle) is the y part. The same pair aims your bullets. Two functions convert 'which way am I pointing' into 'how do I move'.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">heading → (cos θ, sin θ) → dx, dy</div>`, code:`dx = Math.cos(angle);
+dy = Math.sin(angle);` },
+  { title:"4. The screen wraps (toroidal space)", why:"Fly off the right edge and you reappear on the left. One tiny helper, applied to the ship, every bullet, and every rock, makes the playfield a seamless loop. It's the classic Asteroids feel and it's four if-statements.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">x &lt; 0 → x += width · x &gt; width → x -= width</div>`, code:`if (o.x < 0) o.x += W;
+if (o.x > W) o.x -= W;  // and y too` },
+  { title:"5. Splitting rocks = recursion in disguise", why:"Shoot a big rock and it becomes two smaller, faster ones; shoot those and they split again until they're tiny enough to vanish. You're not deleting one rock — you're replacing it with children. That cascade is what turns 4 asteroids into a tense, screen-filling swarm.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🎉</div><p class="font-bold text-slate-700">Angle + velocity + wrap + split = Asteroids.</p></div>`, code:`if (rock.r > 14) spawnTwo(rock, rock.r/1.8);
+rocks.splice(i, 1);` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 8 — Frogger</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  canvas { background:#020617; border:1px solid #1e293b; border-radius:10px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 8</div>
+      <h1 class="text-xl font-bold">🐸 Frogger — Cross the Road and the River</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Arrow keys. Don't get squashed. Don't drown.</h2>
+      <p class="text-slate-500 mb-4">Hop up through traffic, then ride the logs across the river to the top. The road kills on contact; the river kills unless you're standing on a log.</p>
+      <div class="flex justify-center"><canvas id="c" width="480" height="432" tabindex="0"></canvas></div>
+      <div class="flex justify-center gap-6 mt-3 text-sm">
+        <span class="text-slate-500">Score: <span id="score" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Lives: <span id="lives" class="font-bold text-rose-500">3</span></span>
+        <button id="restart" class="text-slate-500 underline">restart</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Click the board first, then use ← ↑ → ↓. Reach the top grass to score and respawn.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Frogger works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Lanes of moving rectangles + one rule per terrain. ~120 lines.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A frog that hops in grid steps</h3></div><pre>if (key === "ArrowUp")   frog.row++;     // one cell per press
+if (key === "ArrowLeft") frog.x -= CELL;</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Lanes of obstacles that scroll + wrap</h3></div><pre>for (const o of lane.items) {
+  o.x += lane.speed;
+  if (o.x &gt; W) o.x = -o.w;   // wrap around
+}</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Road: touching a car = death</h3></div><pre>if (onRoad &amp;&amp; cars.some(car =&gt; overlap(frog, car))) die();</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">River: NOT on a log = death (and ride it)</h3></div><pre>const log = logs.find(l =&gt; overlap(frog, l));
+if (onRiver) log ? (frog.x += log.speed) : die();</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Top row = score + respawn</h3></div><pre>if (frog.row === TOP) { score++; resetFrog(); }</pre></li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 8 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">Tomorrow: Space Invaders.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== FROGGER =====
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const CELL = 48, COLS = 10, ROWS = 9, W = c.width, H = c.height;
+// rows from BOTTOM (0) to TOP (8): 0 start grass, 1-3 road, 4 median, 5-7 river, 8 goal
+const rowY = r => H - (r+1)*CELL;   // top y of row r
+let frog, score, lives, lanes, raf;
+
+function makeLanes(){
+  lanes = {};
+  const mk = (dir, speed, gap, w, count) => { const items=[]; for(let i=0;i<count;i++) items.push({ x: i*gap + Math.random()*30, w }); return { dir, speed: speed*dir, items, w }; };
+  lanes[1] = mk(1,  1.4, 170, 70, 3);
+  lanes[2] = mk(-1, 2.1, 150, 50, 4);
+  lanes[3] = mk(1,  1.7, 200, 90, 3);
+  lanes[5] = mk(-1, 1.3, 180, 110, 3);   // logs
+  lanes[6] = mk(1,  1.0, 200, 130, 3);
+  lanes[7] = mk(-1, 1.8, 160, 90, 3);
+}
+function resetFrog(){ frog = { x: W/2 - CELL/2, row: 0, w: CELL-10 }; }
+function start(){ score=0; lives=3; makeLanes(); resetFrog(); upd(); loop(); }
+function upd(){ document.getElementById("score").textContent=score; document.getElementById("lives").textContent=lives; }
+function die(){ lives--; upd(); if(lives<=0){ score=0; lives=3; upd(); } resetFrog(); }
+const isRoad = r => r>=1 && r<=3, isRiver = r => r>=5 && r<=7;
+
+function loop(){
+  // move lanes
+  for (const r in lanes){ const L=lanes[r]; for(const o of L.items){ o.x += L.speed; if(L.speed>0 && o.x>W) o.x=-o.w; if(L.speed<0 && o.x<-o.w) o.x=W; } }
+  // river carries frog
+  if (isRiver(frog.row)){
+    const L = lanes[frog.row]; const fy = rowY(frog.row);
+    const log = L.items.find(o => frog.x+frog.w*0.5 > o.x && frog.x+frog.w*0.5 < o.x+o.w);
+    if (log) { frog.x += L.speed; if(frog.x< -10 || frog.x>W-10) die(); }
+    else die();
+  }
+  // road collision
+  if (isRoad(frog.row)){
+    const L = lanes[frog.row];
+    if (L.items.some(o => frog.x < o.x+o.w && frog.x+frog.w > o.x)) die();
+  }
+  if (frog.row >= 8){ score++; upd(); resetFrog(); }
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+function draw(){
+  for (let r=0;r<ROWS;r++){
+    ctx.fillStyle = r===0||r===4||r===8 ? "#14532d" : isRoad(r) ? "#1e293b" : "#0c2a4d";
+    ctx.fillRect(0, rowY(r), W, CELL);
+  }
+  // lane items
+  for (const r in lanes){ const L=lanes[r], y=rowY(+r)+8;
+    for (const o of L.items){
+      if (isRiver(+r)){ ctx.fillStyle="#92400e"; ctx.fillRect(o.x, y, o.w, CELL-16); }
+      else { ctx.fillStyle = L.speed>0 ? "#f43f5e" : "#fbbf24"; ctx.fillRect(o.x, y, o.w, CELL-16); ctx.fillStyle="#020617"; ctx.fillRect(o.x+6,y+4,8,CELL-24); ctx.fillRect(o.x+o.w-14,y+4,8,CELL-24); }
+    }
+  }
+  // frog
+  ctx.font = `${CELL-14}px serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText("🐸", frog.x+frog.w/2, rowY(frog.row)+CELL/2);
+}
+document.addEventListener("keydown", e => {
+  if (!["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) return;
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  e.preventDefault();
+  if (e.key==="ArrowUp") frog.row = Math.min(8, frog.row+1);
+  if (e.key==="ArrowDown") frog.row = Math.max(0, frog.row-1);
+  if (e.key==="ArrowLeft") frog.x = Math.max(0, frog.x-CELL);
+  if (e.key==="ArrowRight") frog.x = Math.min(W-frog.w, frog.x+CELL);
+});
+document.getElementById("restart").onclick = () => { cancelAnimationFrame(raf); start(); };
+c.addEventListener("click", ()=>c.focus());
+start();
+
+const STEPS = [
+  { title:"1. A frog that hops in grid steps", why:"Unlike Flappy's smooth physics, Frogger moves in discrete hops. Each arrow press changes the frog's row (up/down) or shifts it one cell left/right. Snapping to a grid is what makes the timing-puzzle feel — you commit to a square and live with it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full">press → move exactly one cell</div>`, code:`if (key === "ArrowUp") frog.row++;
+if (key === "ArrowLeft") frog.x -= CELL;` },
+  { title:"2. Lanes of obstacles that scroll and wrap", why:"Each road/river row is a 'lane' with its own direction and speed. Every frame the obstacles slide along; when one exits one side it reappears on the other. That endless wrap is what makes traffic feel continuous from just a few rectangles.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full">car off the right edge → back on the left</div>`, code:`o.x += lane.speed;
+if (o.x > W) o.x = -o.w;   // wrap` },
+  { title:"3. The road rule: touching a car kills", why:"On a road row, the frog dies if its box overlaps any car's box (the same AABB overlap from Flappy). Lose a life, respawn at the bottom. Simple rule, tense gameplay — it's all about reading the gaps.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full">on road + overlaps car → 💥 die</div>`, code:`if (onRoad && cars.some(c => overlap(frog, c))) die();` },
+  { title:"4. The river rule is inverted", why:"The river flips the logic: open water kills, and a log SAVES you. So you must be standing on a log — and while you are, the log carries you sideways at its speed. Drift off the edge of the screen and you drown. Same overlap check, opposite consequence.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full"><div>on a log → ride it (frog.x += speed)</div><div class="text-emerald-700">on water → 💧 die</div></div>`, code:`const log = logs.find(l => overlap(frog, l));
+onRiver && (log ? frog.x += log.speed : die());` },
+  { title:"5. Reaching the top scores and respawns", why:"When the frog reaches the top grass row, you score and it respawns at the bottom to do it again. Add lives, and you've got the full loop: hop, dodge, ride, arrive, repeat — the entire game from a handful of moving rectangles.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🎉</div><p class="font-bold text-slate-700">Two terrain rules + scrolling lanes = Frogger.</p></div>`, code:`if (frog.row === TOP) { score++; resetFrog(); }` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+</script>
+</body>
+</html>

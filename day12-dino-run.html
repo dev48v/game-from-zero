@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 12 — Dino Run</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  canvas { background:#020617; border:1px solid #1e293b; border-radius:10px; }
+  .copy-btn:hover { background:#1e293b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 12</div>
+      <h1 class="text-xl font-bold">🦖 Dino Run — Endless Runner</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Press Space to jump. Run as far as you can.</h2>
+      <p class="text-slate-500 mb-4">The ground scrolls, cacti rush in from the right, and the longer you survive the faster it gets. One hit ends the run.</p>
+      <div class="flex justify-center"><canvas id="c" width="600" height="200" tabindex="0"></canvas></div>
+      <div class="flex justify-center gap-6 mt-3 text-sm">
+        <span class="text-slate-500">Score: <span id="score" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Best: <span id="best" class="font-bold text-slate-700">0</span></span>
+        <span class="text-slate-500" id="msg"></span>
+        <button id="restart" class="text-slate-500 underline">restart</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Click the canvas, then press <b>Space</b> or <b>↑</b> to jump. On touch, just tap the canvas. Don't hit the cactus.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Dino Run works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A loop, a little gravity, scrolling cacti, and one box-overlap check. ~90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A canvas and the world</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One canvas, a ground line, and the variables every frame will touch: the dino, the list of cacti, the score, and a speed that grows.</p>
+        <div class="relative">
+          <pre>&lt;canvas id="c" width="600" height="200"&gt;&lt;/canvas&gt;
+&lt;script&gt;
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const GROUND = 170;          // y of the ground line
+let dino, cacti, score, speed, over, raf;
+&lt;/script&gt;</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Reset puts everyone home</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The dino is a box sitting on the ground with no vertical speed. Cacti start empty, score is zero, speed is gentle. We call reset both at startup and on restart.</p>
+        <div class="relative">
+          <pre>function reset(){
+  dino  = { x:40, y:GROUND-44, w:24, h:44, vy:0 };
+  cacti = []; score = 0; speed = 4; over = false;
+  spawn();                       // queue the first cactus
+  cancelAnimationFrame(raf); loop();
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Gravity and the jump</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A jump just sets an upward velocity. Every frame gravity pulls that velocity down and adds it to the dino's y. When the dino lands on the ground we clamp it and stop. Only allow a jump while grounded so you can't fly.</p>
+        <div class="relative">
+          <pre>function jump(){
+  if (dino.y >= GROUND - dino.h) dino.vy = -11;   // grounded only
+}
+function physics(){
+  dino.vy += 0.6;                 // gravity
+  dino.y  += dino.vy;
+  if (dino.y > GROUND - dino.h){ dino.y = GROUND - dino.h; dino.vy = 0; }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Spawn and scroll the cacti</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A cactus is a box that starts off the right edge. Each frame every cactus slides left by <code>speed</code>. When one passes a gap, queue the next at a random distance. Drop cacti that have left the screen.</p>
+        <div class="relative">
+          <pre>function spawn(){
+  const h = 28 + Math.random()*22;
+  cacti.push({ x:600 + Math.random()*120, y:GROUND-h, w:16, h });
+}
+function move(){
+  cacti.forEach(o => o.x -= speed);
+  cacti = cacti.filter(o => o.x + o.w > 0);    // off-screen → gone
+  const last = cacti[cacti.length-1];
+  if (!last || last.x < 600 - (160 + Math.random()*160)) spawn();
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Collision = two boxes overlapping</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Axis-Aligned Bounding Box: two rectangles touch only if they overlap on both x and y at once. If the dino's box overlaps any cactus box, the run is over.</p>
+        <div class="relative">
+          <pre>function hits(a, b){
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+// in the loop:
+if (cacti.some(o => hits(dino, o))) over = true;</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Score, speed-up, and the loop</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Score climbs every frame with distance; nudge the speed up slowly so it never stops getting harder. The loop ties it together: physics, move, collide, draw, repeat — and bail out when over.</p>
+        <div class="relative">
+          <pre>function loop(){
+  if (over){ draw(); return; }      // freeze on game over
+  physics(); move();
+  if (cacti.some(o => hits(dino, o))) { over = true; }
+  score += 1; speed += 0.002;       // distance + difficulty
+  draw();
+  raf = requestAnimationFrame(loop);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Draw the scene</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Clear, draw the ground line, draw the dino, draw each cactus, and print the score. Canvas is immediate-mode: nothing persists, so you repaint the whole world every frame.</p>
+        <div class="relative">
+          <pre>function draw(){
+  ctx.fillStyle = "#020617"; ctx.fillRect(0,0,600,200);
+  ctx.strokeStyle = "#334155"; ctx.beginPath();
+  ctx.moveTo(0,GROUND+1); ctx.lineTo(600,GROUND+1); ctx.stroke();
+  ctx.fillStyle = "#10b981";
+  ctx.fillRect(dino.x, dino.y, dino.w, dino.h);          // dino
+  ctx.fillStyle = "#22c55e";
+  cacti.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));  // cacti
+  ctx.fillStyle = "#e2e8f0"; ctx.font = "14px monospace";
+  ctx.fillText("Score " + score, 12, 22);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Wire input and start</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Space and ↑ jump (and restart when over); a tap does the same. Then call reset() once and the runner is live. Double-click the file — no server needed.</p>
+        <div class="relative">
+          <pre>addEventListener("keydown", e => {
+  if (e.code === "Space" || e.key === "ArrowUp"){
+    e.preventDefault();
+    over ? reset() : jump();
+  }
+});
+c.addEventListener("pointerdown", () => over ? reset() : jump());
+reset();</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 12 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built an endless runner with gravity, scrolling obstacles, and AABB collision. Try adding ducking, clouds, or day/night.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== DINO RUN =====
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const GROUND = 170;
+let dino, cacti, score, best = 0, speed, over, raf, tick;
+
+function reset(){
+  dino  = { x:46, y:GROUND-44, w:24, h:44, vy:0 };
+  cacti = []; score = 0; speed = 4; over = false; tick = 0;
+  spawn();
+  document.getElementById("msg").textContent = "";
+  upd(); cancelAnimationFrame(raf); loop();
+}
+function upd(){
+  document.getElementById("score").textContent = Math.floor(score/3);
+  document.getElementById("best").textContent  = Math.floor(best/3);
+}
+function jump(){ if (dino.y >= GROUND - dino.h) dino.vy = -11; }
+function physics(){
+  dino.vy += 0.6; dino.y += dino.vy;
+  if (dino.y > GROUND - dino.h){ dino.y = GROUND - dino.h; dino.vy = 0; }
+}
+function spawn(){
+  const h = 28 + Math.random()*22;
+  cacti.push({ x: c.width + Math.random()*120, y: GROUND - h, w: 16, h });
+}
+function move(){
+  cacti.forEach(o => o.x -= speed);
+  cacti = cacti.filter(o => o.x + o.w > 0);
+  const last = cacti[cacti.length-1];
+  if (!last || last.x < c.width - (170 + Math.random()*170)) spawn();
+}
+function hits(a, b){
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+function end(){
+  over = true;
+  if (score > best) best = score;
+  document.getElementById("msg").textContent = "💀 Crashed — press Space to run again";
+  upd(); draw();
+}
+function loop(){
+  if (over) return;
+  tick++;
+  physics(); move();
+  if (cacti.some(o => hits(dino, o))){ end(); return; }
+  score += 1; speed += 0.0025;
+  upd(); draw();
+  raf = requestAnimationFrame(loop);
+}
+function draw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle = "#020617"; ctx.fillRect(0,0,c.width,c.height);
+  // ground
+  ctx.strokeStyle = "#334155"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0,GROUND+1); ctx.lineTo(c.width,GROUND+1); ctx.stroke();
+  // dashed speed lines on the ground for a sense of motion
+  ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i = 0; i < c.width; i += 40){ const x = (i - (tick*speed % 40)); ctx.moveTo(x, GROUND+10); ctx.lineTo(x+18, GROUND+10); }
+  ctx.stroke();
+  // dino (with a little eye + legs hint)
+  ctx.fillStyle = "#10b981";
+  ctx.fillRect(dino.x, dino.y, dino.w, dino.h);
+  ctx.fillStyle = "#022c22";
+  ctx.fillRect(dino.x + dino.w - 8, dino.y + 6, 4, 4);           // eye
+  // running legs flicker while grounded
+  if (dino.y >= GROUND - dino.h){
+    ctx.fillStyle = "#020617";
+    if (Math.floor(tick/6) % 2) ctx.fillRect(dino.x+4, dino.y+dino.h-6, 6, 6);
+    else ctx.fillRect(dino.x+dino.w-10, dino.y+dino.h-6, 6, 6);
+  }
+  // cacti
+  ctx.fillStyle = "#22c55e";
+  cacti.forEach(o => {
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.fillRect(o.x - 5, o.y + o.h*0.4, 5, 5);                  // little arms
+    ctx.fillRect(o.x + o.w, o.y + o.h*0.55, 5, 5);
+  });
+}
+addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  if (e.code === "Space" || e.key === "ArrowUp" || e.key === " "){
+    e.preventDefault();
+    over ? reset() : jump();
+  }
+});
+c.addEventListener("pointerdown", e => { e.preventDefault(); c.focus(); over ? reset() : jump(); });
+document.getElementById("restart").onclick = reset;
+reset();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The game loop", why:"Every game is one function that runs about 60 times a second: update the world a tiny bit, then draw it. Browsers give you requestAnimationFrame, which calls your loop right before each screen refresh so motion stays smooth. You never draw 'once' — you redraw the whole scene every frame. That steady heartbeat is what turns static boxes into a running game.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">update → draw → requestAnimationFrame(loop)<br>↻ ~60× / second</div>`, code:`function loop(){
+  update();      // move things a little
+  draw();        // repaint everything
+  requestAnimationFrame(loop);   // do it again next frame
+}` },
+  { title:"2. The ground and gravity", why:"There's an invisible line — the ground — and the dino simply isn't allowed below it. Gravity is one number added to a downward velocity every frame, so the dino speeds up as it falls, just like real life. When its bottom reaches the ground we snap it back and zero the velocity. This is the cheapest physics in games, and it feels exactly right.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">vy += gravity · y += vy · if (y &gt; ground) y = ground</div>`, code:`dino.vy += 0.6;   // gravity pulls down each frame
+dino.y  += dino.vy;
+if (dino.y > GROUND - dino.h){ dino.y = GROUND - dino.h; dino.vy = 0; }` },
+  { title:"3. The jump", why:"A jump is not an animation — it's just one push. Pressing Space sets the velocity to a negative number, so the next frames carry the dino upward; gravity then slows, stops, and reverses it into a fall. We only allow a jump while the dino is on the ground, otherwise you could press Space mid-air and float forever. One line of input, and the physics from step 2 does the rest.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">grounded? → vy = -11 → arc up, then gravity pulls back</div>`, code:`function jump(){
+  if (dino.y >= GROUND - dino.h)   // only when standing
+    dino.vy = -11;                 // one upward shove
+}` },
+  { title:"4. Spawning obstacles", why:"Cacti aren't placed by hand — they're created on the fly. Each one is a box that appears just off the right edge of the screen. After enough gap has opened behind the last cactus, we spawn the next at a slightly random distance so the pattern never feels memorised. Randomising height and spacing is what makes an endless level out of a few lines of code.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">last cactus far enough left? → push a new one at x = width</div>`, code:`function spawn(){
+  const h = 28 + Math.random()*22;            // random height
+  cacti.push({ x: width, y: GROUND-h, w:16, h });
+}` },
+  { title:"5. Scrolling the world", why:"The dino never actually moves forward — the world moves toward it. Every frame each cactus slides left by the current speed, which fakes the feeling of running. Once a cactus drifts off the left edge we delete it so the array stays small and fast. Moving the scenery instead of the player is the classic trick behind every side-scroller.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">each frame: cactus.x -= speed · drop ones past the left edge</div>`, code:`cacti.forEach(o => o.x -= speed);
+cacti = cacti.filter(o => o.x + o.w > 0);   // gone off-screen → remove` },
+  { title:"6. Collision detection (AABB)", why:"To know if the dino hit a cactus we treat both as rectangles and test for overlap. Two boxes touch only if they overlap on the x-axis AND the y-axis at the same time — that's the Axis-Aligned Bounding Box test, four comparisons total. It's exact, instant, and used in countless games. If any cactus overlaps the dino, the run is over.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">overlap on x AND overlap on y → they touch</div>`, code:`function hits(a, b){
+  return a.x < b.x+b.w && a.x+a.w > b.x &&    // x overlap
+         a.y < b.y+b.h && a.y+a.h > b.y;       // y overlap
+}` },
+  { title:"7. Increasing difficulty", why:"A runner that never speeds up gets boring and unbeatable scores pile up. So each frame we nudge the speed up by a tiny fraction; you barely notice it second to second, but a minute in the cacti are flying. Because spacing is measured in distance, faster scroll also means tighter reaction windows. This slow ramp is the whole reason 'endless' games stay tense.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">speed += 0.0025 every frame → gentle, relentless ramp</div>`, code:`score += 1;          // distance survived
+speed += 0.0025;     // the world keeps getting faster` },
+  { title:"8. Score and the state machine", why:"The game is always in exactly one state: playing or over. While playing, the score ticks up with distance and the loop keeps requesting frames. On a collision we flip to 'over', record the best score, and stop the loop so the crash freezes on screen. A single boolean cleanly separates 'the game is running' from 'the game ended', which keeps the logic from tangling.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">PLAYING ⇄ OVER · over=true freezes the loop</div>`, code:`if (over) return;            // stop the loop when crashed
+score += 1;
+// on hit:
+over = true; best = Math.max(best, score);` },
+  { title:"9. Input handling", why:"Players expect to jump with the keyboard and to tap on a phone, so we listen for both. A keydown for Space or the up-arrow triggers a jump, and a pointerdown on the canvas does the same — one jump function, two doors into it. When the game is over those same inputs restart it, so a crash never needs a separate button. We also call preventDefault so Space doesn't scroll the page.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">Space / ↑ / tap → if over: restart, else: jump</div>`, code:`addEventListener("keydown", e => {
+  if (e.code === "Space" || e.key === "ArrowUp"){
+    e.preventDefault(); over ? reset() : jump();
+  }
+});
+canvas.addEventListener("pointerdown", () => over ? reset() : jump());` },
+  { title:"10. Rendering on canvas", why:"Canvas is immediate-mode: it remembers nothing, so every frame you clear it and paint the entire scene again — ground, dino, and each cactus. That sounds wasteful but it's how all real-time graphics work, and at 60fps the eye just sees smooth motion. Because you redraw from scratch, animating is simply changing a number (the dino's y, a cactus's x) before the next paint. Box rectangles plus a ground line is all it takes to look like a real runner.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🦖</div><p class="font-bold text-slate-700">Loop + gravity + scrolling boxes + AABB = an endless runner.</p></div>`, code:`function draw(){
+  ctx.clearRect(0,0,W,H);                 // wipe last frame
+  ctx.fillRect(0,GROUND,W,2);             // ground line
+  ctx.fillRect(dino.x,dino.y,dino.w,dino.h);          // dino
+  cacti.forEach(o => ctx.fillRect(o.x,o.y,o.w,o.h));  // cacti
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>

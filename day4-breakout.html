@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 4 — Breakout</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .copy-btn:hover { background:#1e293b; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .brk-canvas { background:#020617; border:2px solid #334155; border-radius:8px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back to GameFromZero" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 4</div>
+      <h1 class="text-xl font-bold">🧱 Breakout</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<!-- LOOK -->
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] flex flex-col items-center justify-center p-8 bg-slate-100">
+    <h2 class="text-4xl font-bold mb-2">🧱 Breakout</h2>
+    <p class="text-slate-500 mb-1">← → move paddle · Space launches the ball · R restarts</p>
+    <div class="text-lg my-3">Score: <span id="score" class="font-bold text-emerald-600">0</span> · Lives: <span id="lives" class="font-bold">3</span></div>
+    <canvas id="c" width="560" height="420" class="brk-canvas"></canvas>
+    <p class="text-xs text-slate-400 mt-4">↑ Same loop as Pong (Day 2), one paddle, brick grid replaces the opponent.</p>
+  </div>
+</section>
+
+<!-- UNDERSTAND -->
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">Build Breakout step by step</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div>
+        <div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step on the left →</div></div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div>
+        <div id="why" class="text-slate-700">—</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div>
+        <pre id="code"></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BUILD -->
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Estimated time: <b>25 minutes</b>. One HTML file.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Steal Pong's game loop</h3></div>
+        <p class="text-sm text-slate-600">Breakout is Pong + a brick grid. The state (paddleX, ballX, ballY, vx, vy) is identical to Pong. Add a 2D <code>bricks[]</code> array.</p>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Build the brick grid</h3></div>
+<pre>const ROWS = 5, COLS = 10;
+const bricks = Array.from({ length: ROWS }, () =&gt;
+  Array(COLS).fill(true)
+);</pre>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Brick collision in 5 lines</h3></div>
+<pre>for (let r = 0; r &lt; ROWS; r++)
+  for (let col = 0; col &lt; COLS; col++) {
+    if (!bricks[r][col]) continue;
+    const bx = col*BW, by = r*BH + 50;
+    if (ballX &gt; bx &amp;&amp; ballX &lt; bx+BW &amp;&amp; ballY &gt; by &amp;&amp; ballY &lt; by+BH) {
+      bricks[r][col] = false; score += 10; vy = -vy;
+    }
+  }</pre>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Lives + reset</h3></div>
+        <p class="text-sm text-slate-600">Ball passes the paddle (y &gt; height) → lives--. If lives = 0 → game over. Else reset ball position. Same shape as Pong's score event.</p>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Tweaks</h3></div>
+        <ul class="text-sm text-slate-600 space-y-2 ml-4 list-disc">
+          <li>Brick colors per row: red (top, worth more) → green (bottom)</li>
+          <li>Multi-hit bricks: <code>bricks[r][c] = 2</code>, decrement instead of false</li>
+          <li>Power-ups: 5% chance brick drops a falling item that grows paddle</li>
+        </ul>
+      </li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
+      <h3 class="font-bold text-lg text-emerald-900">🎉 Day 4 of GameFromZero done.</h3>
+      <p class="text-sm text-emerald-700 mt-2">Tomorrow: 2048 (slide-merge).</p>
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// =========== BREAKOUT ===========
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const SCORE = document.getElementById("score"), LIVES = document.getElementById("lives");
+const PW = 80, PH = 10, BR = 7;
+const ROWS = 5, COLS = 10, BW = 56, BH = 18, BTOP = 40;
+const COLORS = ["#ef4444","#f97316","#facc15","#22c55e","#3b82f6"];
+
+let paddleX, ballX, ballY, vx, vy, score, lives, launched, bricks;
+const keys = {};
+
+function reset() {
+  paddleX = c.width/2 - PW/2;
+  ballX = c.width/2; ballY = c.height - 40;
+  vx = 0; vy = 0;
+  launched = false;
+}
+function newGame() {
+  score = 0; lives = 3;
+  bricks = Array.from({length:ROWS}, () => Array(COLS).fill(true));
+  SCORE.textContent = 0; LIVES.textContent = 3;
+  reset();
+}
+
+function step() {
+  if (keys.ArrowLeft  && paddleX > 0) paddleX -= 7;
+  if (keys.ArrowRight && paddleX < c.width-PW) paddleX += 7;
+
+  if (!launched) { ballX = paddleX + PW/2; return; }
+
+  ballX += vx; ballY += vy;
+  if (ballX < BR || ballX > c.width-BR) vx = -vx;
+  if (ballY < BR) vy = -vy;
+
+  // paddle
+  if (ballY > c.height-PH-BR && ballX > paddleX && ballX < paddleX+PW && vy > 0) {
+    vy = -Math.abs(vy);
+    vx += ((ballX - (paddleX + PW/2)) / PW) * 3;
+  }
+
+  // brick collisions
+  for (let r=0; r<ROWS; r++)
+    for (let col=0; col<COLS; col++) {
+      if (!bricks[r][col]) continue;
+      const bx = col*BW, by = r*BH + BTOP;
+      if (ballX > bx && ballX < bx+BW && ballY > by && ballY < by+BH) {
+        bricks[r][col] = false;
+        score += 10;
+        SCORE.textContent = score;
+        vy = -vy;
+      }
+    }
+
+  // miss
+  if (ballY > c.height) {
+    lives--;
+    LIVES.textContent = lives;
+    if (lives <= 0) { newGame(); return; }
+    reset();
+  }
+}
+
+function draw() {
+  ctx.fillStyle = "#020617"; ctx.fillRect(0,0,c.width,c.height);
+  // bricks
+  for (let r=0; r<ROWS; r++)
+    for (let col=0; col<COLS; col++) {
+      if (!bricks[r][col]) continue;
+      ctx.fillStyle = COLORS[r];
+      ctx.fillRect(col*BW+2, r*BH + BTOP + 2, BW-4, BH-4);
+    }
+  // paddle
+  ctx.fillStyle = "#22c55e";
+  ctx.fillRect(paddleX, c.height-PH-2, PW, PH);
+  // ball
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(ballX, ballY, BR, 0, Math.PI*2); ctx.fill();
+}
+
+addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === " " && !launched) { vx = 3; vy = -3.5; launched = true; }
+  if (e.key === "r" || e.key === "R") newGame();
+});
+addEventListener("keyup", e => { keys[e.key] = false; });
+
+newGame();
+setInterval(() => { step(); draw(); }, 16);
+
+// UNDERSTAND
+const STEPS = [
+  { title:"1. Breakout = Pong + brick grid", why:"Pong has 2 paddles + 1 ball. Breakout has 1 paddle + 1 ball + a grid of bricks. The ball physics are identical. The only new thing is the brick-collision loop. If you built Pong (Day 2), you already have 80% of Breakout.", concept:`<div class="grid grid-cols-2 gap-2 w-full"><div class="bg-slate-100 p-3 rounded text-xs text-center"><b>Pong</b><br>2 paddles · 1 ball</div><div class="bg-emerald-50 border border-emerald-200 p-3 rounded text-xs text-center"><b>Breakout</b><br>1 paddle · 1 ball · 50 bricks</div></div>`, code:`// state from Pong:
+let paddleX, ballX, ballY, vx, vy;
+
+// new for Breakout:
+const bricks = Array.from({ length: 5 },
+  () => Array(10).fill(true));
+let score, lives;` },
+  { title:"2. Brick grid as 2D array", why:"5 rows × 10 cols = 50 bricks. Each cell is true (brick present) or false (destroyed). Tiny memory footprint — ten ints. Easy to scan in collision check.", concept:`<div class="grid grid-cols-10 gap-0.5 w-full">${Array.from({length:50}).map((_,i)=>`<div class="aspect-square rounded-sm" style="background:${["#ef4444","#f97316","#facc15","#22c55e","#3b82f6"][Math.floor(i/10)]};"></div>`).join("")}</div>`, code:`const ROWS = 5, COLS = 10;
+const bricks = Array.from({ length: ROWS },
+  () => Array(COLS).fill(true));
+
+// after a hit:
+bricks[r][col] = false;` },
+  { title:"3. Brick collision in 8 lines", why:"For each brick still alive, check if ball is inside its rectangle. If yes: mark brick dead, score++, flip vy. Done. Don't worry about side-vs-top collision detail — flipping vy looks fine 99% of the time.", concept:`<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full">
+    <div>for each brick:</div>
+    <div class="ml-4">if (ball inside brick rect):</div>
+    <div class="ml-8 text-emerald-700">bricks[r][c] = false</div>
+    <div class="ml-8 text-emerald-700">score += 10</div>
+    <div class="ml-8 text-emerald-700">vy = -vy</div>
+  </div>`, code:`for (let r = 0; r < ROWS; r++)
+  for (let c = 0; c < COLS; c++) {
+    if (!bricks[r][c]) continue;
+    const bx = c*BW, by = r*BH + BTOP;
+    if (ballX > bx && ballX < bx + BW &&
+        ballY > by && ballY < by + BH) {
+      bricks[r][c] = false;
+      score += 10;
+      vy = -vy;
+    }
+  }` },
+  { title:"4. Launch + paddle bounce + steering", why:"Space launches the ball off the paddle with initial velocity. Hit position on paddle steers the deflection — same `(ballX - paddleCenter) / PW * 3` trick as Pong. Hit edge = ball goes sideways, hit center = ball goes straight up.", concept:`<div class="bg-slate-100 p-4 rounded text-xs space-y-1 w-full">
+    <div>Space pressed → vx = 3, vy = -3.5</div>
+    <div class="ml-4">paddle hit at left edge → vx -= 1.5</div>
+    <div class="ml-4">paddle hit at center → vx unchanged</div>
+    <div class="ml-4">paddle hit at right edge → vx += 1.5</div>
+  </div>`, code:`if (e.key === " " && !launched) {
+  vx = 3; vy = -3.5;
+  launched = true;
+}
+
+// on paddle hit:
+vy = -Math.abs(vy);
+vx += ((ballX - (paddleX + PW/2)) / PW) * 3;` },
+  { title:"5. Lives + reset", why:"If ball goes past paddle (y > canvas.height), lives--. If lives reaches 0, game over. Otherwise reset ball position above paddle and wait for next Space. Simple state machine.", concept:`<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full">
+    <div>ball.y &gt; height:</div>
+    <div class="ml-4">lives--</div>
+    <div class="ml-4">if lives === 0: <span class="text-red-700">newGame()</span></div>
+    <div class="ml-4">else: <span class="text-emerald-700">reset ball</span></div>
+  </div>`, code:`if (ballY > c.height) {
+  lives--;
+  if (lives <= 0) { newGame(); return; }
+  reset();  // ball back above paddle, wait for Space
+}` },
+  { title:"6. Colored brick rows", why:"Tradition: top row = red (highest score), bottom = blue (lowest). Visual cue + the ball reaches the bottom rows first = easier early game. Pure cosmetic but the game feels wrong without it.", concept:`<div class="grid grid-cols-10 gap-px w-full">${[..."ef4444 f97316 facc15 22c55e 3b82f6".split(" ")].flatMap(c => Array.from({length:10}, () => `<div class="h-3" style="background:#${c}"></div>`)).join("")}</div>`, code:`const COLORS = ["#ef4444", "#f97316", "#facc15",
+                "#22c55e", "#3b82f6"];
+
+ctx.fillStyle = COLORS[r];  // brick color by row` },
+  { title:"7. Same render loop as every game", why:"setInterval(step + draw, 16) — 60 FPS. Same skeleton as Snake (Day 1), Pong (Day 2), Tetris (Day 3). The pattern doesn't change. Only the world state shape grows.", concept:`<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full">
+    <div>every 16ms tick:</div>
+    <div class="ml-4">step()  ← update paddle + ball + bricks</div>
+    <div class="ml-4">draw()  ← repaint canvas</div>
+  </div>`, code:`setInterval(() => { step(); draw(); }, 16);` },
+  { title:"8. Done!", why:"You now have 4 arcade games sharing the same loop (Snake / Pong / Tetris / Breakout). Master the state-step-draw skeleton once = ship every classic arcade game in an evening each.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🎉</div><p class="font-bold text-slate-700">Same loop, fourth game shipped.</p></div>`, code:`// Next: 2048 (Day 5)
+// Same loop. State = 4×4 grid of numbers.
+// Step = on arrow key, slide + merge tiles.` }
+];
+const stepsEl = document.getElementById("steps");
+const prev = document.getElementById("prev");
+const next = document.getElementById("next-btn");
+const auto = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  b.innerHTML = `<div class="font-semibold">${s.title}</div>`;
+  b.onclick = () => show(i);
+  stepsEl.appendChild(b);
+});
+function show(i) {
+  cur = i;
+  const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((b, idx) => {
+    b.className = idx === i
+      ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold"
+      : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  });
+}
+prev.onclick = () => show(Math.max(0, cur - 1));
+next.onclick = () => show(Math.min(STEPS.length - 1, cur + 1));
+let timer = null;
+auto.onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; auto.textContent = "▶ Auto-play"; return; }
+  auto.textContent = "⏸ Pause";
+  show(0);
+  timer = setInterval(() => {
+    if (cur >= STEPS.length - 1) { clearInterval(timer); timer = null; auto.textContent = "▶ Replay"; return; }
+    show(cur + 1);
+  }, 2500);
+};
+show(0);
+</script>
+</body>
+</html>

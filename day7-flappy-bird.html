@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 7 — Flappy Bird</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  #gameCanvas { display:block; border-radius:10px; cursor:pointer; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back to GameFromZero" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 7</div>
+      <h1 class="text-xl font-bold">🐦 Flappy Bird</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] flex flex-col items-center justify-center p-8 bg-slate-100">
+    <h2 class="text-4xl font-bold mb-2">🐦 Flappy Bird</h2>
+    <p class="text-slate-500 mb-1">Click or press Space to flap · dodge the pipes · survive as long as you can</p>
+    <div class="text-lg my-3">Score: <span id="scoreDisplay" class="font-bold text-emerald-600">0</span></div>
+    <canvas id="gameCanvas" width="360" height="480"></canvas>
+    <p class="text-xs text-slate-400 mt-4">↑ One-button physics: a constant downward force and one upward impulse per tap.</p>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">Build Flappy Bird step by step</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">~120 lines. The whole thing is a game loop, gravity, and AABB collision.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Canvas setup + state</h3></div><pre>const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+let bird, pipes, score, state; // "idle" | "play" | "dead"</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Gravity + velocity each frame</h3></div><pre>// Every tick, apply gravity then clamp fall speed
+bird.vy += GRAVITY;
+bird.vy = Math.min(bird.vy, MAX_FALL);
+bird.y  += bird.vy;
+
+// On tap: instant upward impulse
+function flap() { bird.vy = FLAP_STRENGTH; }</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Pipe spawning + scroll</h3></div><pre>// Spawn a new pipe pair every PIPE_INTERVAL frames
+if (frame % PIPE_INTERVAL === 0) {
+  const gapY = 80 + Math.random() * (H - 200);
+  pipes.push({ x: W, gapY });
+}
+// Each frame, slide all pipes left
+pipes.forEach(p => p.x -= SPEED);
+// Remove off-screen pipes
+pipes = pipes.filter(p => p.x > -PIPE_W);</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">AABB collision detection</h3></div><pre>// Axis-Aligned Bounding Box: do two rectangles overlap?
+function hits(p) {
+  const bx = bird.x - bird.r, by = bird.y - bird.r;
+  const bw = bird.r * 2,      bh = bird.r * 2;
+  // top pipe rect
+  if (bx < p.x+PIPE_W && bx+bw > p.x &&
+      by < p.gapY - GAP/2) return true;
+  // bottom pipe rect
+  if (bx < p.x+PIPE_W && bx+bw > p.x &&
+      by+bh > p.gapY + GAP/2) return true;
+  return false;
+}</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Score + game loop with requestAnimationFrame</h3></div><pre>// Score increments when bird clears a pipe's x position
+pipes.forEach(p => {
+  if (!p.scored && p.x + PIPE_W < bird.x) {
+    score++; p.scored = true;
+  }
+});
+
+// Game loop — browser calls this ~60 times per second
+function loop() {
+  update();
+  draw();
+  if (state !== "dead") requestAnimationFrame(loop);
+}</pre></li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 7 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">Tomorrow: Frogger (cross road + river).</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== FLAPPY BIRD =====
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+const scoreDisplay = document.getElementById("scoreDisplay");
+
+const GRAVITY = 0.45, FLAP_STRENGTH = -8, MAX_FALL = 12;
+const SPEED = 2.8, PIPE_W = 52, GAP = 130, PIPE_INTERVAL = 90;
+
+let bird, pipes, score, frame, state, raf;
+
+function init() {
+  bird = { x: 80, y: H / 2, vy: 0, r: 14 };
+  pipes = []; score = 0; frame = 0; state = "idle";
+  scoreDisplay.textContent = 0;
+  cancelAnimationFrame(raf);
+  draw();
+}
+
+function flap() {
+  if (state === "idle") { state = "play"; loop(); return; }
+  if (state === "play") { bird.vy = FLAP_STRENGTH; }
+  if (state === "dead") { init(); }
+}
+
+canvas.addEventListener("click", flap);
+document.addEventListener("keydown", e => { if (e.code === "Space") { e.preventDefault(); flap(); } });
+
+function update() {
+  if (state !== "play") return;
+  frame++;
+
+  bird.vy += GRAVITY;
+  bird.vy = Math.min(bird.vy, MAX_FALL);
+  bird.y += bird.vy;
+
+  if (frame % PIPE_INTERVAL === 0) {
+    const gapY = 110 + Math.random() * (H - 230);
+    pipes.push({ x: W, gapY, scored: false });
+  }
+  pipes.forEach(p => p.x -= SPEED);
+  pipes = pipes.filter(p => p.x > -PIPE_W);
+
+  pipes.forEach(p => {
+    if (!p.scored && p.x + PIPE_W < bird.x) {
+      score++; p.scored = true;
+      scoreDisplay.textContent = score;
+    }
+  });
+
+  if (bird.y - bird.r < 0 || bird.y + bird.r > H) { state = "dead"; return; }
+
+  for (const p of pipes) {
+    const bx = bird.x - bird.r, by = bird.y - bird.r;
+    const bw = bird.r * 2,      bh = bird.r * 2;
+    const topBottom = p.gapY - GAP / 2;
+    const botTop    = p.gapY + GAP / 2;
+    if (bx < p.x + PIPE_W && bx + bw > p.x) {
+      if (by < topBottom || by + bh > botTop) { state = "dead"; return; }
+    }
+  }
+}
+
+function drawPipe(x, gapY) {
+  const topH = gapY - GAP / 2;
+  const botY = gapY + GAP / 2;
+  const botH = H - botY;
+
+  ctx.fillStyle = "#22c55e";
+  ctx.fillRect(x, 0, PIPE_W, topH);
+  ctx.fillRect(x, botY, PIPE_W, botH);
+
+  // cap
+  ctx.fillStyle = "#16a34a";
+  ctx.fillRect(x - 4, topH - 18, PIPE_W + 8, 18);
+  ctx.fillRect(x - 4, botY, PIPE_W + 8, 18);
+}
+
+function draw() {
+  // sky gradient
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, "#7dd3fc"); sky.addColorStop(1, "#bae6fd");
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+  // ground
+  ctx.fillStyle = "#a3e635"; ctx.fillRect(0, H - 20, W, 20);
+  ctx.fillStyle = "#65a30d"; ctx.fillRect(0, H - 20, W, 4);
+
+  pipes.forEach(p => drawPipe(p.x, p.gapY));
+
+  // bird body
+  const tilt = Math.max(-0.4, Math.min(0.5, bird.vy * 0.04));
+  ctx.save();
+  ctx.translate(bird.x, bird.y);
+  ctx.rotate(tilt);
+  ctx.fillStyle = "#facc15";
+  ctx.beginPath();
+  ctx.arc(0, 0, bird.r, 0, Math.PI * 2);
+  ctx.fill();
+  // eye
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(5, -4, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#0f172a";
+  ctx.beginPath(); ctx.arc(7, -4, 2.5, 0, Math.PI * 2); ctx.fill();
+  // beak
+  ctx.fillStyle = "#f97316";
+  ctx.beginPath(); ctx.moveTo(bird.r - 2, -1); ctx.lineTo(bird.r + 7, 2); ctx.lineTo(bird.r - 2, 5); ctx.closePath(); ctx.fill();
+  // wing
+  ctx.fillStyle = "#fde047";
+  ctx.beginPath(); ctx.ellipse(-3, 4, 8, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  if (state === "idle") {
+    ctx.fillStyle = "rgba(0,0,0,.45)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 28px -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("🐦 Flappy Bird", W / 2, H / 2 - 20);
+    ctx.font = "16px -apple-system, sans-serif";
+    ctx.fillText("Click or Space to start", W / 2, H / 2 + 14);
+  }
+
+  if (state === "dead") {
+    ctx.fillStyle = "rgba(0,0,0,.5)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 30px -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Game Over", W / 2, H / 2 - 30);
+    ctx.font = "bold 22px -apple-system, sans-serif";
+    ctx.fillText("Score: " + score, W / 2, H / 2 + 5);
+    ctx.font = "15px -apple-system, sans-serif";
+    ctx.fillText("Click or Space to restart", W / 2, H / 2 + 34);
+  }
+
+  if (state === "play") {
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 26px -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(score, W / 2, 40);
+  }
+}
+
+function loop() {
+  update();
+  draw();
+  if (state !== "dead") raf = requestAnimationFrame(loop);
+  else draw();
+}
+
+init();
+
+// ===== UNDERSTAND STEPS =====
+const STEPS = [
+  {
+    title: "1. The game loop",
+    why: "requestAnimationFrame fires ~60 times per second. Each tick: update physics → check collisions → draw. This separation is the foundation of every real-time game ever written. Keeping update and draw separate means you can later swap renderers without touching logic.",
+    concept: `<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full"><div class="text-emerald-700">function loop() {</div><div class="ml-4">update(); // move everything</div><div class="ml-4">draw();   // paint everything</div><div class="ml-4 text-emerald-700">requestAnimationFrame(loop);</div><div class="text-emerald-700">}</div></div>`,
+    code: `function loop() {
+  update();
+  draw();
+  if (state !== "dead")
+    requestAnimationFrame(loop);
+}`
+  },
+  {
+    title: "2. Gravity + velocity",
+    why: "Gravity isn't a jump — it's a constant downward force applied every frame. The bird has a vy (vertical velocity) that grows each tick. On a tap, you set vy to a negative value (upward). That's it. The whole 'physics engine' is two lines.",
+    concept: `<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full"><div>vy += GRAVITY  <span class="text-slate-400">// accelerate down</span></div><div>y  += vy       <span class="text-slate-400">// move by velocity</span></div><div class="mt-2 text-emerald-700">on tap:</div><div>vy = FLAP_STRENGTH  <span class="text-slate-400">// impulse up</span></div></div>`,
+    code: `// Every frame
+bird.vy += GRAVITY;          // 0.45 per frame
+bird.vy = Math.min(bird.vy, MAX_FALL);
+bird.y  += bird.vy;
+
+// On click/space
+bird.vy = FLAP_STRENGTH;     // -8 (upward)`
+  },
+  {
+    title: "3. Pipe spawning",
+    why: "Every PIPE_INTERVAL frames, we push a new pipe object onto an array. Each pipe is just { x, gapY }. Every tick, x decreases by SPEED. When a pipe goes off-screen (x < -PIPE_W) we remove it from the array. Simple array mutation, no physics needed.",
+    concept: `<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full"><div>pipes = [{x, gapY}, ...]</div><div class="mt-2">each frame: p.x -= SPEED</div><div>spawn: every 90 frames</div><div class="text-slate-400">remove: x &lt; -PIPE_W</div></div>`,
+    code: `if (frame % PIPE_INTERVAL === 0) {
+  const gapY = 110 + Math.random() * (H - 230);
+  pipes.push({ x: W, gapY, scored: false });
+}
+pipes.forEach(p => p.x -= SPEED);
+pipes = pipes.filter(p => p.x > -PIPE_W);`
+  },
+  {
+    title: "4. Collision — AABB",
+    why: "Axis-Aligned Bounding Box (AABB) is the simplest collision test: two rectangles overlap if they are NOT separated on either axis. We approximate the bird as a rectangle (its bounding box) and check it against the top and bottom pipe rectangles. Fast, correct, and universally used in 2D games.",
+    concept: `<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full"><div class="text-slate-400">overlap when:</div><div>bx &lt; px+PW <span class="text-emerald-700">AND</span> bx+bw &gt; px</div><div>by &lt; topH  <span class="text-red-500">→ hit top pipe</span></div><div>by+bh &gt; botY <span class="text-red-500">→ hit bottom pipe</span></div></div>`,
+    code: `// AABB: bird rect vs pipe rects
+const bx = bird.x - bird.r, by = bird.y - bird.r;
+const bw = bird.r*2, bh = bird.r*2;
+const topH = p.gapY - GAP/2;
+const botY = p.gapY + GAP/2;
+
+if (bx < p.x+PIPE_W && bx+bw > p.x) {
+  if (by < topH || by+bh > botY) die();
+}`
+  },
+  {
+    title: "5. Score",
+    why: "Score is just a counter. We add 1 when the bird's x passes a pipe's right edge — detected by checking p.x + PIPE_W < bird.x for the first time (the scored flag stops double-counting). No fancy math needed.",
+    concept: `<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full"><div>pipe clears bird's x?</div><div class="ml-4">→ score++</div><div class="ml-4 text-slate-400">→ p.scored = true (once only)</div></div>`,
+    code: `pipes.forEach(p => {
+  if (!p.scored && p.x + PIPE_W < bird.x) {
+    score++;
+    p.scored = true;
+  }
+});`
+  },
+  {
+    title: "6. Done!",
+    why: "Flappy Bird is just gravity + one impulse + scrolling obstacles + AABB. Four concepts, ~120 lines. The same gravity + impulse pattern powers every platformer — Mario, Celeste, Hollow Knight. Learn this and you can build them all.",
+    concept: `<div class="text-center w-full"><div class="text-5xl mb-2">🐦</div><p class="font-bold text-slate-700">Gravity + impulse + AABB.</p><p class="text-sm text-slate-500 mt-1">The recipe for every platformer ever made.</p></div>`,
+    code: `// Full recipe:
+// 1. vy += GRAVITY every frame
+// 2. on tap: vy = FLAP_STRENGTH
+// 3. pipes[] scroll left, spawn on interval
+// 4. AABB collision → game over
+// 5. score++ when pipe x < bird x`
+  }
+];
+
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  b.innerHTML = `<div class="font-semibold">${s.title}</div>`;
+  b.onclick = () => show(i);
+  stepsEl.appendChild(b);
+});
+function show(i) {
+  cur = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((b, idx) => {
+    b.className = idx === i
+      ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold"
+      : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  });
+}
+prevB.onclick = () => show(Math.max(0, cur - 1));
+nextB.onclick = () => show(Math.min(STEPS.length - 1, cur + 1));
+let tm = null;
+autoB.onclick = () => {
+  if (tm) { clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; }
+  autoB.textContent = "⏸ Pause"; show(0);
+  tm = setInterval(() => {
+    if (cur >= STEPS.length - 1) { clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; }
+    show(cur + 1);
+  }, 2500);
+};
+show(0);
+</script>
+</body>
+</html>

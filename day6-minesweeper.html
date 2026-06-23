@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 6 — Minesweeper</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  #board { display:grid; gap:3px; background:#1e293b; padding:8px; border-radius:10px; }
+  .ms { width:30px; height:30px; border-radius:5px; font-weight:800; font-size:15px; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none; background:#475569; color:#fff; }
+  .ms.open { background:#e2e8f0; color:#0f172a; cursor:default; }
+  .ms.mine { background:#ef4444; }
+  .ms.flag { background:#f59e0b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back to GameFromZero" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 6</div>
+      <h1 class="text-xl font-bold">💣 Minesweeper</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] flex flex-col items-center justify-center p-8 bg-slate-100">
+    <h2 class="text-4xl font-bold mb-2">💣 Minesweeper</h2>
+    <p class="text-slate-500 mb-1">Left-click reveal · Right-click flag · clear all safe cells to win · R restarts</p>
+    <div class="text-lg my-3">💣 <span id="mines" class="font-bold text-emerald-600">10</span> · <span id="status" class="font-bold"></span></div>
+    <div id="board"></div>
+    <p class="text-xs text-slate-400 mt-4">↑ The trick is flood-fill: open one empty cell and all connected empties cascade open.</p>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">Build Minesweeper step by step</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">~50 lines. The only clever bit is the flood-fill reveal.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Grid of cells</h3></div><pre>const cells = grid.map(() => ({ mine:false, open:false, flag:false, n:0 }));</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Scatter mines + count neighbours</h3></div><pre>// place M mines randomly, then for each cell
+// n = number of the 8 neighbours that are mines</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Flood-fill reveal</h3></div><pre>function open(r,c){
+  if (out || cell.open || cell.flag) return;
+  cell.open = true;
+  if (cell.n === 0)          // empty? cascade to all 8 neighbours
+    forEachNeighbour(r,c, open);
+}</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Win / lose</h3></div><p class="text-sm text-slate-600">Click a mine → lose. All non-mine cells open → win.</p></li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 6 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">Tomorrow: Flappy Bird (one-button physics).</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== MINESWEEPER =====
+const R = 9, C = 9, M = 10;
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+const NUMCOL = ["", "#2563eb","#15803d","#dc2626","#7c3aed","#b45309","#0891b2","#0f172a","#475569"];
+let cells, over, opened;
+boardEl.style.gridTemplateColumns = `repeat(${C}, 30px)`;
+
+function reset() {
+  cells = Array.from({length:R*C}, () => ({ mine:false, open:false, flag:false, n:0 }));
+  over = false; opened = 0; statusEl.textContent = "";
+  let placed = 0;
+  while (placed < M) { const i = Math.floor(Math.random()*R*C); if (!cells[i].mine) { cells[i].mine = true; placed++; } }
+  for (let r=0;r<R;r++) for (let c=0;c<C;c++) {
+    if (cells[r*C+c].mine) continue;
+    let n=0; nb(r,c,(rr,cc)=>{ if (cells[rr*C+cc].mine) n++; }); cells[r*C+c].n = n;
+  }
+  draw();
+}
+function nb(r,c,fn){ for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){ if(!dr&&!dc)continue; const rr=r+dr,cc=c+dc; if(rr>=0&&rr<R&&cc>=0&&cc<C) fn(rr,cc); } }
+function open(r,c){
+  const cell = cells[r*C+c];
+  if (over || cell.open || cell.flag) return;
+  cell.open = true; opened++;
+  if (cell.mine) { over = true; statusEl.innerHTML = '<span class="text-red-500">💥 Boom! Press R</span>'; return; }
+  if (cell.n === 0) nb(r,c,(rr,cc)=>open(rr,cc));
+  if (opened === R*C - M) { over = true; statusEl.innerHTML = '<span class="text-emerald-600">🎉 Cleared! Press R</span>'; }
+}
+function draw(){
+  boardEl.innerHTML = "";
+  for (let r=0;r<R;r++) for (let c=0;c<C;c++) {
+    const cell = cells[r*C+c];
+    const d = document.createElement("div");
+    d.className = "ms" + (cell.open ? " open" : "") + (over && cell.mine ? " mine" : "") + (cell.flag ? " flag" : "");
+    if (cell.flag && !cell.open) d.textContent = "🚩";
+    else if (over && cell.mine) d.textContent = "💣";
+    else if (cell.open && cell.n) { d.textContent = cell.n; d.style.color = NUMCOL[cell.n]; }
+    d.oncontextmenu = e => { e.preventDefault(); if (!over && !cell.open) { cell.flag = !cell.flag; draw(); } };
+    d.onclick = () => { open(r,c); draw(); };
+    boardEl.appendChild(d);
+  }
+}
+addEventListener("keydown", e => { if (e.key==="r"||e.key==="R") reset(); });
+reset();
+
+const STEPS = [
+  { title:"1. Cells hold 4 facts", why:"Each square needs: is it a mine, is it open, is it flagged, and how many of its 8 neighbours are mines. Four fields per cell — the whole game state.", concept:`<div class="bg-slate-100 p-4 rounded text-xs font-mono w-full">{ mine, open, flag, n }</div>`, code:`const cell = { mine:false, open:false, flag:false, n:0 };` },
+  { title:"2. Count neighbour mines once", why:"After scattering mines, precompute each non-mine cell's number = how many of its 8 neighbours are mines. That number is all the player gets to deduce from.", concept:`<div class="grid grid-cols-3 gap-1 w-24 text-center text-xs">${[1,'💣',1,1,2,1,0,1,'💣'].map(v=>`<div class="aspect-square bg-slate-200 rounded flex items-center justify-center">${v}</div>`).join("")}</div>`, code:`let n = 0;
+neighbours(r,c, (rr,cc) => { if (cells[rr][cc].mine) n++; });
+cell.n = n;` },
+  { title:"3. Flood-fill is the whole trick", why:"When you open a cell with 0 neighbouring mines, there's nothing to fear nearby — so you auto-open all 8 neighbours, and if any of THOSE are also 0, they cascade too. That's why one click can clear a huge region. It's recursion.", concept:`<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full"><div>open(cell):</div><div class="ml-3">mark open</div><div class="ml-3 text-emerald-700">if n===0: open all 8 neighbours</div></div>`, code:`function open(r,c){
+  const cell = cells[r][c];
+  if (cell.open || cell.flag) return;   // base case
+  cell.open = true;
+  if (cell.n === 0)
+    neighbours(r,c, (rr,cc) => open(rr,cc)); // recurse
+}` },
+  { title:"4. Flags + right-click", why:"Right-click toggles a flag (your guess: 'mine here'). Flagged cells can't be opened by a left-click — it protects you from your own misclicks. Pure UI state, no logic impact.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full">right-click → cell.flag = !cell.flag</div>`, code:`cell.oncontextmenu = e => {
+  e.preventDefault();
+  if (!cell.open) cell.flag = !cell.flag;
+};` },
+  { title:"5. Win + lose", why:"Open a mine → game over. Win when the number of opened cells equals total cells minus mines (every safe cell revealed). Two one-line checks.", concept:`<div class="bg-slate-100 p-4 rounded text-xs font-mono space-y-1 w-full"><div class="text-red-600">open mine → lose</div><div class="text-emerald-700">opened === R*C - M → win</div></div>`, code:`if (cell.mine) { gameOver(); }
+if (opened === R*C - M) { win(); }` },
+  { title:"6. Done!", why:"Minesweeper = a grid + neighbour counts + recursive flood-fill. The flood-fill (also called connected-component fill) is the same algorithm behind the paint-bucket tool and maze solving.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🎉</div><p class="font-bold text-slate-700">Recursion clears the board.</p></div>`, code:`// Same flood-fill powers:
+//  - paint bucket fill
+//  - flood-it / blob games
+//  - region detection in images` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const b=document.createElement("button"); b.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; b.innerHTML=`<div class="font-semibold">${s.title}</div>`; b.onclick=()=>show(i); stepsEl.appendChild(b); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((b,idx)=>{ b.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2500); };
+show(0);
+</script>
+</body>
+</html>

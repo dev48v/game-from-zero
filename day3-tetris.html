@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 3 — Tetris</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .copy-btn:hover { background:#1e293b; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .tetris-canvas { background:#020617; border:2px solid #334155; border-radius:8px; image-rendering: pixelated; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back to GameFromZero" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 3</div>
+      <h1 class="text-xl font-bold">🟦 Tetris on Canvas</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<!-- LOOK -->
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] flex flex-col items-center justify-center p-8 bg-slate-100">
+    <h2 class="text-4xl font-bold mb-2">🟦 Tetris</h2>
+    <p class="text-slate-500 mb-1">← → move · ↓ soft drop · ↑ rotate · Space hard drop</p>
+    <div class="flex gap-6 my-3 items-start">
+      <canvas id="c" width="240" height="480" class="tetris-canvas"></canvas>
+      <div class="space-y-3">
+        <div class="bg-white border border-slate-200 rounded-xl p-3 w-28">
+          <div class="text-xs text-slate-500 font-bold uppercase">Score</div>
+          <div class="text-2xl font-bold text-emerald-600" id="score">0</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-3 w-28">
+          <div class="text-xs text-slate-500 font-bold uppercase">Lines</div>
+          <div class="text-2xl font-bold" id="lines">0</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-3 w-28">
+          <div class="text-xs text-slate-500 font-bold uppercase">Next</div>
+          <canvas id="next" width="80" height="80" class="block mx-auto mt-1"></canvas>
+        </div>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400 mt-4">↑ Open <b>UNDERSTAND</b> for piece rotation + line clear logic.</p>
+  </div>
+</section>
+
+<!-- UNDERSTAND -->
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">Build Tetris step by step</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step. Read the WHY.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div>
+        <div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step on the left →</div></div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div>
+        <div id="why" class="text-slate-700">—</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div>
+        <pre id="code"></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BUILD -->
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Estimated time: <b>30 minutes</b>. One HTML file.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Make an empty HTML</h3></div>
+<pre>touch tetris.html</pre>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Copy the Tetris source</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Full source on GitHub — search "tetris in 100 lines js". The shape: 10x20 board · 7 piece definitions · gravity tick · line clear scan · keyboard input.</p>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Tweaks</h3></div>
+        <ul class="text-sm text-slate-600 space-y-2 ml-4 list-disc">
+          <li>Speed up with score: <code>dropMs = max(100, 700 - lines*40)</code></li>
+          <li>Hold piece: store current, swap with hold buffer</li>
+          <li>Ghost piece: render translucent at landing position</li>
+          <li>SRS rotation: official Tetris kicks (complex but feels pro)</li>
+        </ul>
+      </li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
+      <h3 class="font-bold text-lg text-emerald-900">🎉 Day 3 of GameFromZero done.</h3>
+      <p class="text-sm text-emerald-700 mt-2">Tomorrow: Breakout. Same loop, ball + brick wall.</p>
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// =============== TETRIS ===============
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const nx = document.getElementById("next"), nxc = nx.getContext("2d");
+const COLS = 10, ROWS = 20, SIZE = 24;
+const SCORE = document.getElementById("score"), LINES = document.getElementById("lines");
+const COLORS = ["#0a0a0a","#22d3ee","#3b82f6","#f97316","#facc15","#22c55e","#a855f7","#ef4444"];
+// Tetromino shapes: I, J, L, O, S, T, Z (color index = piece+1)
+const SHAPES = [
+  [[1,1,1,1]],
+  [[2,0,0],[2,2,2]],
+  [[0,0,3],[3,3,3]],
+  [[4,4],[4,4]],
+  [[0,5,5],[5,5,0]],
+  [[0,6,0],[6,6,6]],
+  [[7,7,0],[0,7,7]]
+];
+let board, piece, score, linesCleared, dropTimer, gameOver;
+
+function newPiece() {
+  const idx = Math.floor(Math.random()*7);
+  return { shape: SHAPES[idx], x: 3, y: 0 };
+}
+let nextP;
+
+function reset() {
+  board = Array.from({length:ROWS}, () => Array(COLS).fill(0));
+  score = 0; linesCleared = 0; gameOver = false;
+  SCORE.textContent = 0; LINES.textContent = 0;
+  piece = newPiece();
+  nextP = newPiece();
+  drawNext();
+}
+
+function collide(p, dx=0, dy=0, shape=null) {
+  const s = shape || p.shape;
+  for (let r=0; r<s.length; r++)
+    for (let col=0; col<s[r].length; col++) {
+      if (!s[r][col]) continue;
+      const x = p.x + col + dx, y = p.y + r + dy;
+      if (x<0 || x>=COLS || y>=ROWS) return true;
+      if (y>=0 && board[y][x]) return true;
+    }
+  return false;
+}
+
+function merge() {
+  piece.shape.forEach((row, r) => row.forEach((v, col) => {
+    if (v && piece.y+r >= 0) board[piece.y+r][piece.x+col] = v;
+  }));
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let y = ROWS-1; y >= 0; y--) {
+    if (board[y].every(v => v)) {
+      board.splice(y, 1);
+      board.unshift(Array(COLS).fill(0));
+      cleared++;
+      y++;
+    }
+  }
+  if (cleared) {
+    const pts = [0,40,100,300,1200][cleared];
+    score += pts;
+    linesCleared += cleared;
+    SCORE.textContent = score;
+    LINES.textContent = linesCleared;
+  }
+}
+
+function rotate(s) {
+  const N = s.length, M = s[0].length;
+  const out = Array.from({length:M}, () => Array(N).fill(0));
+  for (let r=0; r<N; r++) for (let col=0; col<M; col++) out[col][N-1-r] = s[r][col];
+  return out;
+}
+
+function softDrop() {
+  if (!collide(piece, 0, 1)) piece.y++;
+  else {
+    merge();
+    clearLines();
+    piece = nextP;
+    nextP = newPiece();
+    drawNext();
+    if (collide(piece)) { gameOver = true; }
+  }
+}
+
+function hardDrop() {
+  while (!collide(piece, 0, 1)) piece.y++;
+  softDrop();
+}
+
+function draw() {
+  ctx.fillStyle = "#020617";
+  ctx.fillRect(0, 0, c.width, c.height);
+  for (let y=0; y<ROWS; y++) for (let x=0; x<COLS; x++) {
+    if (board[y][x]) drawCell(ctx, x, y, COLORS[board[y][x]]);
+  }
+  piece.shape.forEach((row, r) => row.forEach((v, col) => {
+    if (v && piece.y+r >= 0) drawCell(ctx, piece.x+col, piece.y+r, COLORS[v]);
+  }));
+  if (gameOver) {
+    ctx.fillStyle = "rgba(220,38,38,.5)"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 28px system-ui"; ctx.textAlign = "center";
+    ctx.fillText("Game Over", c.width/2, c.height/2);
+    ctx.font = "14px system-ui";
+    ctx.fillText("Press Space", c.width/2, c.height/2+24);
+  }
+}
+
+function drawCell(c, x, y, col) {
+  c.fillStyle = col;
+  c.fillRect(x*SIZE+1, y*SIZE+1, SIZE-2, SIZE-2);
+}
+
+function drawNext() {
+  nxc.fillStyle = "#020617"; nxc.fillRect(0, 0, nx.width, nx.height);
+  const s = nextP.shape;
+  const w = s[0].length, h = s.length;
+  const cell = 16;
+  const offX = (nx.width - w*cell) / 2, offY = (nx.height - h*cell) / 2;
+  s.forEach((row, r) => row.forEach((v, col) => {
+    if (v) { nxc.fillStyle = COLORS[v]; nxc.fillRect(offX + col*cell+1, offY + r*cell+1, cell-2, cell-2); }
+  }));
+}
+
+addEventListener("keydown", e => {
+  if (gameOver) { if (e.key === " ") { reset(); draw(); } return; }
+  if (e.key === "ArrowLeft"  && !collide(piece, -1, 0)) piece.x--;
+  if (e.key === "ArrowRight" && !collide(piece,  1, 0)) piece.x++;
+  if (e.key === "ArrowDown") softDrop();
+  if (e.key === "ArrowUp") {
+    const rotated = rotate(piece.shape);
+    if (!collide(piece, 0, 0, rotated)) piece.shape = rotated;
+  }
+  if (e.key === " ") hardDrop();
+  draw();
+  e.preventDefault();
+});
+
+reset(); draw();
+let last = 0;
+function loop(t) {
+  if (!gameOver) {
+    if (t - last > 600) { softDrop(); last = t; draw(); }
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// =============== UNDERSTAND ===============
+const STEPS = [
+  { title:"1. Board = 2D grid of cell colors", why:"10 columns × 20 rows. Each cell holds 0 (empty) or a number 1-7 (the piece color that landed there). The board is the WHOLE world state.", concept:`<div class="bg-slate-100 p-4 rounded font-mono text-xs w-full">board = [<br>&nbsp;&nbsp;[0,0,0,0,0,0,0,0,0,0],&nbsp;<span class="text-slate-500">// row 0 top</span><br>&nbsp;&nbsp;...18 more rows...<br>&nbsp;&nbsp;[3,3,0,0,5,5,2,2,2,0]&nbsp;<span class="text-slate-500">// row 19 bottom</span><br>]</div>`, code:`let board = Array.from({length: 20}, () => Array(10).fill(0));` },
+  { title:"2. Seven tetrominoes", why:"Each piece = a small 2D matrix of 0s and a color number. I = 4-in-a-row, O = 2×2 square, T = T-shape, L/J = mirror, S/Z = zig-zag. The matrix is rotated to spin the piece.", concept:`<div class="bg-slate-100 p-4 rounded font-mono text-xs w-full space-y-1">
+    <div>I = [[1,1,1,1]]</div>
+    <div>O = [[4,4],[4,4]]</div>
+    <div>T = [[0,6,0],[6,6,6]]</div>
+    <div>S = [[0,5,5],[5,5,0]]</div>
+  </div>`, code:`const SHAPES = [
+  [[1,1,1,1]],             // I (cyan)
+  [[2,0,0],[2,2,2]],       // J (blue)
+  [[0,0,3],[3,3,3]],       // L (orange)
+  [[4,4],[4,4]],           // O (yellow)
+  [[0,5,5],[5,5,0]],       // S (green)
+  [[0,6,0],[6,6,6]],       // T (purple)
+  [[7,7,0],[0,7,7]]        // Z (red)
+];` },
+  { title:"3. Rotate = transpose + reverse", why:"To rotate a matrix 90° clockwise: take column k of the original, that's row k of the rotated. Easier: rotated[col][N-1-row] = original[row][col]. Five lines.", concept:`<div class="bg-slate-100 p-4 rounded font-mono text-xs w-full">
+    <div>before:&nbsp;[[0,6,0],</div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[6,6,6]]</div>
+    <div class="text-emerald-700">↓ rotate 90° CW</div>
+    <div>after:&nbsp;&nbsp;[[6,0],</div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[6,6],</div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[6,0]]</div>
+  </div>`, code:`function rotate(s) {
+  const N = s.length, M = s[0].length;
+  const out = Array.from({length: M}, () => Array(N).fill(0));
+  for (let r=0; r<N; r++)
+    for (let c=0; c<M; c++)
+      out[c][N-1-r] = s[r][c];
+  return out;
+}` },
+  { title:"4. Collision check", why:"Before any move (left/right/down/rotate) check if the resulting piece position overlaps the board or goes out of bounds. If yes → reject move. Same function for all four motions.", concept:`<div class="bg-slate-100 p-4 rounded text-sm space-y-1 w-full">
+    <div>for each filled cell in piece.shape:</div>
+    <div class="ml-4">compute world (x, y) = piece.x + col + dx, piece.y + row + dy</div>
+    <div class="ml-4">if x &lt; 0 → collide</div>
+    <div class="ml-4">if x ≥ 10 → collide</div>
+    <div class="ml-4">if y ≥ 20 → collide</div>
+    <div class="ml-4">if board[y][x] ≠ 0 → collide</div>
+  </div>`, code:`function collide(p, dx=0, dy=0, shape=null) {
+  const s = shape || p.shape;
+  for (let r=0; r<s.length; r++)
+    for (let c=0; c<s[r].length; c++) {
+      if (!s[r][c]) continue;
+      const x = p.x + c + dx, y = p.y + r + dy;
+      if (x<0 || x>=COLS || y>=ROWS) return true;
+      if (y>=0 && board[y][x]) return true;
+    }
+  return false;
+}` },
+  { title:"5. Gravity tick", why:"requestAnimationFrame loop checks elapsed time. Every 600ms (faster as level rises) try moving piece down by 1. If it would collide, MERGE the piece into the board → check for line clears → spawn next piece.", concept:`<div class="bg-slate-100 p-4 rounded text-sm w-full">
+    <div class="font-mono text-xs space-y-1">
+      <div>every 600ms:</div>
+      <div class="ml-4">if can move down → piece.y++</div>
+      <div class="ml-4 text-emerald-700">else → merge into board</div>
+      <div class="ml-8">→ clearLines()</div>
+      <div class="ml-8">→ spawn next piece</div>
+    </div>
+  </div>`, code:`function softDrop() {
+  if (!collide(piece, 0, 1)) piece.y++;
+  else {
+    merge();
+    clearLines();
+    piece = nextP;
+    nextP = newPiece();
+    if (collide(piece)) gameOver = true;
+  }
+}` },
+  { title:"6. Line clear", why:"After merge, scan rows bottom-up. Any row that's fully non-zero = a cleared line. Splice it out + unshift an empty row on top. Award points: 1 line=40, 2=100, 3=300, 4=1200 (Tetris bonus).", concept:`<div class="bg-slate-100 p-4 rounded text-sm w-full">
+    <div class="font-mono text-xs space-y-1">
+      <div>for y in (rows-1 .. 0):</div>
+      <div class="ml-4">if board[y].every(non-zero):</div>
+      <div class="ml-8 text-emerald-700">splice row out</div>
+      <div class="ml-8 text-emerald-700">unshift empty row</div>
+      <div class="ml-8">score += [40, 100, 300, 1200][cleared]</div>
+    </div>
+  </div>`, code:`for (let y = ROWS-1; y >= 0; y--) {
+  if (board[y].every(v => v)) {
+    board.splice(y, 1);
+    board.unshift(Array(COLS).fill(0));
+    cleared++;
+    y++;  // re-check same index
+  }
+}` },
+  { title:"7. Hard drop", why:"Space bar = drop the piece as far down as possible in one tick. While there's no collision moving down, increment y. Then trigger softDrop() to merge. Players use this constantly.", concept:`<div class="bg-slate-100 p-4 rounded font-mono text-xs w-full">
+    <div>while (!collide(piece, 0, 1)):</div>
+    <div class="ml-4">piece.y++</div>
+    <div class="text-emerald-700 mt-1">// piece sits at the bottom — merge it</div>
+    <div>softDrop()</div>
+  </div>`, code:`function hardDrop() {
+  while (!collide(piece, 0, 1)) piece.y++;
+  softDrop();
+}` },
+  { title:"8. Next-piece preview", why:"Tetris players plan ahead — they need to see what's coming. Tiny canvas to the side renders nextP with smaller cells. Update whenever the active piece is consumed.", concept:`<div class="grid grid-cols-2 gap-2 w-full">
+    <div class="bg-slate-100 p-3 rounded text-center">
+      <div class="text-xs text-slate-500 font-bold uppercase">Now playing</div>
+      <div class="text-3xl mt-2">🟦</div>
+    </div>
+    <div class="bg-slate-100 p-3 rounded text-center">
+      <div class="text-xs text-slate-500 font-bold uppercase">Next</div>
+      <div class="text-3xl mt-2">🟥</div>
+    </div>
+  </div>`, code:`function drawNext() {
+  // smaller canvas, smaller cells
+  const cell = 16;
+  // render nextP centered
+}` },
+  { title:"9. Done!", why:"Tetris = board + 7 pieces + collide + merge + line-clear + gravity tick. Same loop pattern (state → input → step → draw) as Snake and Pong. Same skeleton powers every falling-block puzzle game.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🎉</div><p class="font-bold text-slate-700">You understand grid-puzzle gravity.</p></div>`, code:`// Next: same loop, swap pieces.
+// Puyo Puyo · Dr. Mario · Columns — all variants.` }
+];
+
+const stepsEl = document.getElementById("steps");
+const prev = document.getElementById("prev");
+const next = document.getElementById("next-btn");
+const auto = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  b.innerHTML = `<div class="font-semibold">${s.title}</div>`;
+  b.onclick = () => show(i);
+  stepsEl.appendChild(b);
+});
+function show(i) {
+  cur = i;
+  const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((b, idx) => {
+    b.className = idx === i
+      ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold"
+      : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  });
+}
+prev.onclick = () => show(Math.max(0, cur - 1));
+next.onclick = () => show(Math.min(STEPS.length - 1, cur + 1));
+let timer = null;
+auto.onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; auto.textContent = "▶ Auto-play"; return; }
+  auto.textContent = "⏸ Pause";
+  show(0);
+  timer = setInterval(() => {
+    if (cur >= STEPS.length - 1) { clearInterval(timer); timer = null; auto.textContent = "▶ Replay"; return; }
+    show(cur + 1);
+  }, 2500);
+};
+show(0);
+</script>
+</body>
+</html>

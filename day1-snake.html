@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 1 — Snake (3-tier)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .copy-btn:hover { background:#1e293b; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .snake-canvas { background:#020617; border:2px solid #334155; border-radius:8px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back to GameFromZero" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 1</div>
+      <h1 class="text-xl font-bold">🐍 Snake on Canvas</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<!-- LOOK -->
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] flex flex-col items-center justify-center p-8 bg-slate-100">
+    <h2 class="text-4xl font-bold mb-2">🐍 Snake</h2>
+    <p class="text-slate-500 mb-1">Arrow keys to move &middot; Space to restart</p>
+    <div class="text-lg my-3">Score: <span id="score" class="font-bold text-emerald-600">0</span></div>
+    <canvas id="c" width="400" height="400" class="snake-canvas"></canvas>
+    <p class="text-xs text-slate-400 mt-6">↑ This is what you build. Click <b>UNDERSTAND</b> to see how each piece works.</p>
+  </div>
+</section>
+
+<!-- UNDERSTAND -->
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">Build it step by step</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step. Read the WHY.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div>
+        <div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step on the left →</div></div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div>
+        <div id="why" class="text-slate-700">—</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div>
+        <pre id="code"></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BUILD -->
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Estimated time: <b>20 minutes</b>. No npm, no build. One HTML file.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Make an empty file</h3></div>
+<pre>mkdir my-snake
+cd my-snake
+touch index.html</pre>
+        <p class="text-xs text-slate-500 mt-2">Windows: right-click → New → Text File → rename to <code>index.html</code></p>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Paste this in index.html</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Entire game in <b>one file</b>. ~80 lines of JS.</p>
+        <div class="relative">
+<pre id="full-code">&lt;!DOCTYPE html&gt;
+&lt;html&gt;&lt;head&gt;&lt;title&gt;Snake&lt;/title&gt;&lt;/head&gt;
+&lt;body style="background:#0f172a;color:#e2e8f0;text-align:center;font-family:system-ui;"&gt;
+  &lt;h1&gt;🐍 Snake&lt;/h1&gt;
+  &lt;div&gt;Score: &lt;span id="score"&gt;0&lt;/span&gt;&lt;/div&gt;
+  &lt;canvas id="c" width="400" height="400" style="background:#020617;border:2px solid #334155;"&gt;&lt;/canvas&gt;
+  &lt;p&gt;Arrow keys to move · Space to restart&lt;/p&gt;
+&lt;script&gt;
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const GRID = 20, SIZE = canvas.width / GRID;
+let snake, dir, nextDir, food, score, dead;
+
+function reset() {
+  snake = [{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+  dir = {x:1,y:0}; nextDir = dir;
+  food = randCell(); score = 0; dead = false;
+  scoreEl.textContent = score;
+}
+function randCell() {
+  while (true) {
+    const c = { x: Math.floor(Math.random()*GRID), y: Math.floor(Math.random()*GRID) };
+    if (!snake.some(s =&gt; s.x===c.x &amp;&amp; s.y===c.y)) return c;
+  }
+}
+function step() {
+  if (dead) return;
+  dir = nextDir;
+  const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+  if (head.x&lt;0 || head.y&lt;0 || head.x&gt;=GRID || head.y&gt;=GRID) return die();
+  if (snake.some(s =&gt; s.x===head.x &amp;&amp; s.y===head.y)) return die();
+  snake.unshift(head);
+  if (head.x===food.x &amp;&amp; head.y===food.y) { score++; scoreEl.textContent = score; food = randCell(); }
+  else snake.pop();
+}
+function die() {
+  dead = true;
+  ctx.fillStyle = "rgba(220,38,38,.4)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 32px system-ui"; ctx.textAlign = "center";
+  ctx.fillText("Game Over", canvas.width/2, canvas.height/2);
+}
+function draw() {
+  if (dead) return;
+  ctx.fillStyle = "#020617"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#ef4444"; ctx.fillRect(food.x*SIZE+2, food.y*SIZE+2, SIZE-4, SIZE-4);
+  snake.forEach((s,i)=&gt;{ ctx.fillStyle = i===0 ? "#22c55e" : "#16a34a"; ctx.fillRect(s.x*SIZE+1, s.y*SIZE+1, SIZE-2, SIZE-2); });
+}
+addEventListener("keydown", e =&gt; {
+  const k = e.key;
+  if (k === " ") { reset(); return; }
+  if (k==="ArrowUp"    &amp;&amp; dir.y!== 1) nextDir = {x:0,y:-1};
+  if (k==="ArrowDown"  &amp;&amp; dir.y!==-1) nextDir = {x:0,y: 1};
+  if (k==="ArrowLeft"  &amp;&amp; dir.x!== 1) nextDir = {x:-1,y:0};
+  if (k==="ArrowRight" &amp;&amp; dir.x!==-1) nextDir = {x: 1,y:0};
+});
+reset();
+setInterval(()=&gt;{ step(); draw(); }, 100);
+&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Open in browser</h3></div>
+        <p class="text-sm text-slate-600">Double-click <code>index.html</code>. Arrow keys to play. Space to restart.</p>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Tweak it</h3></div>
+        <ul class="text-sm text-slate-600 space-y-2 ml-4 list-disc">
+          <li>Speed: <code>setInterval(..., 100)</code> → <code>50</code> for fast.</li>
+          <li>Bigger board: <code>GRID = 20</code> → <code>30</code>.</li>
+          <li>Recolor snake: <code>"#22c55e"</code> → any hex.</li>
+          <li>Multiple food: spawn 3 at once by using an array.</li>
+        </ul>
+      </li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Put it online</h3></div>
+        <p class="text-sm text-slate-600">Drag your folder to <a href="https://vercel.com" class="text-emerald-600 underline" target="_blank">vercel.com</a>. Live URL in 30 seconds.</p>
+      </li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
+      <h3 class="font-bold text-lg text-emerald-900">🎉 Day 1 of GameFromZero done.</h3>
+      <p class="text-sm text-emerald-700 mt-2">Tomorrow: Pong. Then Tetris. 50 days total.</p>
+    </div>
+  </div>
+</section>
+
+<script>
+// TABS
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// SNAKE GAME
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const GRID = 20, SIZE = canvas.width / GRID;
+let snake, dir, nextDir, food, score, dead;
+function reset() {
+  snake = [{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+  dir = {x:1,y:0}; nextDir = dir;
+  food = randCell(); score = 0; dead = false;
+  scoreEl.textContent = score;
+}
+function randCell() {
+  while (true) {
+    const c = { x: Math.floor(Math.random()*GRID), y: Math.floor(Math.random()*GRID) };
+    if (!snake.some(s => s.x===c.x && s.y===c.y)) return c;
+  }
+}
+function step() {
+  if (dead) return;
+  dir = nextDir;
+  const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+  if (head.x<0 || head.y<0 || head.x>=GRID || head.y>=GRID) return die();
+  if (snake.some(s => s.x===head.x && s.y===head.y)) return die();
+  snake.unshift(head);
+  if (head.x===food.x && head.y===food.y) { score++; scoreEl.textContent = score; food = randCell(); }
+  else snake.pop();
+}
+function die() {
+  dead = true;
+  ctx.fillStyle = "rgba(220,38,38,.4)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 32px system-ui"; ctx.textAlign = "center";
+  ctx.fillText("Game Over", canvas.width/2, canvas.height/2);
+  ctx.font = "16px system-ui";
+  ctx.fillText("Press Space", canvas.width/2, canvas.height/2 + 30);
+}
+function draw() {
+  if (dead) return;
+  ctx.fillStyle = "#020617"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#ef4444"; ctx.fillRect(food.x*SIZE+2, food.y*SIZE+2, SIZE-4, SIZE-4);
+  snake.forEach((s,i)=>{ ctx.fillStyle = i===0 ? "#22c55e" : "#16a34a"; ctx.fillRect(s.x*SIZE+1, s.y*SIZE+1, SIZE-2, SIZE-2); });
+}
+addEventListener("keydown", e => {
+  const k = e.key;
+  if (k === " ") { reset(); return; }
+  if (k==="ArrowUp"    && dir.y!== 1) nextDir = {x:0,y:-1};
+  if (k==="ArrowDown"  && dir.y!==-1) nextDir = {x:0,y: 1};
+  if (k==="ArrowLeft"  && dir.x!== 1) nextDir = {x:-1,y:0};
+  if (k==="ArrowRight" && dir.x!==-1) nextDir = {x: 1,y:0};
+});
+reset();
+setInterval(()=>{ step(); draw(); }, 100);
+
+// UNDERSTAND STEPS
+const STEPS = [
+  { title:"1. The canvas + grid", why:"A 400×400 canvas split into 20×20 cells. Each cell = 20px. Snake & food live on the grid, not on pixels — so collisions are integer comparisons, not float math.", concept:`<div class="grid grid-cols-10 gap-px inline-grid bg-slate-700 p-px rounded">${Array.from({length:100},(_,i)=>`<div class="w-5 h-5 bg-slate-900"></div>`).join("")}</div>`, code:`const GRID = 20;                  // 20×20 cells
+const SIZE = canvas.width / GRID; // 20px per cell` },
+  { title:"2. Snake = array of cells", why:"The snake is just a list of {x,y} cells. Head is index 0. Body follows. This makes 'move' easy: add new head, remove last cell. Length = array length.", concept:`<div class="font-mono text-sm bg-slate-100 p-4 rounded">snake = [<br>&nbsp;&nbsp;{x:10, y:10}, <span class="text-emerald-600 font-bold">// head</span><br>&nbsp;&nbsp;{x:9,  y:10},<br>&nbsp;&nbsp;{x:8,  y:10}  <span class="text-slate-500">// tail</span><br>]</div>`, code:`snake = [{x:10,y:10}, {x:9,y:10}, {x:8,y:10}];` },
+  { title:"3. Movement = shift head", why:"Each tick: compute new head from old head + direction. Add new head to front. Remove tail. Length stays the same. (Unless we ate food.)", concept:`<div class="text-sm bg-slate-100 p-4 rounded font-mono space-y-1"><div>old head: (10, 10)</div><div>dir:      (1, 0) <span class="text-slate-500">→ right</span></div><div class="text-emerald-700 font-bold">new head: (11, 10)</div></div>`, code:`const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+snake.unshift(head);   // add new head
+snake.pop();           // remove tail` },
+  { title:"4. Food spawns randomly", why:"Pick a random cell. If snake is on that cell, try again. Loop. As snake grows the loop runs longer but never blocks — board is much bigger than snake.", concept:`<div class="grid grid-cols-5 gap-1 inline-grid p-3 bg-slate-200 rounded"><div class="w-8 h-8 bg-emerald-700 rounded"></div><div class="w-8 h-8 bg-emerald-500 rounded"></div><div class="w-8 h-8 bg-emerald-400 rounded"></div><div class="w-8 h-8 bg-slate-300 rounded"></div><div class="w-8 h-8 bg-slate-300 rounded"></div><div class="w-8 h-8 bg-slate-300 rounded"></div><div class="w-8 h-8 bg-red-500 rounded"></div><div class="w-8 h-8 bg-slate-300 rounded"></div><div class="w-8 h-8 bg-slate-300 rounded"></div><div class="w-8 h-8 bg-slate-300 rounded"></div></div>`, code:`function randCell() {
+  while (true) {
+    const c = { x: Math.floor(Math.random()*GRID),
+                y: Math.floor(Math.random()*GRID) };
+    if (!snake.some(s => s.x===c.x && s.y===c.y)) return c;
+  }
+}` },
+  { title:"5. Eat = grow tail", why:"If new head landed on food, DON'T pop the tail. Length increases by 1. Spawn new food. That's the entire growth mechanic.", concept:`<div class="bg-slate-100 p-4 rounded text-sm space-y-1"><div>if head reached food:</div><div class="ml-4 text-emerald-600 font-bold">don't pop tail</div><div class="ml-4">spawn new food</div><div>else:</div><div class="ml-4 text-slate-500">pop tail (snake stays same length)</div></div>`, code:`if (head.x === food.x && head.y === food.y) {
+  score++;
+  food = randCell();
+  // note: no snake.pop()
+} else {
+  snake.pop();
+}` },
+  { title:"6. Wall collision", why:"If head goes off the grid, die. Grid runs 0..19. Out of bounds = dead.", concept:`<div class="bg-red-100 text-red-800 p-4 rounded font-mono text-sm"><div>head.x &lt; 0   → 💥</div><div>head.x ≥ 20  → 💥</div><div>head.y &lt; 0   → 💥</div><div>head.y ≥ 20  → 💥</div></div>`, code:`if (head.x<0 || head.y<0 || head.x>=GRID || head.y>=GRID) die();` },
+  { title:"7. Self collision", why:"If new head lands on any existing body cell, die. `array.some` checks all cells in one line.", concept:`<div class="bg-red-100 text-red-800 p-4 rounded font-mono text-sm"><div>if any body-cell matches head:</div><div class="ml-4">💥 Game Over</div></div>`, code:`if (snake.some(s => s.x===head.x && s.y===head.y)) die();` },
+  { title:"8. The game loop", why:"setInterval runs step+draw every 100ms = 10 FPS. Slow enough that the player can react, fast enough to feel alive. Tweak for difficulty.", concept:`<div class="bg-slate-100 p-4 rounded font-mono text-sm space-y-1"><div>every 100ms tick:</div><div class="ml-4">→ step()  <span class="text-slate-500">// move snake</span></div><div class="ml-4">→ draw()  <span class="text-slate-500">// paint canvas</span></div></div>`, code:`setInterval(() => { step(); draw(); }, 100);` },
+  { title:"9. Done!", why:"You now have full Snake in ~80 lines. The same loop (state → step → draw) powers Tetris, Pong, Breakout. Master one game loop = unlock every arcade game.", concept:`<div class="text-center"><div class="text-5xl mb-3">🎉</div><p class="font-bold text-slate-700">You understand the game-loop pattern.</p><p class="text-sm text-slate-500 mt-2">Open the BUILD tab to make your own.</p></div>`, code:`// next: same pattern, different game.` }
+];
+const stepsEl = document.getElementById("steps");
+const prev = document.getElementById("prev");
+const next = document.getElementById("next");
+const auto = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  b.innerHTML = `<div class="font-semibold">${s.title}</div>`;
+  b.onclick = () => show(i);
+  stepsEl.appendChild(b);
+});
+function show(i) {
+  cur = i;
+  const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((b, idx) => {
+    b.className = idx === i
+      ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold"
+      : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm";
+  });
+}
+prev.onclick = () => show(Math.max(0, cur - 1));
+next.onclick = () => show(Math.min(STEPS.length - 1, cur + 1));
+let timer = null;
+auto.onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; auto.textContent = "▶ Auto-play"; return; }
+  auto.textContent = "⏸ Pause";
+  show(0);
+  timer = setInterval(() => {
+    if (cur >= STEPS.length - 1) { clearInterval(timer); timer = null; auto.textContent = "▶ Replay"; return; }
+    show(cur + 1);
+  }, 2500);
+};
+show(0);
+
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>

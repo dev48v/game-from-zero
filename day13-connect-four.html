@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 13 — Connect Four</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* Connect Four board */
+  #board { background:#1d4ed8; border:1px solid #1e293b; border-radius:14px; padding:10px; display:flex; flex-direction:row; gap:0; width:fit-content; }
+  .col { display:flex; flex-direction:column-reverse; cursor:pointer; }
+  .col:hover .ghost { opacity:.45; }
+  .cell { width:48px; height:48px; margin:5px; border-radius:50%; background:#020617; display:flex; align-items:center; justify-content:center; transition:background .15s; }
+  .disc { width:38px; height:38px; border-radius:50%; }
+  .red    { background:radial-gradient(circle at 32% 30%, #f87171, #dc2626); box-shadow:inset 0 -3px 6px rgba(0,0,0,.4); }
+  .yellow { background:radial-gradient(circle at 32% 30%, #fde68a, #f59e0b); box-shadow:inset 0 -3px 6px rgba(0,0,0,.4); }
+  .ghost  { opacity:0; transition:opacity .15s; }
+  .win    { outline:4px solid #34d399; outline-offset:-4px; animation:pulse .8s infinite alternate; }
+  @keyframes pulse { from { outline-color:#34d399; } to { outline-color:#a7f3d0; } }
+  .drop { animation:dropIn .25s ease-out; }
+  @keyframes dropIn { from { transform:translateY(-260px); } to { transform:none; } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 13</div>
+      <h1 class="text-xl font-bold">🔴 Connect Four — Beat the Minimax AI</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Drop a red disc. The AI drops yellow. Get four in a row.</h2>
+      <p class="text-slate-500 mb-4">You play red, the computer plays yellow and thinks ahead with minimax. Line up four — across, down, or on either diagonal — before it does. It will block your threats and pounce on any win it can find.</p>
+      <div class="flex justify-center"><div id="board"></div></div>
+      <div class="flex justify-center items-center gap-6 mt-4 text-sm">
+        <span class="text-slate-500">Turn: <span id="turn" class="font-bold text-emerald-600">You (red)</span></span>
+        <span class="text-slate-500" id="msg"></span>
+        <button id="restart" class="text-slate-500 underline">restart</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Click any column to drop your disc into the lowest open slot. The AI searches a few moves deep before replying. First to four-in-a-row wins; a full board is a draw.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Connect Four + minimax works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A 2D grid, a drop rule, a four-direction win check, and a minimax search with alpha-beta pruning. ~120 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The board as a 2D grid</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Connect Four is 7 columns by 6 rows. We store it as an array of 6 rows, each an array of 7 cells. <code>0</code> is empty, <code>1</code> is you (red), <code>2</code> is the AI (yellow). Row 0 is the bottom so a piece "falls" to the lowest empty cell.</p>
+        <div class="relative">
+          <pre>const COLS = 7, ROWS = 6;
+const HUMAN = 1, AI = 2;
+let board, turn, over;
+
+function makeBoard(){
+  return Array.from({length: ROWS}, () =&gt; Array(COLS).fill(0));
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Dropping a disc</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A move is just a column. Walk up from the bottom row and place the disc in the first empty cell. If the top cell is full the column is illegal. <code>validMoves</code> lists every column that still has room.</p>
+        <div class="relative">
+          <pre>function drop(b, col, player){
+  for (let r = 0; r &lt; ROWS; r++){
+    if (b[r][col] === 0){ b[r][col] = player; return r; }  // lowest empty
+  }
+  return -1;                       // column is full
+}
+function validMoves(b){
+  const m = [];
+  for (let c = 0; c &lt; COLS; c++) if (b[ROWS-1][c] === 0) m.push(c);
+  return m;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Win check in four directions</h3></div>
+        <p class="text-sm text-slate-600 mb-3">From every cell, look in four directions — right, up, and both diagonals — and count four matching discs in a line. We return the four cells so the UI can highlight the winning row. The four directions cover horizontal, vertical, and both diagonals once each.</p>
+        <div class="relative">
+          <pre>const DIRS = [[0,1],[1,0],[1,1],[1,-1]];   // →  ↑  ↗  ↘
+function winner(b){
+  for (let r = 0; r &lt; ROWS; r++)
+    for (let c = 0; c &lt; COLS; c++){
+      const p = b[r][c]; if (!p) continue;
+      for (const [dr,dc] of DIRS){
+        const line = [[r,c]];
+        for (let k = 1; k &lt; 4; k++){
+          const nr = r+dr*k, nc = c+dc*k;
+          if (nr&lt;0||nr&gt;=ROWS||nc&lt;0||nc&gt;=COLS||b[nr][nc]!==p) break;
+          line.push([nr,nc]);
+        }
+        if (line.length === 4) return { player:p, line };
+      }
+    }
+  return null;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Scoring a window of four</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When the search can't see a win yet, it judges a position by sliding a 4-cell "window" over the board. Three of mine with a gap is great; three of yours with a gap is dangerous, so we subtract for it. Summing every window gives one number: how good the board is for the AI.</p>
+        <div class="relative">
+          <pre>function scoreWindow(w, me){
+  const foe = me === AI ? HUMAN : AI;
+  const my = w.filter(x =&gt; x === me).length;
+  const op = w.filter(x =&gt; x === foe).length;
+  const empty = w.filter(x =&gt; x === 0).length;
+  if (my === 4) return 100000;
+  if (my === 3 &amp;&amp; empty === 1) return 50;
+  if (my === 2 &amp;&amp; empty === 2) return 5;
+  if (op === 3 &amp;&amp; empty === 1) return -80;   // block their threat
+  return 0;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The evaluation function</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Run <code>scoreWindow</code> over every horizontal, vertical, and diagonal window on the board and add them up. A small bonus for the centre column helps, because central pieces sit on more winning lines. One number summarises the whole position.</p>
+        <div class="relative">
+          <pre>function evaluate(b){
+  let s = 0;
+  for (let r = 0; r &lt; ROWS; r++)
+    if (b[r][3] === AI) s += 3;                 // prize the centre
+  // every horizontal, vertical and diagonal window of 4
+  for (const w of allWindows(b)) s += scoreWindow(w, AI);
+  return s;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Minimax with alpha-beta pruning</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The AI imagines the future: on its turn it picks the move with the highest score (maximise), and assumes you reply with the lowest (minimise). It recurses until it finds a win, a draw, or runs out of depth, then trusts <code>evaluate</code>. Alpha-beta tracks the best each side is guaranteed and stops exploring branches that can't beat it.</p>
+        <div class="relative">
+          <pre>function minimax(b, depth, alpha, beta, maximizing){
+  const win = winner(b);
+  if (win) return { score: win.player === AI ? 1e6+depth : -1e6-depth };
+  if (depth === 0 || validMoves(b).length === 0)
+    return { score: evaluate(b) };
+
+  const moves = validMoves(b);
+  let best = maximizing ? -Infinity : Infinity, bestCol = moves[0];
+
+  for (const col of moves){
+    const nb = b.map(row =&gt; row.slice());        // copy the board
+    drop(nb, col, maximizing ? AI : HUMAN);
+    const val = minimax(nb, depth-1, alpha, beta, !maximizing).score;
+
+    if (maximizing){
+      if (val &gt; best){ best = val; bestCol = col; }
+      alpha = Math.max(alpha, best);
+    } else {
+      if (val &lt; best){ best = val; bestCol = col; }
+      beta = Math.min(beta, best);
+    }
+    if (alpha &gt;= beta) break;                     // prune
+  }
+  return { score: best, col: bestCol };
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">The AI takes its turn</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Ask minimax for the best column at depth 4, drop a yellow disc there, then check for a win or a full-board draw. We run it after a short delay so the player sees their own move land first.</p>
+        <div class="relative">
+          <pre>function aiMove(){
+  const { col } = minimax(board, 4, -Infinity, Infinity, true);
+  drop(board, col, AI);
+  render();
+  const w = winner(board);
+  if (w) return finish(w);
+  if (validMoves(board).length === 0) return finish(null);  // draw
+  turn = HUMAN;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Wire up the UI</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Render the grid as seven clickable columns. A click drops the human disc; if nobody has won and it's still the AI's turn, hand control to <code>aiMove</code> after a beat. Lock input while the AI thinks or the game is over. Double-click the file — no server needed.</p>
+        <div class="relative">
+          <pre>function play(col){
+  if (over || turn !== HUMAN) return;
+  if (drop(board, col, HUMAN) === -1) return;   // column full
+  render();
+  const w = winner(board);
+  if (w) return finish(w);
+  if (validMoves(board).length === 0) return finish(null);
+  turn = AI;
+  setTimeout(aiMove, 250);                       // let the AI reply
+}
+function reset(){ board = makeBoard(); turn = HUMAN; over = false; render(); }
+reset();</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 13 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Connect Four with a real game-tree AI: minimax, an evaluation function, and alpha-beta pruning. Try raising the search depth, ordering moves centre-first, or adding a transposition table to go deeper.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== CONNECT FOUR =====
+const COLS = 7, ROWS = 6, HUMAN = 1, AI = 2;
+const boardEl = document.getElementById("board");
+let board, turn, over, winCells;
+
+function makeBoard(){ return Array.from({length: ROWS}, () => Array(COLS).fill(0)); }
+
+function drop(b, col, player){
+  for (let r = 0; r < ROWS; r++){
+    if (b[r][col] === 0){ b[r][col] = player; return r; }
+  }
+  return -1;
+}
+function validMoves(b){
+  const m = [];
+  for (let c = 0; c < COLS; c++) if (b[ROWS-1][c] === 0) m.push(c);
+  return m;
+}
+
+const DIRS = [[0,1],[1,0],[1,1],[1,-1]];   // →  ↑  ↗  ↘
+function winner(b){
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++){
+      const p = b[r][c]; if (!p) continue;
+      for (const [dr,dc] of DIRS){
+        const line = [[r,c]];
+        for (let k = 1; k < 4; k++){
+          const nr = r+dr*k, nc = c+dc*k;
+          if (nr<0||nr>=ROWS||nc<0||nc>=COLS||b[nr][nc]!==p) break;
+          line.push([nr,nc]);
+        }
+        if (line.length === 4) return { player:p, line };
+      }
+    }
+  return null;
+}
+
+// every horizontal / vertical / diagonal window of 4 cells
+function allWindows(b){
+  const wins = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      for (const [dr,dc] of DIRS){
+        const er = r+dr*3, ec = c+dc*3;
+        if (er<0||er>=ROWS||ec<0||ec>=COLS) continue;
+        const w = [];
+        for (let k = 0; k < 4; k++) w.push(b[r+dr*k][c+dc*k]);
+        wins.push(w);
+      }
+  return wins;
+}
+function scoreWindow(w, me){
+  const foe = me === AI ? HUMAN : AI;
+  const my = w.filter(x => x === me).length;
+  const op = w.filter(x => x === foe).length;
+  const empty = w.filter(x => x === 0).length;
+  if (my === 4) return 100000;
+  if (my === 3 && empty === 1) return 50;
+  if (my === 2 && empty === 2) return 5;
+  if (op === 3 && empty === 1) return -80;
+  return 0;
+}
+function evaluate(b){
+  let s = 0;
+  for (let r = 0; r < ROWS; r++) if (b[r][3] === AI) s += 3;   // centre bias
+  for (const w of allWindows(b)) s += scoreWindow(w, AI);
+  return s;
+}
+
+function minimax(b, depth, alpha, beta, maximizing){
+  const win = winner(b);
+  if (win) return { score: win.player === AI ? 1000000 + depth : -1000000 - depth };
+  const moves = validMoves(b);
+  if (depth === 0 || moves.length === 0) return { score: evaluate(b) };
+
+  // search centre columns first → better pruning
+  moves.sort((a, c) => Math.abs(3 - a) - Math.abs(3 - c));
+  let best = maximizing ? -Infinity : Infinity, bestCol = moves[0];
+
+  for (const col of moves){
+    const nb = b.map(row => row.slice());
+    drop(nb, col, maximizing ? AI : HUMAN);
+    const val = minimax(nb, depth - 1, alpha, beta, !maximizing).score;
+    if (maximizing){
+      if (val > best){ best = val; bestCol = col; }
+      alpha = Math.max(alpha, best);
+    } else {
+      if (val < best){ best = val; bestCol = col; }
+      beta = Math.min(beta, best);
+    }
+    if (alpha >= beta) break;   // prune
+  }
+  return { score: best, col: bestCol };
+}
+
+function aiMove(){
+  if (over) return;
+  const { col } = minimax(board, 4, -Infinity, Infinity, true);
+  drop(board, col, AI);
+  render();
+  const w = winner(board);
+  if (w) return finish(w);
+  if (validMoves(board).length === 0) return finish(null);
+  turn = HUMAN;
+  setTurn();
+}
+
+function play(col){
+  if (over || turn !== HUMAN) return;
+  if (drop(board, col, HUMAN) === -1) return;
+  render();
+  const w = winner(board);
+  if (w) return finish(w);
+  if (validMoves(board).length === 0) return finish(null);
+  turn = AI;
+  setTurn();
+  setTimeout(aiMove, 280);
+}
+
+function finish(w){
+  over = true;
+  winCells = w ? w.line : [];
+  render();
+  const msg = document.getElementById("msg");
+  if (!w) msg.textContent = "🤝 Draw — board is full. Press restart.";
+  else if (w.player === HUMAN) msg.textContent = "🎉 You win! Press restart.";
+  else msg.textContent = "🤖 AI wins. Press restart.";
+  document.getElementById("turn").textContent = "Game over";
+}
+
+function setTurn(){
+  const t = document.getElementById("turn");
+  t.textContent = turn === HUMAN ? "You (red)" : "AI thinking…";
+}
+
+function isWinCell(r, c){
+  return winCells && winCells.some(([wr, wc]) => wr === r && wc === c);
+}
+
+function render(){
+  boardEl.innerHTML = "";
+  for (let c = 0; c < COLS; c++){
+    const colEl = document.createElement("div");
+    colEl.className = "col";
+    colEl.onclick = () => play(c);
+    for (let r = 0; r < ROWS; r++){
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      const v = board[r][c];
+      if (v){
+        const disc = document.createElement("div");
+        disc.className = "disc drop " + (v === HUMAN ? "red" : "yellow");
+        if (isWinCell(r, c)) cell.classList.add("win");
+        cell.appendChild(disc);
+      }
+      colEl.appendChild(cell);   // column-reverse stacks row 0 at the bottom
+    }
+    boardEl.appendChild(colEl);
+  }
+}
+
+function reset(){
+  board = makeBoard();
+  turn = HUMAN; over = false; winCells = [];
+  document.getElementById("msg").textContent = "";
+  setTurn();
+  render();
+}
+document.getElementById("restart").onclick = reset;
+reset();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The board is a 2D grid", why:"Connect Four lives on a grid that is 7 columns wide and 6 rows tall. We store it as an array of rows, each holding seven numbers: 0 for empty, 1 for you, 2 for the computer. Everything the game does is read from or written to this little table. Because the whole state is just numbers in a grid, copying it, scoring it, or searching it later becomes easy.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">6 rows × 7 cols<br>0 = empty · 1 = you · 2 = AI</div>`, code:`const COLS = 7, ROWS = 6;
+let board = Array.from({length: ROWS},
+                       () => Array(COLS).fill(0));` },
+  { title:"2. Dropping = lowest empty cell", why:"You don't choose a square in Connect Four — you choose a column, and gravity decides the row. To drop a disc we scan that column from the bottom up and fill the first empty cell we meet. If the very top cell is already taken, the column is full and the move is illegal. This one rule is the entire physics of the game.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">pick a column → fall to the lowest empty cell</div>`, code:`function drop(b, col, player){
+  for (let r = 0; r < ROWS; r++)
+    if (b[r][col] === 0){ b[r][col] = player; return r; }
+  return -1;          // column full → illegal
+}` },
+  { title:"3. Winning in four directions", why:"A win is four of your discs in an unbroken line. There are really only four directions to check from any cell: across, straight up, and the two diagonals — checking 'left' or 'down' would just re-test the same lines backwards. From every filled cell we step three times in each direction and see if all four match. Doing it this way catches horizontal, vertical, and both diagonal wins with one tidy loop.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">→ across · ↑ up · ↗ ↘ both diagonals · need 4 in a row</div>`, code:`const DIRS = [[0,1],[1,0],[1,1],[1,-1]];
+// from each cell, step 3 times in a direction;
+// if all four discs match, that line wins.` },
+  { title:"4. What is game-tree search?", why:"Imagine drawing every move you could make, then every reply the opponent could make, then every answer to that, on and on. That branching picture is the game tree, and the AI explores it to see where each choice leads. Leaves of the tree are finished or 'deep enough' positions it can judge. Searching the tree is how a computer 'thinks ahead' instead of just reacting to the board in front of it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">now → my 7 moves → your 7 replies → … → outcomes</div>`, code:`// each node = a board position
+// each branch = a legal move (one of up to 7 columns)
+// the AI walks this tree to compare possible futures` },
+  { title:"5. Minimax — the core idea", why:"Minimax assumes both players are smart. On the AI's turn it picks the move that maximises its score; on your turn it assumes you pick the move that minimises that score — the worst case for the AI. It alternates 'maximise, minimise, maximise…' down the tree and lets the values bubble back up. The result is a move that's good even if you play perfectly, not just good against a careless opponent.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">AI's turn → take the MAX · your turn → assume the MIN</div>`, code:`if (maximizing){          // AI's move
+  best = Math.max(best, value);
+} else {                  // your move
+  best = Math.min(best, value);
+}` },
+  { title:"6. Depth and the evaluation function", why:"The full tree is far too big to explore to the end, so we stop after a fixed number of moves — the depth. At that cut-off the AI can't see a finish, so it scores the position with an evaluation function: how many three-in-a-rows it has, how central its pieces are, how dangerous your threats look. That single number is the AI's gut feeling for an unfinished board, and the whole search leans on it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">stop at depth 4 → score the board with evaluate()</div>`, code:`if (depth === 0) return evaluate(b);
+// evaluate() rewards my lines of 2 and 3,
+// the centre column, and subtracts for your threats.` },
+  { title:"7. Alpha-beta pruning", why:"Minimax wastes time exploring moves it can already tell are pointless. Alpha-beta keeps two bookmarks: alpha (the best the maximiser can guarantee) and beta (the best the minimiser can guarantee). The moment a branch can't possibly beat what we've already found, we cut it off and skip the rest — that's pruning. It gives the exact same answer as plain minimax but visits far fewer positions, which lets us search deeper in the same time.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">if (alpha ≥ beta) break · skip branches that can't win</div>`, code:`alpha = Math.max(alpha, best);   // maximiser's floor
+beta  = Math.min(beta,  best);   // minimiser's ceiling
+if (alpha >= beta) break;        // prune the rest` },
+  { title:"8. Why deeper is stronger but slower", why:"Each extra level of depth multiplies the work by up to seven, because every position branches into seven possible columns. Depth 2 sees a couple of moves ahead; depth 6 spots traps and forced wins long before they happen. But that power costs time — the tree explodes exponentially, which is exactly why alpha-beta and centre-first move ordering matter so much. We pick a depth that's clever yet still replies instantly.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">positions ≈ 7^depth<br>deeper = smarter, but exponentially slower</div>`, code:`minimax(board, 4, -Infinity, Infinity, true);
+// depth 4 ≈ a few thousand positions → instant + strong.
+// depth 7 sees forced wins but costs far more time.` },
+  { title:"9. Turn and state management", why:"The game is always in one clear state: your turn, the AI's turn, or over. A click is ignored unless it's your turn and the game is live, which stops you from moving while the AI is thinking. After every drop we check for a win, then a full-board draw, then hand the turn to the other player. Keeping this state tidy is what makes a two-player game feel fair and never get stuck.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">YOU ⇄ AI ⇄ OVER · check win, then draw, then swap turn</div>`, code:`if (over || turn !== HUMAN) return;   // ignore stray clicks
+drop(board, col, HUMAN);
+if (winner(board)) return finish();
+turn = AI; setTimeout(aiMove, 280);   // hand over` },
+  { title:"10. Putting it together", why:"Each piece is small, but together they make a tough opponent. The grid holds the state, the drop rule places discs, the four-direction check spots wins, and the evaluation function judges everything in between. Minimax with alpha-beta then looks several moves ahead to block your threats and grab its own wins. Stack these ideas and a few hundred lines of plain JavaScript will outplay most humans.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🔴🟡</div><p class="font-bold text-slate-700">Grid + drop + win-check + minimax/alpha-beta = a Connect Four AI.</p></div>`, code:`// the whole engine in one breath:
+play(col)  →  drop human disc  →  check win/draw
+           →  aiMove(): minimax depth 4  →  drop AI disc
+           →  check win/draw  →  back to you` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>

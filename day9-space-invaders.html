@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GameFromZero · Day 9 — Space Invaders</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  canvas { background:#020617; border:1px solid #1e293b; border-radius:10px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 9</div>
+      <h1 class="text-xl font-bold">👾 Space Invaders — a Marching Grid That Shoots Back</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">← → to move. Space to fire. Clear the swarm before it lands.</h2>
+      <p class="text-slate-500 mb-4">The whole grid steps sideways together; hit a wall and it drops a row and reverses. They shoot back. Let one reach the bottom and it's over.</p>
+      <div class="flex justify-center"><canvas id="c" width="480" height="440" tabindex="0"></canvas></div>
+      <div class="flex justify-center gap-6 mt-3 text-sm">
+        <span class="text-slate-500">Score: <span id="score" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Lives: <span id="lives" class="font-bold text-rose-500">3</span></span>
+        <span class="text-slate-500" id="msg"></span>
+        <button id="restart" class="text-slate-500 underline">restart</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Click the board first, then ← → and Space. Wipe out all 40 invaders to win.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Space Invaders works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">One grid that moves as a unit, two bullet arrays, two collision checks. ~120 lines.</p>
+    <ol class="space-y-6">
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A grid of invaders as one array</h3></div><pre>for (let r=0;r&lt;ROWS;r++)
+  for (let col=0;col&lt;COLS;col++)
+    invaders.push({ x: col*GAP, y: r*GAP, alive:true });</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The whole swarm marches together</h3></div><pre>for (const inv of alive) inv.x += dir * STEP;
+// hit a wall? drop a row and flip direction
+if (edgeHit) { dir *= -1; for (const inv of alive) inv.y += DROP; }</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Player shots travel up, invaders die</h3></div><pre>bullet.y -= 6;
+const hit = alive.find(inv =&gt; overlap(bullet, inv));
+if (hit) { hit.alive = false; score += 10; }</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Invaders shoot back at random</h3></div><pre>if (Math.random() &lt; 0.02) {
+  const shooter = alive[rand(alive.length)];
+  enemyBullets.push({ x: shooter.x, y: shooter.y, dy: 4 });
+}</pre></li>
+      <li class="bg-white rounded-2xl border border-slate-200 p-6"><div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Win, lose, or they land on you</h3></div><pre>if (alive.length === 0) win();
+if (enemyBullet hits player) lives--;
+if (lowestInvader.y &gt;= player.y) gameOver();</pre></li>
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 9 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">Tomorrow: Asteroids.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== SPACE INVADERS =====
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const W = c.width, H = c.height;
+const ROWS = 5, COLS = 8, IW = 30, IH = 20, GAPX = 46, GAPY = 36;
+let invaders, dir, player, bullets, enemyBullets, score, lives, keys, raf, over;
+
+function makeInvaders(){
+  invaders = [];
+  const startX = 40, startY = 40;
+  for (let r=0;r<ROWS;r++)
+    for (let col=0;col<COLS;col++)
+      invaders.push({ x: startX + col*GAPX, y: startY + r*GAPY, row:r });
+}
+function start(){
+  makeInvaders(); dir = 1; over = false;
+  player = { x: W/2-20, y: H-26, w:40, h:14 };
+  bullets = []; enemyBullets = []; score = 0; lives = 3; keys = {};
+  document.getElementById("msg").textContent = "";
+  upd(); cancelAnimationFrame(raf); loop();
+}
+function upd(){ document.getElementById("score").textContent=score; document.getElementById("lives").textContent=lives; }
+const overlap = (a,aw,ah,b) => a.x < b.x+IW && a.x+aw > b.x && a.y < b.y+IH && a.y+ah > b.y;
+
+function loop(){
+  if (over) return;
+  // march the swarm: speed scales as fewer survive
+  const speed = 0.4 + (ROWS*COLS - invaders.length) * 0.03;
+  let edge = false;
+  for (const inv of invaders){ inv.x += dir*speed; if (inv.x < 6 || inv.x > W-IW-6) edge = true; }
+  if (edge){ dir *= -1; for (const inv of invaders) inv.y += 14; }
+  // player move
+  if (keys["ArrowLeft"]) player.x = Math.max(0, player.x-5);
+  if (keys["ArrowRight"]) player.x = Math.min(W-player.w, player.x+5);
+  // player bullets
+  bullets = bullets.filter(b => b.y > -10);
+  for (const b of bullets){
+    b.y -= 7;
+    const hit = invaders.find(inv => b.x > inv.x && b.x < inv.x+IW && b.y > inv.y && b.y < inv.y+IH);
+    if (hit){ invaders = invaders.filter(i=>i!==hit); b.y = -20; score += 10; upd(); }
+  }
+  // invaders fire
+  if (invaders.length && Math.random() < 0.03){
+    const s = invaders[Math.floor(Math.random()*invaders.length)];
+    enemyBullets.push({ x: s.x+IW/2, y: s.y+IH });
+  }
+  enemyBullets = enemyBullets.filter(b => b.y < H+10);
+  for (const b of enemyBullets){
+    b.y += 4;
+    if (b.x > player.x && b.x < player.x+player.w && b.y > player.y && b.y < player.y+player.h){
+      b.y = H+20; lives--; upd(); if (lives<=0) end("💥 Game Over");
+    }
+  }
+  // landed on you?
+  if (invaders.some(inv => inv.y+IH >= player.y)) end("👾 They landed — Game Over");
+  if (invaders.length === 0) end("🏆 You cleared the swarm!");
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+function end(t){ over = true; document.getElementById("msg").textContent = t; draw(); }
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // invaders (alternate color by row)
+  ctx.font = "20px serif"; ctx.textAlign="left"; ctx.textBaseline="top";
+  for (const inv of invaders){ ctx.fillText(inv.row<2 ? "👾" : inv.row<4 ? "👽" : "🛸", inv.x, inv.y); }
+  // player
+  ctx.fillStyle = "#34d399"; ctx.fillRect(player.x, player.y, player.w, player.h);
+  ctx.fillRect(player.x+player.w/2-3, player.y-8, 6, 8);
+  // bullets
+  ctx.fillStyle = "#fbbf24"; for (const b of bullets) ctx.fillRect(b.x-1, b.y, 3, 10);
+  ctx.fillStyle = "#f43f5e"; for (const b of enemyBullets) ctx.fillRect(b.x-1, b.y, 3, 10);
+}
+document.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  if (["ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+  keys[e.key] = true;
+  if (e.key === " " && !over && bullets.length < 3) bullets.push({ x: player.x+player.w/2, y: player.y-6 });
+});
+document.addEventListener("keyup", e => keys[e.key] = false);
+document.getElementById("restart").onclick = start;
+c.addEventListener("click", ()=>c.focus());
+start();
+
+const STEPS = [
+  { title:"1. A grid of invaders as one flat array", why:"Don't think 'rows and columns' at runtime — build the grid once into a single array of {x, y} objects. From then on the swarm is just a list you loop over. That flat list is what makes marching, shooting, and counting survivors all one-liners.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">5 × 8 = 40 little objects in one array</div>`, code:`for (let r=0;r<ROWS;r++)
+  for (let col=0;col<COLS;col++)
+    invaders.push({ x: col*GAP, y: r*GAP });` },
+  { title:"2. The classic 'march, drop, reverse'", why:"Every frame the entire array shifts in the current direction. The trick: check if ANY invader touched a wall. If one did, flip the direction for all of them and nudge the whole grid down a step. That single shared rule is the iconic Space Invaders motion.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">→→→ wall! ↓ then ←←← wall! ↓ then →→→</div>`, code:`for (const inv of invaders) inv.x += dir*speed;
+if (edgeHit) { dir *= -1; invaders.forEach(i => i.y += DROP); }` },
+  { title:"3. Player shots delete invaders", why:"Bullets are tiny objects moving up. Each frame, test every bullet against every invader with a box-overlap check. On a hit, remove that invader from the array (filter it out) and add to the score. Fewer invaders → the array is shorter → the game speeds up for free.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">bullet ∩ invader → invader removed, +10</div>`, code:`const hit = invaders.find(inv => overlap(bullet, inv));
+if (hit) { invaders = invaders.filter(i=>i!==hit); score+=10; }` },
+  { title:"4. Invaders shoot back (a coin flip)", why:"There's no AI here — just probability. Each frame, with a small chance, pick a random surviving invader and drop a bullet from it. Tune that one number (0.02 vs 0.05) and you've set the entire difficulty. Emergent menace from a single Math.random().", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center">2% chance/frame → a random invader fires</div>`, code:`if (Math.random() < 0.02) {
+  const shooter = invaders[rand(invaders.length)];
+  enemyBullets.push({ x: shooter.x, y: shooter.y });
+}` },
+  { title:"5. Three ways the round ends", why:"Win when the array is empty. Lose a life when an enemy bullet overlaps your ship. Lose the game outright if any invader's y reaches your row — they've landed. Three little checks at the bottom of the loop turn a moving grid into a real arcade game.", concept:`<div class="text-center w-full"><div class="text-5xl mb-2">🎉</div><p class="font-bold text-slate-700">One array + two bullet lists = the whole arcade classic.</p></div>`, code:`if (invaders.length === 0) win();
+if (enemyHitsPlayer) lives--;
+if (lowestInvader.y >= player.y) gameOver();` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+</script>
+</body>
+</html>
