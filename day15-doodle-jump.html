@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 15 — Doodle Jump</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* Doodle Jump canvas */
+  #game { border-radius:16px; background:#ecfdf5; box-shadow:0 18px 40px rgba(0,0,0,.18); touch-action:none; display:block; }
+  .game-wrap { position:relative; width:340px; }
+  #overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(15,23,42,.78); color:#fff; border-radius:16px; text-align:center; padding:20px; }
+  #overlay.hidden { display:none; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 15</div>
+      <h1 class="text-xl font-bold">🦘 Doodle Jump — Bounce Your Way Up</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Bounce higher and higher — don't fall off the bottom.</h2>
+      <p class="text-slate-500 mb-4">Your character bounces on its own: every time it lands on a platform it springs straight back up. Your only job is steering left and right to line up the next platform. Use ←/→ or A/D (or tap/click the left and right half of the screen). Run off one edge and you reappear on the other. As you climb, the view scrolls up and fresh platforms keep appearing above. Miss them all and drop off the bottom — that's game over. Your score is the highest you reached.</p>
+      <div class="flex justify-center">
+        <div class="game-wrap">
+          <canvas id="game" width="340" height="520"></canvas>
+          <div id="overlay">
+            <div class="text-3xl mb-1">🦘</div>
+            <div class="text-xl font-bold mb-1" id="ovTitle">Doodle Jump</div>
+            <div class="text-sm text-slate-200 mb-4" id="ovText">Steer with ←/→ or A/D. The bounce is automatic.</div>
+            <button id="startBtn" class="bg-emerald-500 text-white px-6 py-2 rounded-lg font-semibold">Start</button>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-center items-center gap-6 mt-5 text-sm">
+        <span class="text-slate-500">Score: <span id="score" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Best: <span id="best" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">← → / A D to move</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">The jump is constant — you never tap to jump, you only aim. Platform spacing is slightly random and widens as you go, so the climb gets harder the higher you get. Everything runs offline in one canvas with requestAnimationFrame; on touch screens, hold the left or right half of the canvas to steer.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Doodle Jump works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A canvas, a falling player pulled by gravity, an array of platforms, a bounce on landing, a camera that scrolls the world down, and a spawn-and-cull loop that keeps the climb endless. ~90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Canvas and the game loop</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Everything is drawn on one <code>&lt;canvas&gt;</code>. The loop runs through <code>requestAnimationFrame</code>, which calls our function ~60 times a second in sync with the screen. Each frame we do three things in order: update the physics, draw the new picture, then ask for the next frame. That update-then-draw rhythm is the heartbeat of every action game.</p>
+        <div class="relative">
+          <pre>const cv = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;
+
+function loop(){
+  update();              // move things
+  draw();                // paint the frame
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The player, gravity, and the auto-bounce</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The player has a position and a vertical velocity <code>vy</code>. Every frame gravity adds a little to <code>vy</code> so the fall speeds up, and <code>vy</code> is added to <code>y</code> so the player actually moves. There is no jump button: whenever the player lands on a platform we slam <code>vy</code> to a fixed negative number, launching it straight back up. Constant impulse in, gravity pulling back — that loop is the bounce.</p>
+        <div class="relative">
+          <pre>const player = { x: W/2, y: H-80, w: 34, h: 34, vx: 0, vy: 0 };
+const GRAVITY = 0.45;
+const JUMP = -12;          // constant upward impulse
+
+function applyGravity(){
+  player.vy += GRAVITY;    // fall faster every frame
+  player.y  += player.vy;  // velocity moves the player
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Horizontal movement with edge wrap</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Left/right keys set the horizontal velocity <code>vx</code>, which we add to <code>x</code> each frame. Instead of stopping at the walls, the player wraps: walk off the right edge and you reappear on the left, and the other way round. Wrapping keeps the whole width usable and lets you slip across the screen to catch a platform on the far side.</p>
+        <div class="relative">
+          <pre>function moveSideways(){
+  player.x += player.vx;
+  if (player.x > W) player.x = 0;          // off right → left
+  if (player.x < 0) player.x = W;          // off left  → right
+}
+// keys: ArrowLeft / A → vx = -5 · ArrowRight / D → vx = 5</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Platforms, and bouncing only while falling</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Platforms are just objects with an x, a y, and a width. We only check for a landing when the player is moving downward (<code>vy &gt; 0</code>) and its feet cross the top of a platform. That one rule lets you pass straight up through platforms and only catch them on the way down — exactly how Doodle Jump feels. On a hit, we set <code>vy</code> to the jump impulse and the bounce begins again.</p>
+        <div class="relative">
+          <pre>function checkLanding(){
+  if (player.vy <= 0) return;              // only when FALLING
+  for (const p of platforms){
+    const feet = player.y + player.h;
+    if (player.x + player.w > p.x && player.x < p.x + p.w &&
+        feet > p.y && feet < p.y + 14){
+      player.vy = JUMP;                    // bounce!
+    }
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The scrolling camera — move the world, not the player</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The player never really climbs the screen — it stays near the middle while the world slides down past it. When the player rises above a line, we measure how far and push everything else — every platform — down by that amount, while also adding it to the score. From the player's point of view it's climbing; from the code's point of view, the whole world is scrolling beneath a fixed camera.</p>
+        <div class="relative">
+          <pre>function scroll(){
+  const line = H * 0.4;                    // camera follow line
+  if (player.y < line){
+    const dy = line - player.y;
+    player.y = line;                       // pin the player
+    for (const p of platforms) p.y += dy;  // push world DOWN
+    score += Math.round(dy);               // height climbed
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Spawning above and culling below</h3></div>
+        <p class="text-sm text-slate-600 mb-3">As platforms scroll down, the ones near the top thin out and the ones past the bottom are useless. So each frame we drop any platform that has fallen below the screen, and while the highest platform isn't high enough we add a new one just above it. Spacing is slightly randomized and grows as the score climbs, which is what quietly ramps up the difficulty.</p>
+        <div class="relative">
+          <pre>function recycle(){
+  platforms = platforms.filter(p => p.y < H);     // cull off-screen
+  while (topY() > 0){                              // fill the gap above
+    const gap = 70 + Math.random()*40 + score*0.002;
+    platforms.push({ x: Math.random()*(W-64), y: topY()-gap, w: 64 });
+  }
+}
+const topY = () => Math.min(...platforms.map(p => p.y));</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Game over and restart</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is exactly one way to lose: fall past the bottom of the screen. When the player's top edge drops below the canvas height, we flip the state to <code>over</code>, save the best score to <code>localStorage</code>, and show the overlay. Restart resets the player, rebuilds the starting platforms, zeroes the score, and flips the state back to <code>play</code> — a clean slate every time.</p>
+        <div class="relative">
+          <pre>function update(){
+  if (state !== "play") return;
+  applyGravity(); moveSideways(); checkLanding(); scroll(); recycle();
+  if (player.y > H){                       // fell off the bottom
+    state = "over";
+    best = Math.max(best, score);
+    localStorage.setItem("djBest", best);
+    showOverlay("Game Over", "Score " + score);
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Wire up controls and start</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Key-down sets <code>vx</code>, key-up clears it, so the player drifts only while a key is held. We also let a tap on the left or right half of the canvas steer, for touch screens. The Start button calls <code>reset()</code> to lay down the first platforms under the player and set the state to <code>play</code>. Double-click the file — no server needed.</p>
+        <div class="relative">
+          <pre>addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft"  || e.key === "a") player.vx = -5;
+  if (e.key === "ArrowRight" || e.key === "d") player.vx =  5;
+});
+addEventListener("keyup", () => player.vx = 0);
+
+cv.addEventListener("pointerdown", e => {
+  const x = e.offsetX;                     // half-screen touch steer
+  player.vx = x < W/2 ? -5 : 5;
+});
+cv.addEventListener("pointerup", () => player.vx = 0);
+
+document.getElementById("startBtn").onclick = reset;</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 15 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Doodle Jump with gravity-driven physics, a constant auto-bounce, falling-only collision, a world-scrolling camera, and an endless spawn-and-cull platform stream. Try adding moving platforms, breakable ones, a jetpack power-up, or a spring that bounces extra high.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== DOODLE JUMP =====
+const cv  = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;
+
+const scoreEl = document.getElementById("score");
+const bestEl  = document.getElementById("best");
+const overlay = document.getElementById("overlay");
+const ovTitle = document.getElementById("ovTitle");
+const ovText  = document.getElementById("ovText");
+const startBtn= document.getElementById("startBtn");
+
+const GRAVITY = 0.45;
+const JUMP    = -12;          // constant upward impulse on landing
+const SPEED   = 5;
+
+const player = { x: W/2 - 17, y: H - 90, w: 34, h: 34, vx: 0, vy: 0 };
+let platforms = [];
+let score = 0;
+let best  = +localStorage.getItem("djBest") || 0;
+let state = "idle";           // idle · play · over
+bestEl.textContent = best;
+
+const topY = () => platforms.length ? Math.min.apply(null, platforms.map(p => p.y)) : H;
+
+function reset(){
+  player.x = W/2 - 17; player.y = H - 90; player.vx = 0; player.vy = JUMP;
+  platforms = [];
+  // a starter platform right under the player so the first bounce is guaranteed
+  platforms.push({ x: W/2 - 32, y: H - 50, w: 64 });
+  // fill the rest of the screen going up
+  let y = H - 50;
+  while (y > 0){
+    y -= 70 + Math.random() * 40;
+    platforms.push({ x: Math.random() * (W - 64), y: y, w: 64 });
+  }
+  score = 0;
+  scoreEl.textContent = 0;
+  state = "play";
+  overlay.classList.add("hidden");
+}
+
+function applyGravity(){
+  player.vy += GRAVITY;
+  player.y  += player.vy;
+}
+
+function moveSideways(){
+  player.x += player.vx;
+  if (player.x > W)            player.x = -player.w;   // wrap right → left
+  if (player.x + player.w < 0) player.x = W;           // wrap left  → right
+}
+
+function checkLanding(){
+  if (player.vy <= 0) return;                          // only while FALLING
+  const feet = player.y + player.h;
+  for (const p of platforms){
+    if (player.x + player.w > p.x && player.x < p.x + p.w &&
+        feet > p.y && feet < p.y + 16){
+      player.vy = JUMP;                                // bounce!
+      return;
+    }
+  }
+}
+
+function scroll(){
+  const line = H * 0.42;
+  if (player.y < line){
+    const dy = line - player.y;
+    player.y = line;
+    for (const p of platforms) p.y += dy;              // push world DOWN
+    score += Math.round(dy);
+    scoreEl.textContent = score;
+  }
+}
+
+function recycle(){
+  platforms = platforms.filter(p => p.y < H);          // cull off-screen
+  while (topY() > 0){                                  // spawn above
+    const gap = 70 + Math.random() * 40 + score * 0.0015;
+    platforms.push({ x: Math.random() * (W - 64), y: topY() - gap, w: 64 });
+  }
+}
+
+function update(){
+  if (state !== "play") return;
+  applyGravity();
+  moveSideways();
+  checkLanding();
+  scroll();
+  recycle();
+  if (player.y > H){                                   // fell off the bottom
+    state = "over";
+    if (score > best){ best = score; localStorage.setItem("djBest", best); }
+    bestEl.textContent = best;
+    showOverlay("Game Over", "Score " + score + " · best " + best);
+  }
+}
+
+function draw(){
+  ctx.clearRect(0, 0, W, H);
+  // platforms
+  ctx.fillStyle = "#059669";
+  for (const p of platforms){
+    ctx.beginPath();
+    ctx.roundRect(p.x, p.y, p.w, 12, 6);
+    ctx.fill();
+  }
+  // player
+  if (state !== "idle"){
+    ctx.font = "30px serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("🦘", player.x, player.y);
+  }
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function showOverlay(title, text){
+  ovTitle.textContent = title;
+  ovText.textContent  = text;
+  startBtn.textContent = "Play again";
+  overlay.classList.remove("hidden");
+}
+
+// roundRect fallback for older canvases
+if (!ctx.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
+    this.moveTo(x+r,y); this.arcTo(x+w,y,x+w,y+h,r); this.arcTo(x+w,y+h,x,y+h,r);
+    this.arcTo(x,y+h,x,y,r); this.arcTo(x,y,x+w,y,r); this.closePath(); return this;
+  };
+}
+
+// controls
+addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft"  || e.key === "a" || e.key === "A") player.vx = -SPEED;
+  if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") player.vx =  SPEED;
+  if (["ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+});
+addEventListener("keyup", e => {
+  if (["ArrowLeft","ArrowRight","a","A","d","D"].includes(e.key)) player.vx = 0;
+});
+cv.addEventListener("pointerdown", e => {
+  const rect = cv.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  player.vx = x < W/2 ? -SPEED : SPEED;
+});
+cv.addEventListener("pointerup",     () => player.vx = 0);
+cv.addEventListener("pointerleave",  () => player.vx = 0);
+
+startBtn.onclick = reset;
+requestAnimationFrame(loop);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The game loop runs everything", why:"An action game is really just one function called over and over, about 60 times a second. We use requestAnimationFrame, which syncs that function to the screen's refresh so motion looks smooth. On every call we do the same two jobs in order: update the world a tiny bit, then redraw it. Run that fast enough and a stack of still pictures becomes a living, bouncing game. Nothing in Doodle Jump happens outside this loop.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">update → draw → next frame → update → draw …<br>~60 times every second</div>`, code:`function loop(){
+  update();   // move things a little
+  draw();     // paint the new picture
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);` },
+  { title:"2. Gravity and the automatic bounce", why:"The player has a vertical speed called vy. Each frame gravity adds a small amount to vy, so the fall keeps getting faster, and then vy is added to the player's y so it actually moves. The clever part is that there is no jump button. The moment the player lands on a platform we force vy to a fixed negative value, which fires it straight back up. Gravity then slows it, stops it, and pulls it down again — and the cycle repeats forever.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">vy += gravity (fall faster)<br>land → vy = JUMP (shoot up)</div>`, code:`player.vy += GRAVITY;   // always pulling down
+player.y  += player.vy;  // speed becomes movement
+// on landing:
+player.vy = JUMP;        // a fixed kick upward, no button` },
+  { title:"3. Steering left and right with edge wrap", why:"You don't control the jump — only the aim. Pressing left or right sets a horizontal speed vx, which we add to the player's x every frame, and releasing the key sets it back to zero. Rather than blocking at the walls, the player wraps around: leave the right edge and you slide in from the left. That wrap turns the screen into a loop and lets you dart across to grab a platform sitting on the far side.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">x += vx<br>x &gt; width → x = 0 (teleport across)</div>`, code:`player.x += player.vx;
+if (player.x > W) player.x = 0;   // off right → reappear left
+if (player.x < 0) player.x = W;   // off left  → reappear right` },
+  { title:"4. Landing only while falling", why:"Platforms are simple boxes, but the collision rule has one twist that makes the whole game feel right: we only check for a landing when the player is moving downward, when vy is greater than zero. That means you sail straight up through a platform and only catch it on the way back down. We test whether the player's feet have just crossed the top edge of a platform, and if so we trigger the bounce. Without the falling-only check you'd stick to the underside of platforms and the game would feel wrong.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">vy &gt; 0 (falling) AND feet on top → bounce<br>vy &lt; 0 (rising) → pass through</div>`, code:`if (player.vy <= 0) return;        // ignore while rising
+if (feetOverlapTopOf(platform)){
+  player.vy = JUMP;                // catch it on descent
+}` },
+  { title:"5. The scrolling camera: move the world, not the player", why:"This is the heart of the trick. The player never actually climbs up the screen — it stays pinned near the middle, and instead the entire world slides downward past it. When the player rises above a chosen line, we measure how far above and shove every platform down by that same distance, then pin the player back to the line. To your eyes the character is soaring upward; in the code, the camera is fixed and the world is scrolling beneath it. That same amount also becomes your score.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">player above line?<br>→ pin player · push every platform DOWN by dy</div>`, code:`const line = H * 0.42;
+if (player.y < line){
+  const dy = line - player.y;
+  player.y = line;                 // hold the player still
+  for (const p of platforms) p.y += dy;   // world scrolls down
+}` },
+  { title:"6. Generating new platforms above you", why:"If the world only had the platforms it started with, you'd run out of things to bounce on within seconds. So as the world scrolls and the top of the screen empties, we keep adding fresh platforms just above the current highest one. Each new platform gets a random x position and a gap above the last, so the path is different every run. We add them in a small loop that keeps spawning until the area above the screen is filled, which is what makes the climb endless.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">while (top of stack is on-screen):<br>add platform at random x, gap above the top one</div>`, code:`while (topY() > 0){
+  const gap = 70 + Math.random()*40;       // varied vertical spacing
+  platforms.push({
+    x: Math.random() * (W - 64),           // random horizontal spot
+    y: topY() - gap, w: 64
+  });
+}` },
+  { title:"7. Recycling platforms that scroll off-screen", why:"New platforms appear forever, so without cleanup the array would grow without limit and slowly choke the game. The fix is culling: every frame we throw away any platform that has scrolled below the bottom of the canvas, because you can never bounce on it again. Spawning above and culling below together keep the list small and roughly constant in size, no matter how high you climb. It's the same pattern any endless game uses to stay fast.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">spawn ABOVE  ⬆<br>━━ screen ━━<br>cull BELOW  ⬇ (delete)</div>`, code:`// drop anything that fell past the bottom
+platforms = platforms.filter(p => p.y < H);
+// the array stays small no matter how far you climb` },
+  { title:"8. Score is the height you climbed", why:"There's no point counting platforms — what matters is how high you got. Because the camera scrolls the world down by some distance dy whenever you rise, that dy is exactly the height you just gained. So every time we scroll the world, we add dy to the score. The number you see is literally the total distance climbed. Stop rising and the world stops scrolling, so the score naturally freezes until you bounce higher again.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every scroll: score += dy<br>score = total height climbed</div>`, code:`if (player.y < line){
+  const dy = line - player.y;
+  score += Math.round(dy);   // height gained = points
+}` },
+  { title:"9. Difficulty through wider spacing", why:"A good endless game starts easy and quietly gets harder, without ever announcing it. We do that purely through platform spacing. The vertical gap between new platforms is partly random and partly tied to your score, so the higher you climb the further apart they drift. Bigger gaps mean your fixed-height bounce only just reaches the next one, leaving less room for error. The bounce strength never changes — only the world gets meaner.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">low: gaps small, easy ↑<br>high: gaps wider, risky ↑↑</div>`, code:`const gap = 70 + Math.random()*40 + score*0.0015;
+// early on ≈ 70-110px · much higher up the gaps stretch out
+// the jump height is constant — the spacing is what scales` },
+  { title:"10. Game over and restarting", why:"There is exactly one losing condition: falling past the bottom of the screen. When the player's y drops below the canvas height, we switch a single state word to 'over', stash the best score in localStorage so it survives a refresh, and show the overlay. Restart simply runs a reset that re-centres the player, lays down a fresh starting platform right under it, rebuilds the stack, zeroes the score, and flips the state back to 'play'. One variable decides whether the loop updates or pauses — clean and bug-resistant.", concept:`<div class="text-center w-full"><div class="text-4xl mb-2">🦘</div><p class="font-bold text-slate-700">Gravity + auto-bounce + scrolling camera + spawn/cull = endless climb.</p></div>`, code:`if (player.y > H){              // off the bottom
+  state = "over";
+  best = Math.max(best, score);
+  localStorage.setItem("djBest", best);
+}
+// restart: reset() rebuilds platforms, state = "play"` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>

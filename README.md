@@ -1,10 +1,10 @@
 # GameFromZero
 
-50 classic browser games built from scratch — one self-contained, playable HTML file each.
+50 classic browser games built from scratch - one self-contained playable HTML file each.
 
 🌐 **Live (all days):** https://dev48v.infy.uk/gamefromzero.php
 
-Every lesson is a single, self-contained HTML file with three tabs — 👁 **LOOK** (an interactive demo), 🧠 **UNDERSTAND** (the concept, step by step), 🔨 **BUILD** (do it yourself). No build tools, no install — open any file in a browser.
+Every lesson is a single, self-contained HTML file with three tabs — 👁 **LOOK** (interactive demo), 🧠 **UNDERSTAND** (the concept, step by step), 🔨 **BUILD** (do it yourself). No build tools, no install — open any file in a browser.
 
 ## Days
 - [GameFromZero · Day 1 — Snake (3-tier)](https://dev48v.infy.uk/game/day1-snake.html) — `day1-snake.html`
@@ -21,6 +21,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 12 — Dino Run](https://dev48v.infy.uk/game/day12-dino-run.html) — `day12-dino-run.html`
 - [GameFromZero · Day 13 — Connect Four](https://dev48v.infy.uk/game/day13-connect-four.html) — `day13-connect-four.html`
 - [GameFromZero · Day 14 — Simon](https://dev48v.infy.uk/game/day14-simon.html) — `day14-simon.html`
+- [GameFromZero · Day 15 — Doodle Jump](https://dev48v.infy.uk/game/day15-doodle-jump.html) — `day15-doodle-jump.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
