@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 16 — Whac-a-Mole</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* Whac-a-Mole board */
+  #board { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; width:340px; padding:18px; border-radius:16px; background:#ecfdf5; box-shadow:0 18px 40px rgba(0,0,0,.18); touch-action:manipulation; }
+  .hole { position:relative; aspect-ratio:1/1; border-radius:50%; background:#a16207; box-shadow:inset 0 10px 18px rgba(0,0,0,.45); overflow:hidden; cursor:pointer; user-select:none; }
+  .hole::after { content:""; position:absolute; left:8%; right:8%; bottom:0; height:30%; background:#78350f; border-radius:50%; }
+  .mole { position:absolute; left:50%; bottom:-100%; transform:translateX(-50%); font-size:46px; line-height:1; transition:bottom .12s ease-out; z-index:2; pointer-events:none; }
+  .hole.up .mole { bottom:6%; }
+  .hole.bonk .mole { transform:translateX(-50%) scale(1.35) rotate(-12deg); }
+  .game-wrap { position:relative; width:340px; }
+  #overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(15,23,42,.78); color:#fff; border-radius:16px; text-align:center; padding:20px; z-index:10; }
+  #overlay.hidden { display:none; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 16</div>
+      <h1 class="text-xl font-bold">🔨 Whac-a-Mole — Fast Hands Win</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Moles keep popping up — whack as many as you can before the clock runs out.</h2>
+      <p class="text-slate-500 mb-4">Nine holes, one timer, and a steady stream of moles. Each mole pops up in a random empty hole and only stays up for a short moment before ducking back down. Click or tap a mole while it's up to bonk it: that scores a point and builds a combo. The longer you survive, the faster moles appear and the quicker they hide, so your reactions have to keep up. You have 30 seconds. Whack fast, whack often, and beat your best.</p>
+      <div class="flex justify-center">
+        <div class="game-wrap">
+          <div id="board"></div>
+          <div id="overlay">
+            <div class="text-3xl mb-1">🐹</div>
+            <div class="text-xl font-bold mb-1" id="ovTitle">Whac-a-Mole</div>
+            <div class="text-sm text-slate-200 mb-4" id="ovText">Click a mole the instant it pops up. 30 seconds on the clock.</div>
+            <button id="startBtn" class="bg-emerald-500 text-white px-6 py-2 rounded-lg font-semibold">Start</button>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-center items-center gap-6 mt-5 text-sm">
+        <span class="text-slate-500">Score: <span id="score" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Time: <span id="time" class="font-bold text-emerald-600">30</span>s</span>
+        <span class="text-slate-500">Combo: <span id="combo" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Best: <span id="best" class="font-bold text-emerald-600">0</span></span>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">A combo grows with every mole you hit in a row; let one escape un-whacked and the combo resets to zero. Difficulty ramps automatically — moles spawn sooner and stay up for a shorter window as the seconds tick by. Everything runs offline with plain DOM and setTimeout; on touch screens a tap whacks just like a click.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Whac-a-Mole works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A 3×3 grid of holes, an array that tracks which hole is "up", a spawn loop on a timer, a short up-window per mole, a click handler that scores hits, a countdown, and a difficulty ramp that tightens the timing as the clock drops. ~90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Build the 3×3 grid of holes</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There's no canvas here — the board is nine plain <code>&lt;div&gt;</code> holes laid out by CSS grid. We create them in a loop, drop a hidden mole element inside each, and remember every hole in an array so we can reach any of them by index later. The array is the whole game's memory: hole 0 to hole 8, each one either empty or holding a popped-up mole.</p>
+        <div class="relative">
+          <pre>const board = document.getElementById("board");
+const holes = [];                        // index 0..8
+for (let i = 0; i < 9; i++){
+  const hole = document.createElement("div");
+  hole.className = "hole";
+  hole.innerHTML = '&lt;div class="mole"&gt;🐹&lt;/div&gt;';
+  hole.dataset.i = i;                    // remember its slot
+  board.appendChild(hole);
+  holes.push(hole);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Pick a random empty hole</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A mole should never pop up where one is already showing, or it would look like nothing happened. So before spawning we build a list of holes that aren't currently <code>up</code>, then pick one at random from that list. <code>Math.random()</code> gives a number from 0 up to (but not including) 1; multiply by the list length and floor it to land on a valid index. If every hole is busy, we simply skip this tick.</p>
+        <div class="relative">
+          <pre>function freeHole(){
+  const free = holes.filter(h => !h.classList.contains("up"));
+  if (free.length === 0) return null;          // all busy → skip
+  return free[Math.floor(Math.random() * free.length)];
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Pop a mole up, then auto-hide it</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To show a mole we add the <code>up</code> class — CSS slides the 🐹 into view. Then we set a single <code>setTimeout</code> for the "up window": when it fires, if that mole is still up (you didn't whack it) it ducks down again and the combo breaks. We store the timeout id on the hole so a successful whack can cancel it. That stored handle is the key to clean hit detection in the next step.</p>
+        <div class="relative">
+          <pre>function popUp(hole, upTime){
+  hole.classList.add("up");
+  hole._timer = setTimeout(() => {
+    if (hole.classList.contains("up")){       // escaped un-whacked
+      hole.classList.remove("up");
+      combo = 0;                              // missing breaks the combo
+      comboEl.textContent = combo;
+    }
+  }, upTime);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Click to whack — score and combo</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One click listener on each hole handles the whack. A click only counts if the hole is actually <code>up</code> and we haven't already scored it (a guard stops a frantic double-tap from counting twice). On a valid hit we cancel the auto-hide timer, drop the mole, bump the combo, and add points — bigger combos are worth more. A quick bonk animation gives the satisfying squash before it disappears.</p>
+        <div class="relative">
+          <pre>holes.forEach(hole => hole.addEventListener("pointerdown", () => {
+  if (state !== "play") return;
+  if (!hole.classList.contains("up") || hole._hit) return;  // guard
+  hole._hit = true;
+  clearTimeout(hole._timer);              // cancel the escape
+  combo++;
+  score += 1 + Math.floor(combo / 3);     // combos pay more
+  scoreEl.textContent = score;
+  comboEl.textContent = combo;
+  hole.classList.add("bonk");
+  setTimeout(() => { hole.classList.remove("up","bonk"); hole._hit = false; }, 120);
+}));</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The spawn loop on a timer</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Instead of a fixed-interval timer, each spawn schedules the next one with <code>setTimeout</code>. That lets the delay change every time, which is what makes the ramp possible. Each tick we grab a free hole, compute how long the mole should stay up, pop it, then book the next spawn after a random-ish delay. We keep the timeout id in <code>spawnTimer</code> so game-over can stop the chain cleanly.</p>
+        <div class="relative">
+          <pre>let spawnTimer = null;
+function spawn(){
+  const hole = freeHole();
+  if (hole) popUp(hole, upWindow());        // upWindow shrinks over time
+  spawnTimer = setTimeout(spawn, spawnDelay());   // schedule the next
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">The 30-second countdown</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A separate <code>setInterval</code> ticks once per second, subtracting one from <code>timeLeft</code> and updating the display. The countdown is deliberately independent of the spawn loop — one governs how long the round lasts, the other governs how often moles appear. When the clock hits zero we stop the interval and call game-over. Two simple timers, two clear jobs.</p>
+        <div class="relative">
+          <pre>let timeLeft = 30, clock = null;
+function startClock(){
+  clock = setInterval(() => {
+    timeLeft--;
+    timeEl.textContent = timeLeft;
+    if (timeLeft <= 0) gameOver();
+  }, 1000);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Difficulty that ramps with the clock</h3></div>
+        <p class="text-sm text-slate-600 mb-3">No level numbers — the game just gets harder as time passes. We measure elapsed time as a fraction from 0 (start) to 1 (end), then use it to shrink both the gap between spawns and how long each mole stays up. Early on moles are slow and generous; near the end they flicker by. A little randomness on top keeps the pattern from feeling robotic.</p>
+        <div class="relative">
+          <pre>function progress(){ return (30 - timeLeft) / 30; }   // 0 → 1
+
+function spawnDelay(){
+  const t = progress();
+  return 900 - t * 550 + Math.random() * 250;   // ~900ms → ~350ms
+}
+function upWindow(){
+  const t = progress();
+  return 1100 - t * 650;                         // ~1100ms → ~450ms up
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Game over, best score, and restart</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When time runs out we flip <code>state</code> to <code>over</code>, stop both timers, and pull down any mole still up. We compare the run to the best score in <code>localStorage</code> and save it if you beat it, so your record survives a refresh. Start/Restart resets the score, combo and clock, clears every hole, sets state to <code>play</code>, and kicks off the spawn loop and countdown again — a clean round every time. Double-click the file; no server needed.</p>
+        <div class="relative">
+          <pre>function gameOver(){
+  state = "over";
+  clearInterval(clock); clearTimeout(spawnTimer);
+  holes.forEach(h => h.classList.remove("up","bonk"));
+  if (score > best){ best = score; localStorage.setItem("wamBest", best); }
+  bestEl.textContent = best;
+  showOverlay("Time!", "Score " + score + " · best " + best);
+}
+function start(){
+  state = "play"; score = 0; combo = 0; timeLeft = 30;
+  scoreEl.textContent = comboEl.textContent = 0; timeEl.textContent = 30;
+  holes.forEach(h => { h.classList.remove("up","bonk"); h._hit = false; });
+  overlay.classList.add("hidden");
+  startClock(); spawn();
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 16 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Whac-a-Mole with a DOM grid of holes, a self-scheduling spawn loop, a per-mole up-window with auto-hide, guarded click-to-whack scoring with combos, an independent countdown, and a difficulty ramp tied to the clock. Try adding a golden mole worth extra points, a bomb you must NOT hit, or a 60-second marathon mode.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== WHAC-A-MOLE =====
+const board   = document.getElementById("board");
+const scoreEl = document.getElementById("score");
+const timeEl  = document.getElementById("time");
+const comboEl = document.getElementById("combo");
+const bestEl  = document.getElementById("best");
+const overlay = document.getElementById("overlay");
+const ovTitle = document.getElementById("ovTitle");
+const ovText  = document.getElementById("ovText");
+const startBtn= document.getElementById("startBtn");
+
+let score = 0;
+let combo = 0;
+let timeLeft = 30;
+let best = +localStorage.getItem("wamBest") || 0;
+let state = "idle";              // idle · play · over
+let spawnTimer = null;
+let clock = null;
+bestEl.textContent = best;
+
+// build the 3x3 grid
+const holes = [];
+for (let i = 0; i < 9; i++){
+  const hole = document.createElement("div");
+  hole.className = "hole";
+  hole.innerHTML = '<div class="mole">🐹</div>';
+  hole.dataset.i = i;
+  board.appendChild(hole);
+  holes.push(hole);
+}
+
+// difficulty ramps with the clock: 0 (start) → 1 (end)
+function progress(){ return (30 - timeLeft) / 30; }
+function spawnDelay(){ return 900 - progress() * 550 + Math.random() * 250; }  // ~900 → ~350ms
+function upWindow(){ return 1100 - progress() * 650; }                          // ~1100 → ~450ms
+
+function freeHole(){
+  const free = holes.filter(h => !h.classList.contains("up"));
+  if (free.length === 0) return null;
+  return free[Math.floor(Math.random() * free.length)];
+}
+
+function popUp(hole, upTime){
+  hole.classList.add("up");
+  hole._hit = false;
+  clearTimeout(hole._timer);
+  hole._timer = setTimeout(() => {
+    if (hole.classList.contains("up") && !hole._hit){      // escaped un-whacked
+      hole.classList.remove("up");
+      combo = 0;
+      comboEl.textContent = combo;
+    }
+  }, upTime);
+}
+
+function spawn(){
+  if (state !== "play") return;
+  const hole = freeHole();
+  if (hole) popUp(hole, upWindow());
+  spawnTimer = setTimeout(spawn, spawnDelay());
+}
+
+function startClock(){
+  clock = setInterval(() => {
+    if (state !== "play") return;
+    timeLeft--;
+    timeEl.textContent = timeLeft;
+    if (timeLeft <= 0) gameOver();
+  }, 1000);
+}
+
+// click / tap to whack
+holes.forEach(hole => hole.addEventListener("pointerdown", () => {
+  if (state !== "play") return;
+  if (!hole.classList.contains("up") || hole._hit) return;   // guard double-tap
+  hole._hit = true;
+  clearTimeout(hole._timer);
+  combo++;
+  score += 1 + Math.floor(combo / 3);                        // combos pay more
+  scoreEl.textContent = score;
+  comboEl.textContent = combo;
+  hole.classList.add("bonk");
+  setTimeout(() => { hole.classList.remove("up", "bonk"); hole._hit = false; }, 120);
+}));
+
+function gameOver(){
+  state = "over";
+  clearInterval(clock);
+  clearTimeout(spawnTimer);
+  holes.forEach(h => { clearTimeout(h._timer); h.classList.remove("up", "bonk"); h._hit = false; });
+  if (score > best){ best = score; localStorage.setItem("wamBest", best); }
+  bestEl.textContent = best;
+  showOverlay("Time!", "Score " + score + " · best " + best);
+}
+
+function start(){
+  // stop any leftover timers from a previous round
+  clearInterval(clock);
+  clearTimeout(spawnTimer);
+  holes.forEach(h => { clearTimeout(h._timer); h.classList.remove("up", "bonk"); h._hit = false; });
+  state = "play";
+  score = 0; combo = 0; timeLeft = 30;
+  scoreEl.textContent = 0;
+  comboEl.textContent = 0;
+  timeEl.textContent = 30;
+  overlay.classList.add("hidden");
+  startClock();
+  spawn();
+}
+
+function showOverlay(title, text){
+  ovTitle.textContent = title;
+  ovText.textContent  = text;
+  startBtn.textContent = "Play again";
+  overlay.classList.remove("hidden");
+}
+
+startBtn.onclick = start;
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The board is an array of holes", why:"There's no canvas in this game — the board is just nine plain div elements arranged by CSS into a 3×3 grid. We build them in a loop and push each one into an array, so the whole game state lives in that list: holes[0] through holes[8]. At any moment a hole is either empty or holding a popped-up mole, which we track with a single CSS class. Keeping the holes in an array means we can reach any of them by index, pick one at random, or sweep them all clear in a single line.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">holes = [ 0 1 2 / 3 4 5 / 6 7 8 ]<br>each hole: empty or "up"</div>`, code:`const holes = [];
+for (let i = 0; i < 9; i++){
+  const hole = document.createElement("div");
+  hole.className = "hole";
+  board.appendChild(hole);
+  holes.push(hole);   // the array IS the game state
+}` },
+  { title:"2. Spawning on a timer", why:"Moles don't appear continuously — they pop up on a timer. Rather than a fixed setInterval, each spawn schedules the very next one with setTimeout. That self-rescheduling chain is what later lets the delay shrink over time. Every tick the loop tries to pop one mole and then books the next tick. Because it calls itself, the chain keeps going on its own until game-over stops it. This setTimeout-that-reschedules-itself pattern is the engine that drives the whole round.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">spawn → wait delay → spawn → wait delay → …<br>each tick books the next one</div>`, code:`function spawn(){
+  popOneMole();
+  spawnTimer = setTimeout(spawn, spawnDelay());
+}
+// it reschedules ITSELF, so the chain never stops on its own` },
+  { title:"3. Randomness: picking a free hole", why:"A mole must appear somewhere unpredictable, but never in a hole that already has one — that would look like nothing happened. So we first filter the holes down to those that aren't currently up, giving us a list of free spots. Then Math.random() produces a decimal from 0 up to just under 1; multiply by the list length and floor it to get a valid random index. If every hole happens to be busy, the list is empty and we simply skip the spawn this tick. Filter-then-pick is a tiny pattern you'll reuse in dozens of games.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">free = holes without "up"<br>pick = free[ floor(random × free.length) ]</div>`, code:`const free = holes.filter(h => !h.classList.contains("up"));
+if (free.length === 0) return;                 // all busy → skip
+const hole = free[Math.floor(Math.random() * free.length)];` },
+  { title:"4. The up-window and auto-hide", why:"A mole that stayed up forever would be no challenge, so each one gets a short up-window. When we pop a mole we add the up class and immediately start a setTimeout for that window. If the timer fires and the mole is still up — meaning you never whacked it — it ducks back down on its own and the combo breaks. We store that timeout's id right on the hole so a successful whack can cancel it. The race between your reaction and this timer is the entire tension of the game.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">pop up → start hide-timer<br>timer fires first → mole escapes<br>you click first → cancel timer</div>`, code:`hole.classList.add("up");
+hole._timer = setTimeout(() => {
+  if (hole.classList.contains("up")){   // never got whacked
+    hole.classList.remove("up");        // duck back down
+    combo = 0;                          // and break the streak
+  }
+}, upTime);` },
+  { title:"5. Hit detection on click", why:"Whacking is just a click listener on each hole. But a raw click isn't enough — the click only counts if the hole is actually up at that instant, otherwise stabbing an empty hole would score. The moment we register a valid hit, we cancel the mole's auto-hide timer (it didn't escape — you got it) and drop it down. Hit detection here is simpler than the pixel-overlap maths of a canvas game because the DOM already tells us exactly which hole was clicked. That's the quiet upside of building on real elements instead of one big canvas.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click hole → is it "up"?<br>yes → cancel hide-timer, score it<br>no → ignore</div>`, code:`hole.addEventListener("pointerdown", () => {
+  if (!hole.classList.contains("up")) return;  // empty hole? ignore
+  clearTimeout(hole._timer);                   // it didn't escape
+  hole.classList.remove("up");                 // knock it down
+  score++;
+});` },
+  { title:"6. Scoring and combos", why:"Every clean hit is worth at least a point, but a combo rewards hitting moles in an unbroken streak. We keep a combo counter that goes up on each whack and resets to zero whenever a mole escapes. To make streaks feel valuable, points scale with the combo — every few hits in a row the per-mole value goes up. This is the classic risk-and-reward dial: play it safe for singles, or chase a long chain for a much bigger total. The whole system is just two integers and a tiny bit of arithmetic.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">hit → combo++ · points = 1 + combo/3<br>miss → combo = 0</div>`, code:`combo++;
+score += 1 + Math.floor(combo / 3);   // longer streaks pay more
+// elsewhere, on a missed mole:
+combo = 0;                             // one escape wipes the streak` },
+  { title:"7. The countdown timer and game over", why:"The round lasts a fixed 30 seconds, governed by a setInterval that fires once a second, subtracts one from the time, and refreshes the display. It runs completely separately from the spawn loop: one decides how long the game lasts, the other how often moles appear. The instant the clock reaches zero we stop the interval and trigger game-over, which freezes the state, halts the spawn chain, and pulls down any mole still showing. Two independent timers, each with one clear responsibility, keeps the logic easy to reason about and hard to break.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every 1s: time-- → show<br>time = 0 → stop everything (game over)</div>`, code:`clock = setInterval(() => {
+  timeLeft--;
+  timeEl.textContent = timeLeft;
+  if (timeLeft <= 0) gameOver();   // stop both timers, freeze state
+}, 1000);` },
+  { title:"8. Difficulty ramps with the clock", why:"A good arcade game starts gentle and quietly tightens, without ever showing a level number. We get that purely from timing. We turn the clock into a progress value that runs from 0 at the start to 1 at the end, then use it to shrink two things: the delay between spawns and how long each mole stays up. At the start moles are slow and forgiving; near the end they flash by and you barely have time to react. A dash of randomness on top stops the rhythm from feeling mechanical.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">progress 0 → 1 as time runs out<br>spawn gap shrinks · up-window shrinks</div>`, code:`function progress(){ return (30 - timeLeft) / 30; }  // 0 → 1
+const delay = 900  - progress() * 550;   // moles arrive sooner
+const up    = 1100 - progress() * 650;   // and hide quicker` },
+  { title:"9. Guarding against double-spawns and double-hits", why:"Timers and fast clicks create subtle race conditions, so we add two cheap guards. First, before spawning we only ever choose from free holes, so two moles can't share one hole. Second, on a click we set a one-shot flag on the hole the moment it's hit; a frantic double-tap that lands in the same instant sees the flag and is ignored, so one mole can never score twice. We also clear a hole's pending hide-timer whenever it changes state, so a stale timeout from a previous pop can't fire and wrongly break your combo. Small guards, far fewer weird bugs.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">spawn only into FREE holes<br>hit sets _hit flag → second tap ignored<br>state change → clear old timer</div>`, code:`if (!hole.classList.contains("up") || hole._hit) return;  // double-tap guard
+hole._hit = true;
+clearTimeout(hole._timer);     // kill the stale auto-hide
+// and on every pop / clear: clearTimeout(hole._timer) first` },
+  { title:"10. Best score that survives a refresh", why:"A high score is only motivating if it sticks around, so we save it in localStorage — the browser's little key-value store that persists across reloads and even after closing the tab. On load we read the saved best (defaulting to zero the first time). At game-over we compare the run to the best and write the new value back only if you beat it. It's two lines, no server, no account, and your record is waiting the next time you open the page. That permanence is what turns a one-off game into 'just one more try'.", concept:`<div class="text-center w-full"><div class="text-4xl mb-2">🐹</div><p class="font-bold text-slate-700">Grid + spawn loop + up-window + click scoring + countdown + ramp = Whac-a-Mole.</p></div>`, code:`let best = +localStorage.getItem("wamBest") || 0;   // read on load
+// at game over:
+if (score > best){
+  best = score;
+  localStorage.setItem("wamBest", best);            // persist the record
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>
