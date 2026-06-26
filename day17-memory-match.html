@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 17 — Memory Match</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* Memory Match board */
+  #board { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; width:360px; padding:18px; border-radius:16px; background:#ecfdf5; box-shadow:0 18px 40px rgba(0,0,0,.18); touch-action:manipulation; }
+  .card { position:relative; aspect-ratio:1/1; cursor:pointer; user-select:none; perspective:600px; }
+  .card-inner { position:absolute; inset:0; transition:transform .35s; transform-style:preserve-3d; }
+  .card.flipped .card-inner, .card.matched .card-inner { transform:rotateY(180deg); }
+  .card-face { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:12px; backface-visibility:hidden; -webkit-backface-visibility:hidden; }
+  .card-back { background:#10b981; background-image:linear-gradient(135deg,#10b981,#059669); box-shadow:inset 0 4px 10px rgba(0,0,0,.18); font-size:30px; color:rgba(255,255,255,.85); }
+  .card-front { background:#fff; box-shadow:inset 0 0 0 2px #d1fae5; font-size:38px; transform:rotateY(180deg); }
+  .card.matched .card-front { background:#d1fae5; box-shadow:inset 0 0 0 2px #34d399; }
+  .card.matched { animation:pop .3s ease-out; }
+  @keyframes pop { 0%{transform:scale(1);} 50%{transform:scale(1.08);} 100%{transform:scale(1);} }
+  .game-wrap { position:relative; width:360px; }
+  #overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(15,23,42,.78); color:#fff; border-radius:16px; text-align:center; padding:20px; z-index:10; }
+  #overlay.hidden { display:none; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 17</div>
+      <h1 class="text-xl font-bold">🃏 Memory Match — Find the Pairs</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Sixteen face-down cards hide eight matching pairs — flip two at a time and remember where everything is.</h2>
+      <p class="text-slate-500 mb-4">Every card is face-down at the start. Click one to flip it and reveal its emoji, then flip a second. If the two faces match, the pair locks face-up and stays put. If they don't, both cards quietly flip back down after a moment — so your memory is the only thing keeping score of where each picture was. Clear all eight pairs in as few moves and as little time as you can, then try to beat your best.</p>
+      <div class="flex justify-center">
+        <div class="game-wrap">
+          <div id="board"></div>
+          <div id="overlay">
+            <div class="text-3xl mb-1">🃏</div>
+            <div class="text-xl font-bold mb-1" id="ovTitle">Memory Match</div>
+            <div class="text-sm text-slate-200 mb-4" id="ovText">Flip two cards at a time. Match all eight pairs to win.</div>
+            <button id="startBtn" class="bg-emerald-500 text-white px-6 py-2 rounded-lg font-semibold">Start</button>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-center items-center gap-6 mt-5 text-sm">
+        <span class="text-slate-500">Moves: <span id="moves" class="font-bold text-emerald-600">0</span></span>
+        <span class="text-slate-500">Pairs: <span id="pairs" class="font-bold text-emerald-600">0</span>/8</span>
+        <span class="text-slate-500">Time: <span id="time" class="font-bold text-emerald-600">0</span>s</span>
+        <span class="text-slate-500">Best: <span id="best" class="font-bold text-emerald-600">—</span></span>
+      </div>
+      <div class="flex justify-center mt-4">
+        <button id="restartBtn" class="bg-slate-200 hover:bg-slate-300 px-5 py-2 rounded-lg font-semibold text-sm">🔀 Shuffle &amp; Restart</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">A move is one pair of flips. Input locks for a beat while a mismatched pair flips back, so a fast double-click can't break the game. The deck is shuffled with Fisher-Yates every round, so the layout is different each time. Everything runs offline with plain DOM, a CSS 3D flip, and one setTimeout; on touch screens a tap flips just like a click.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Memory Match works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A 4×4 grid of cards, a deck built from eight emoji pairs and shuffled with Fisher-Yates, a CSS 3D flip on each card, a click handler that tracks your first and second pick, a match check that locks or flips back, an input lock during the flip-back, win detection, and a moves/timer/best score. ~80 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Build the deck and shuffle it</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Take eight emoji, double the list so every picture appears twice, and you have a 16-card deck of matching pairs. To make each round unpredictable we shuffle it with the Fisher-Yates algorithm: walk from the last card backwards, and swap each one with a random card at or before its position. That gives a perfectly fair, unbiased shuffle in a single pass — far better than the lopsided <code>Math.random() - 0.5</code> sort trick you'll see online.</p>
+        <div class="relative">
+          <pre>const FACES = ["🍎","🚀","🐶","🌺","⚽","🎸","🍕","⭐"];
+function buildDeck(){
+  const deck = [...FACES, ...FACES];          // 8 pairs → 16 cards
+  for (let i = deck.length - 1; i > 0; i--){  // Fisher-Yates shuffle
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];  // swap
+  }
+  return deck;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Render the 4×4 grid of cards</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each card is two stacked faces inside a flipper: a green <em>back</em> you see at the start and an emoji <em>front</em> that's hidden until you flip. CSS grid lays the 16 cards out four-by-four. We store the card's value and its index in <code>dataset</code> so the click handler can identify exactly what was clicked. The array of card elements becomes our handle on the whole board.</p>
+        <div class="relative">
+          <pre>const board = document.getElementById("board");
+const cards = [];
+buildDeck().forEach((value, i) => {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.dataset.value = value;            // its emoji
+  card.dataset.index = i;                // its slot
+  card.innerHTML = `&lt;div class="card-inner"&gt;
+      &lt;div class="card-face card-back"&gt;❓&lt;/div&gt;
+      &lt;div class="card-face card-front"&gt;${value}&lt;/div&gt;
+    &lt;/div&gt;`;
+  board.appendChild(card);
+  cards.push(card);
+});</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Flip a card on click</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A single click listener on each card does the flipping. But it must refuse bad clicks: ignore the card if the board is locked (a pair is mid-check), if it's already flipped, or if it's already matched. When the click is valid we add the <code>flipped</code> class — the CSS rotates the card 180° to show its emoji — and then route it into the first-pick / second-pick logic.</p>
+        <div class="relative">
+          <pre>cards.forEach(card => card.addEventListener("click", () => {
+  if (locked) return;                                  // mid-check
+  if (card.classList.contains("flipped")) return;      // already up
+  if (card.classList.contains("matched")) return;      // already solved
+  card.classList.add("flipped");                       // CSS does the 3D turn
+  pick(card);
+}));</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Track first pick vs second pick</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Memory Match is a two-step interaction, so we hold the first flipped card in a variable. If nothing is held yet, this click becomes the first pick and we just wait. If a first pick already exists, this click is the second — we count one move and run the match check. After each pair is resolved we clear the first pick back to null, ready for the next turn.</p>
+        <div class="relative">
+          <pre>let first = null;          // the first card of the current pair
+let moves = 0;
+
+function pick(card){
+  if (!first){
+    first = card;          // remember it, wait for the second flip
+    return;
+  }
+  moves++;                 // a "move" = one pair of flips
+  movesEl.textContent = moves;
+  checkMatch(first, card);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Match → lock, or mismatch → flip back (with input lock)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Comparing two cards is just comparing their stored values. If they match, we mark both <code>matched</code> so they stay face-up forever and bump the pair count. If they don't, we set <code>locked = true</code> to freeze the board, wait ~800 ms so the player can memorise the faces, then flip both back down and unlock. That input lock is the single most important guard — without it a quick third click would flip a new card while two are still showing and corrupt the game.</p>
+        <div class="relative">
+          <pre>let locked = false;
+
+function checkMatch(a, b){
+  if (a.dataset.value === b.dataset.value){     // same emoji → match
+    a.classList.add("matched");
+    b.classList.add("matched");
+    matched++; pairsEl.textContent = matched;
+    first = null;
+    if (matched === 8) win();
+  } else {                                       // no match → flip back
+    locked = true;                               // freeze all input
+    setTimeout(() => {
+      a.classList.remove("flipped");
+      b.classList.remove("flipped");
+      first = null;
+      locked = false;                            // unfreeze
+    }, 800);
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">The move counter and timer</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Two simple scores tell the story of a run. The move counter (already bumped on every second flip) measures how efficiently you played. The timer is a <code>setInterval</code> that ticks once a second, started on the very first flip rather than on page load so the clock only counts real play. We keep its id so we can stop it the moment you win.</p>
+        <div class="relative">
+          <pre>let seconds = 0, clock = null;
+function startClock(){
+  if (clock) return;                  // already running
+  clock = setInterval(() => {
+    seconds++;
+    timeEl.textContent = seconds;
+  }, 1000);
+}
+// call startClock() inside the very first flip</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Win detection and best score</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The board is solved the instant all eight pairs are matched, which we already check after every successful pair. On a win we stop the clock, show the overlay with your moves and time, and compare the run to the best stored in <code>localStorage</code>. We rank a run by moves first (then time as a tie-break) and save it only if it beats the record, so your best survives a refresh.</p>
+        <div class="relative">
+          <pre>function win(){
+  clearInterval(clock); clock = null;
+  const better = !best || moves < best.moves ||
+                 (moves === best.moves &amp;&amp; seconds < best.time);
+  if (better){
+    best = { moves, time: seconds };
+    localStorage.setItem("mmBest", JSON.stringify(best));
+  }
+  bestEl.textContent = best.moves + " moves";
+  showOverlay("You win! 🎉", `${moves} moves · ${seconds}s`);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Shuffle &amp; restart</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Restarting is a clean reset: stop the clock, zero out moves, pairs, time and the first-pick, unlock the board, then wipe and rebuild the grid from a freshly shuffled deck so the layout is brand new. Because we tear down and re-render the cards, there are no stale flipped/matched classes to clean up. Double-click the file to play; no server needed.</p>
+        <div class="relative">
+          <pre>function restart(){
+  clearInterval(clock); clock = null;
+  first = null; locked = false;
+  moves = 0; matched = 0; seconds = 0;
+  movesEl.textContent = 0; pairsEl.textContent = 0; timeEl.textContent = 0;
+  board.innerHTML = "";               // remove old cards
+  cards.length = 0;
+  renderDeck(buildDeck());            // fresh shuffle, fresh grid
+  overlay.classList.add("hidden");
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 17 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Memory Match with a Fisher-Yates shuffled deck, a CSS 3D card flip, first-pick / second-pick tracking, a match check that locks pairs or flips them back, an input lock that kills the double-click bug, win detection, and a moves/timer/best score in localStorage. Try adding a 6×6 board, a flip-count penalty, or a two-player turn-based mode.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== MEMORY MATCH =====
+const board    = document.getElementById("board");
+const movesEl  = document.getElementById("moves");
+const pairsEl  = document.getElementById("pairs");
+const timeEl   = document.getElementById("time");
+const bestEl   = document.getElementById("best");
+const overlay  = document.getElementById("overlay");
+const ovTitle  = document.getElementById("ovTitle");
+const ovText   = document.getElementById("ovText");
+const startBtn = document.getElementById("startBtn");
+const restartBtn = document.getElementById("restartBtn");
+
+const FACES = ["🍎","🚀","🐶","🌺","⚽","🎸","🍕","⭐"];
+
+let cards   = [];
+let first   = null;       // first card of the current pair
+let locked  = false;      // input lock while a mismatch flips back
+let moves   = 0;
+let matched = 0;
+let seconds = 0;
+let clock   = null;
+let started = false;      // becomes true on the first flip
+let best    = JSON.parse(localStorage.getItem("mmBest") || "null");
+
+if (best) bestEl.textContent = best.moves + " moves";
+
+// build the deck: 8 emoji × 2, Fisher-Yates shuffled
+function buildDeck(){
+  const deck = [...FACES, ...FACES];
+  for (let i = deck.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+// render the 4x4 grid from a deck array
+function renderDeck(deck){
+  board.innerHTML = "";
+  cards = [];
+  deck.forEach((value, i) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.value = value;
+    card.dataset.index = i;
+    card.innerHTML =
+      '<div class="card-inner">' +
+        '<div class="card-face card-back">❓</div>' +
+        '<div class="card-face card-front">' + value + '</div>' +
+      '</div>';
+    card.addEventListener("click", () => onFlip(card));
+    board.appendChild(card);
+    cards.push(card);
+  });
+}
+
+function startClock(){
+  if (clock) return;
+  clock = setInterval(() => { seconds++; timeEl.textContent = seconds; }, 1000);
+}
+
+function onFlip(card){
+  if (locked) return;                                // a pair is mid-check
+  if (card.classList.contains("flipped")) return;    // already face-up
+  if (card.classList.contains("matched")) return;    // already solved
+  if (!started){ started = true; startClock(); }     // clock starts on 1st flip
+
+  card.classList.add("flipped");
+  pick(card);
+}
+
+function pick(card){
+  if (!first){
+    first = card;                                    // wait for the second flip
+    return;
+  }
+  moves++;
+  movesEl.textContent = moves;
+  checkMatch(first, card);
+}
+
+function checkMatch(a, b){
+  if (a.dataset.value === b.dataset.value){          // match → lock face-up
+    a.classList.add("matched");
+    b.classList.add("matched");
+    matched++;
+    pairsEl.textContent = matched;
+    first = null;
+    if (matched === FACES.length) win();
+  } else {                                            // mismatch → flip back
+    locked = true;                                    // freeze input
+    setTimeout(() => {
+      a.classList.remove("flipped");
+      b.classList.remove("flipped");
+      first = null;
+      locked = false;                                 // unlock
+    }, 800);
+  }
+}
+
+function win(){
+  clearInterval(clock); clock = null;
+  const better = !best || moves < best.moves ||
+                 (moves === best.moves && seconds < best.time);
+  if (better){
+    best = { moves: moves, time: seconds };
+    localStorage.setItem("mmBest", JSON.stringify(best));
+  }
+  bestEl.textContent = best.moves + " moves";
+  showOverlay("You win! 🎉", moves + " moves · " + seconds + "s   (best: " + best.moves + " moves)");
+}
+
+function showOverlay(title, text){
+  ovTitle.textContent = title;
+  ovText.textContent  = text;
+  startBtn.textContent = "Play again";
+  overlay.classList.remove("hidden");
+}
+
+function newGame(){
+  clearInterval(clock); clock = null;
+  first = null; locked = false; started = false;
+  moves = 0; matched = 0; seconds = 0;
+  movesEl.textContent = 0;
+  pairsEl.textContent = 0;
+  timeEl.textContent = 0;
+  renderDeck(buildDeck());
+  overlay.classList.add("hidden");
+}
+
+startBtn.onclick   = newGame;
+restartBtn.onclick = newGame;
+
+// lay out an initial (hidden behind overlay) board so the grid is visible
+renderDeck(buildDeck());
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The card model: value + flipped + matched", why:"Every card is described by just three things: which picture it shows, whether it's currently flipped face-up, and whether it's already been matched. The picture is stored on the element as a data attribute; the two states are plain CSS classes we add and remove. That's the entire model — no objects, no framework, just an element that knows its value and carries two flags. Once you see a card as 'a value plus two booleans', the rest of the game is simply rules for when those flags change.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">card = { value: "🍎",<br>&nbsp;&nbsp;flipped: false,<br>&nbsp;&nbsp;matched: false }</div>`, code:`// a card is an element that knows its value and two states
+card.dataset.value = "🍎";        // which picture
+card.classList.add("flipped");    // face-up right now?
+card.classList.add("matched");    // solved for good?` },
+  { title:"2. Building & shuffling the deck (Fisher-Yates)", why:"A memory game needs each picture to appear exactly twice, so we take eight emoji and concatenate the list with itself to get sixteen cards in eight pairs. Then we shuffle, because a fixed layout would be boring the second time. Fisher-Yates is the right way: walk from the last card backwards and swap each one with a random earlier card. It touches every card once and produces every ordering with equal probability — a truly fair shuffle, unlike the popular sort-with-random trick which is subtly biased.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">8 emoji ×2 → 16 cards<br>walk back, swap each<br>with a random earlier one</div>`, code:`const deck = [...FACES, ...FACES];        // 8 pairs = 16 cards
+for (let i = deck.length - 1; i > 0; i--){
+  const j = Math.floor(Math.random() * (i + 1));
+  [deck[i], deck[j]] = [deck[j], deck[i]]; // swap = unbiased shuffle
+}` },
+  { title:"3. The CSS 3D flip", why:"The satisfying card turn isn't JavaScript animation — it's pure CSS. Each card holds an inner wrapper with two faces stacked on top of each other: a back and a front, with the front pre-rotated 180°. We give the wrapper a 3D transform style and hide the reverse of each face with backface-visibility. Rotating the wrapper by 180° swings the back away and brings the front into view. JavaScript does nothing but toggle one class; the browser handles the smooth half-turn entirely on the GPU.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">.card-inner rotateY(0)  → shows BACK<br>.card-inner rotateY(180) → shows FRONT<br>backface-visibility hides the reverse</div>`, code:`.card-inner { transform-style: preserve-3d; transition: transform .35s; }
+.card.flipped .card-inner { transform: rotateY(180deg); }
+.card-face { backface-visibility: hidden; }   /* hide the reverse side */
+.card-front { transform: rotateY(180deg); }    /* front starts pre-turned */` },
+  { title:"4. The click → flip flow", why:"All the player can do is click a card, so one click listener per card drives everything. The handler is mostly guards: it refuses the click if the board is locked mid-check, if the card is already flipped, or if it's already matched. Only a fresh, legal click adds the flipped class and passes the card on to the pick logic. Doing the gatekeeping right here, at the entry point, means the rest of the code never has to worry about illegal flips — it can assume every card it sees was a valid choice.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click → locked? already up? matched?<br>any yes → ignore<br>all no → flip + hand to pick()</div>`, code:`card.addEventListener("click", () => {
+  if (locked) return;                              // mid-check
+  if (card.classList.contains("flipped")) return;  // already up
+  if (card.classList.contains("matched")) return;  // already solved
+  card.classList.add("flipped");
+  pick(card);                                      // continue the turn
+});` },
+  { title:"5. First pick vs second pick", why:"A turn is two flips, so the game needs to remember the first card while it waits for the second. We hold it in a single variable called first. When a card arrives and first is empty, this is the opening flip — we stash the card and simply wait. When first already holds a card, the new one is the second flip, so we count a move and run the comparison. After the pair is resolved we set first back to null, which arms the next turn. One variable is the entire two-step state machine.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">first empty → store this card, wait<br>first set → this is #2, compare<br>after resolve → first = null</div>`, code:`function pick(card){
+  if (!first){ first = card; return; }   // opening flip: remember & wait
+  moves++;                                // second flip = one move
+  checkMatch(first, card);                // compare the two
+}` },
+  { title:"6. Comparing & locking matches", why:"Comparing two cards is just comparing the values stored on them — no geometry, no pixels. If the two emoji are equal it's a match: we add the matched class to both so they stay face-up permanently, count the pair, and clear the first pick. The matched class also makes the cards immune to future clicks, because our flip guard skips anything already matched. Matched cards quietly drop out of play, the board fills up with solved pairs, and the comparison itself stays a one-line equality check.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a.value === b.value ?<br>yes → mark both "matched" (locked up)<br>pairs++ · first = null</div>`, code:`if (a.dataset.value === b.dataset.value){   // same picture?
+  a.classList.add("matched");               // lock both face-up
+  b.classList.add("matched");
+  matched++;                                 // one more pair solved
+  first = null;                              // ready for the next turn
+}` },
+  { title:"7. The flip-back delay + input lock", why:"When two cards don't match, the player needs a moment to memorise them before they hide — so we don't flip back instantly. We set a locked flag to true, freezing all input, then use a setTimeout of about 800 ms to flip both cards face-down and unlock. That lock is the crucial guard against the classic double-click bug: without it, a fast third click during the pause would flip a new card while two are still showing, leaving three cards face-up and breaking the turn logic. The flip guard checks locked first, so every extra click in that window is harmlessly ignored.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">mismatch → locked = true (freeze)<br>wait 800ms → flip both back<br>then locked = false (unfreeze)</div>`, code:`locked = true;                       // freeze the board
+setTimeout(() => {
+  a.classList.remove("flipped");     // flip both back down
+  b.classList.remove("flipped");
+  first = null;
+  locked = false;                    // safe to flip again
+}, 800);` },
+  { title:"8. Win detection", why:"The board is won the instant the last pair is matched, and the cleanest place to notice that is right after we register a successful pair. We keep a count of matched pairs and compare it to the total number of pairs — eight here. The moment they're equal, the player has cleared the board, so we call win(). Checking at the point a pair is solved means we never have to scan all sixteen cards looking for unsolved ones; the counter already knows. It's the same lightweight idea as the move counter: track a number, react when it hits a threshold.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">on every match: matched++<br>matched === 8 ? → win!</div>`, code:`matched++;                       // just solved a pair
+pairsEl.textContent = matched;
+if (matched === FACES.length){   // all 8 pairs cleared?
+  win();                         // show the win overlay, stop the clock
+}` },
+  { title:"9. Moves, timer & score", why:"Two numbers measure how well a run went. Moves counts pairs of flips — bumped once on every second flip — and rewards remembering positions instead of guessing. The timer is a setInterval that starts on the very first flip, not on page load, so it only times real play and we save its id to stop it on a win. Together they give a fair, two-dimensional score: fewer moves and less time is better. Ranking primarily by moves, with time as a tie-break, keeps a steady, thoughtful player ahead of a lucky frantic one.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">2nd flip → moves++<br>1st flip → start 1s timer<br>rank by moves, then time</div>`, code:`moves++;                                   // counted on the 2nd flip
+function startClock(){
+  if (clock) return;                       // only start once
+  clock = setInterval(() => { seconds++; timeEl.textContent = seconds; }, 1000);
+}
+// best = fewer moves, then less time` },
+  { title:"10. Reset & best score", why:"Restarting wipes the board to a clean slate: stop the clock, zero the moves, pairs, time and first-pick, clear the input lock, then tear down the old cards and re-render a freshly shuffled deck. Because we rebuild the grid from scratch there are no leftover flipped or matched classes to scrub. The best score lives in localStorage, the browser's tiny key-value store, so your record survives a refresh or even closing the tab — we read it on load and write it back only when a run beats it. That little bit of permanence is what turns one game into 'just one more try'.", concept:`<div class="text-center w-full"><div class="text-4xl mb-2">🃏</div><p class="font-bold text-slate-700">Shuffled deck + 3D flip + first/second pick + match-or-flip-back + input lock = Memory Match.</p></div>`, code:`function newGame(){
+  clearInterval(clock); clock = null;
+  first = null; locked = false; started = false;
+  moves = matched = seconds = 0;
+  renderDeck(buildDeck());                 // fresh shuffle, fresh grid
+}
+let best = JSON.parse(localStorage.getItem("mmBest") || "null");  // survives refresh` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>
