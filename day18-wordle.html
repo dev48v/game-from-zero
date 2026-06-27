@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 18 — Wordle</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* Wordle board */
+  #board { display:grid; grid-template-rows:repeat(6,1fr); gap:6px; padding:18px; border-radius:16px; background:#ecfdf5; box-shadow:0 18px 40px rgba(0,0,0,.18); }
+  .row { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+  .tile { width:56px; height:56px; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; text-transform:uppercase;
+          border:2px solid #d1d5db; border-radius:6px; color:#0f172a; background:#fff; user-select:none; }
+  .tile.filled { border-color:#94a3b8; animation:popIn .12s ease-out; }
+  @keyframes popIn { 0%{transform:scale(.9);} 100%{transform:scale(1);} }
+  /* per-letter result colors */
+  .tile.green  { background:#10b981; border-color:#10b981; color:#fff; }
+  .tile.yellow { background:#f59e0b; border-color:#f59e0b; color:#fff; }
+  .tile.gray   { background:#64748b; border-color:#64748b; color:#fff; }
+  /* CSS flip reveal */
+  .tile.reveal { animation:flip .55s ease forwards; }
+  @keyframes flip {
+    0%   { transform:rotateX(0);   }
+    50%  { transform:rotateX(90deg); }
+    100% { transform:rotateX(0);   }
+  }
+  .row.shake { animation:shake .4s; }
+  @keyframes shake { 0%,100%{transform:translateX(0);} 20%,60%{transform:translateX(-6px);} 40%,80%{transform:translateX(6px);} }
+  /* on-screen keyboard */
+  #keyboard { display:flex; flex-direction:column; gap:6px; align-items:center; margin-top:18px; }
+  .kbrow { display:flex; gap:5px; justify-content:center; }
+  .key { min-width:34px; height:48px; padding:0 8px; border:0; border-radius:6px; background:#cbd5e1; color:#0f172a;
+         font-weight:700; font-size:13px; text-transform:uppercase; cursor:pointer; }
+  .key:hover { background:#94a3b8; }
+  .key.wide { min-width:58px; font-size:11px; }
+  .key.green  { background:#10b981; color:#fff; }
+  .key.yellow { background:#f59e0b; color:#fff; }
+  .key.gray   { background:#64748b; color:#fff; }
+  .game-wrap { position:relative; }
+  #msg { min-height:24px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 18</div>
+      <h1 class="text-xl font-bold">🟩 Wordle — Guess the Word in Six</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Guess the hidden five-letter word in six tries — the tiles tell you how close you are.</h2>
+      <p class="text-slate-500 mb-4">Type any five-letter word and press Enter. Each tile then flips to reveal a colour: green means that letter is correct and in the right spot, yellow means the letter is in the word but somewhere else, and gray means the letter isn't in the word at all. Use those clues to narrow it down — the on-screen keyboard remembers everything you've learned by colouring its keys. You have six guesses; nail the word to win, or run out and the answer is revealed.</p>
+      <div class="flex justify-center">
+        <div class="game-wrap">
+          <div id="board"></div>
+          <div id="keyboard"></div>
+        </div>
+      </div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-2">
+        <button id="newBtn" class="bg-slate-200 hover:bg-slate-300 px-5 py-2 rounded-lg font-semibold text-sm">🔀 New game</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Duplicate letters are handled the real Wordle way: a two-pass scan marks the exact-position greens first, then hands out yellows only for the letters the answer still has left over — so guessing a word with a repeated letter never lights up more copies than the answer actually contains. Only valid five-letter words from the built-in list are accepted; anything else shakes the row. Everything runs offline in plain vanilla JS — both the on-screen keys and your physical keyboard work.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Wordle works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A 6×5 grid of tiles, a current-row buffer that captures typing, the two-pass scoring algorithm that colours each letter green / yellow / gray (handling duplicates correctly), a CSS flip reveal, an on-screen keyboard whose keys take the best colour they've earned, win/lose detection, and a new-game that picks a random answer. ~90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Build the 6×5 board</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Wordle is a fixed grid: six guesses tall, five letters wide. We build it once as 30 empty tile elements arranged in 6 rows of 5, and keep a 2D array of references so we can find any tile by <code>row</code> and <code>column</code> later. The board never grows or shrinks — guesses just fill the next empty row. CSS grid does the layout; JavaScript only fills in letters and colours.</p>
+        <div class="relative">
+          <pre>const ROWS = 6, COLS = 5;
+const board = document.getElementById("board");
+const tiles = [];                          // tiles[r][c] = element
+for (let r = 0; r &lt; ROWS; r++){
+  const row = document.createElement("div");
+  row.className = "row";
+  tiles[r] = [];
+  for (let c = 0; c &lt; COLS; c++){
+    const t = document.createElement("div");
+    t.className = "tile";
+    row.appendChild(t);
+    tiles[r][c] = t;                       // remember each tile
+  }
+  board.appendChild(row);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Capture typing into the active row</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Two numbers track where we are: <code>row</code> (which guess) and <code>col</code> (how many letters typed so far). A letter key writes into the current tile and moves col right (capped at 5). Backspace moves col left and clears the tile. Enter submits. We listen on the physical keyboard and route the on-screen keys through the same <code>handleKey</code> function so both inputs behave identically.</p>
+        <div class="relative">
+          <pre>let row = 0, col = 0;
+let current = "";                          // letters typed in this row
+
+function handleKey(key){
+  if (over) return;
+  if (key === "ENTER")      submitGuess();
+  else if (key === "BACK"){ if (col &gt; 0){ col--; current = current.slice(0,-1); tiles[row][col].textContent = ""; tiles[row][col].classList.remove("filled"); } }
+  else if (/^[A-Z]$/.test(key) &amp;&amp; col &lt; COLS){
+    tiles[row][col].textContent = key;
+    tiles[row][col].classList.add("filled");
+    current += key; col++;
+  }
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter") handleKey("ENTER");
+  else if (e.key === "Backspace") handleKey("BACK");
+  else if (/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
+});</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The two-pass scoring algorithm</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the heart of Wordle and the part most people get wrong. You can't colour in one pass, because duplicate letters need careful counting. <b>Pass 1:</b> walk the guess and mark every letter that's in the exact right spot green — and decrement a tally of the answer's remaining letters. <b>Pass 2:</b> walk again over the not-yet-green letters; colour one yellow only if the answer still has that letter left over in the tally, then decrement. Anything left is gray. This guarantees a repeated guess letter never gets more colours than the answer actually has copies of.</p>
+        <div class="relative">
+          <pre>function score(guess, answer){
+  const result = Array(COLS).fill("gray");
+  const left = {};                                  // unused answer letters
+  for (const ch of answer) left[ch] = (left[ch]||0) + 1;
+
+  // PASS 1 — greens (exact position), consume from the tally
+  for (let i = 0; i &lt; COLS; i++){
+    if (guess[i] === answer[i]){ result[i] = "green"; left[guess[i]]--; }
+  }
+  // PASS 2 — yellows, only if a copy is still left over
+  for (let i = 0; i &lt; COLS; i++){
+    if (result[i] === "green") continue;
+    if (left[guess[i]] &gt; 0){ result[i] = "yellow"; left[guess[i]]--; }
+  }
+  return result;                                    // e.g. ["green","gray","yellow",...]
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Reveal with the flip + colour the keyboard</h3></div>
+        <p class="text-sm text-slate-600 mb-3">With the colours computed, we paint them one tile at a time with a small stagger so the row "rolls over" via the CSS flip animation. Half-way through each tile's flip (when it's edge-on) we apply its colour class, so the colour appears as it turns. After a tile is coloured we upgrade its keyboard key — but only ever to a <em>better</em> colour: green beats yellow beats gray, so a key that already went green can never drop back to yellow.</p>
+        <div class="relative">
+          <pre>const RANK = { gray:0, yellow:1, green:2 };       // precedence
+
+function reveal(guess, result){
+  result.forEach((color, i) => {
+    const t = tiles[row][i];
+    setTimeout(() => {
+      t.classList.add("reveal");
+      setTimeout(() => t.classList.add(color), 270);  // colour mid-flip
+      paintKey(guess[i], color);                       // upgrade the key
+    }, i * 280);
+  });
+}
+function paintKey(letter, color){
+  const k = keyEls[letter];
+  if (RANK[color] &gt; RANK[keyState[letter] || "gray0"]) {  // only upgrade
+    keyState[letter] = color;
+    k.classList.remove("green","yellow","gray");
+    k.classList.add(color);
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Validate the guess on submit</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When Enter is pressed we guard the submission before scoring. The guess must be exactly five letters long, and it must be a real word from our built-in list — otherwise we shake the row and bail out, leaving the player to fix it. Only a valid guess flows through to scoring, revealing, and the win/lose check. Keeping all the rejection logic up front means the rest of the pipeline can assume it's always handling a legal word.</p>
+        <div class="relative">
+          <pre>function submitGuess(){
+  if (current.length &lt; COLS) return shake("Not enough letters");
+  const guess = current.toLowerCase();
+  if (!WORDS.includes(guess)) return shake("Not in word list");
+
+  const result = score(guess, answer);
+  reveal(guess, result);
+  finish(guess, result);                 // win / lose / next row
+}
+function shake(text){
+  msg.textContent = text;
+  tiles[row][0].parentElement.classList.add("shake");
+  setTimeout(() => tiles[row][0].parentElement.classList.remove("shake"), 400);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Win / lose detection</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A guess wins the instant it equals the answer. We check that right after revealing; on a match we set a game-over flag and show a victory message. If it wasn't the answer, we advance to the next row and reset the column. If that was the sixth and final row, the game is lost — so we reveal the answer to the player. The single <code>over</code> flag stops all further typing once the game ends, win or lose.</p>
+        <div class="relative">
+          <pre>let over = false;
+
+function finish(guess, result){
+  if (guess === answer){
+    over = true;
+    setTimeout(() => msg.textContent = "🎉 You got it!", COLS * 280);
+  } else if (row === ROWS - 1){
+    over = true;                                  // used all 6 rows
+    setTimeout(() => msg.textContent = "The word was: " + answer.toUpperCase(), COLS * 280);
+  } else {
+    row++; col = 0; current = "";                 // move to next guess
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Pick a random answer + new game</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A new game picks a random word from the answer list, then wipes the board to a clean slate: clear every tile's text and colour classes, reset the row/col counters and the current buffer, clear the game-over flag, and recolour the keyboard back to neutral. Real Wordle uses one shared daily word — to get that, seed the index from today's date instead of <code>Math.random()</code> so everyone gets the same puzzle. Double-click the file to play; no server needed.</p>
+        <div class="relative">
+          <pre>const ANSWERS = ["crane","slate","ghost","plumb","vivid",/* ...~30 */];
+let answer;
+
+function newGame(){
+  answer = ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
+  // daily mode instead:  let i = daysSinceEpoch() % ANSWERS.length;
+  row = 0; col = 0; current = ""; over = false; msg.textContent = "";
+  for (let r = 0; r &lt; ROWS; r++) for (let c = 0; c &lt; COLS; c++){
+    const t = tiles[r][c];
+    t.textContent = "";
+    t.className = "tile";                          // strip filled + colours
+  }
+  keyState = {};
+  Object.values(keyEls).forEach(k => k.classList.remove("green","yellow","gray"));
+}
+newGame();</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 18 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Wordle with a 6×5 board, a typing buffer that feeds the active row, the two-pass green-then-yellow scoring that handles duplicate letters correctly, a CSS flip reveal, an on-screen keyboard with green&gt;yellow&gt;gray key precedence, win/lose detection, word validation, and a random-answer new game. Try adding a daily seeded word, a hard mode, or a shareable emoji-grid result.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== WORDLE =====
+const ROWS = 6, COLS = 5;
+const board    = document.getElementById("board");
+const keyboard = document.getElementById("keyboard");
+const msg      = document.getElementById("msg");
+const newBtn   = document.getElementById("newBtn");
+
+// ~30 possible answers
+const ANSWERS = [
+  "crane","slate","ghost","plumb","vivid","mango","quilt","brave","flock","jolly",
+  "dwarf","pixel","rhino","scout","tonic","vapor","witty","zebra","amber","blink",
+  "chirp","dodge","ember","frost","glaze","hazel","ivory","kayak","lemon","mirth"
+];
+// extra accepted guesses (answers are also valid)
+const EXTRA = [
+  "audio","raise","stare","tease","stone","spear","cargo","grape","lucky","money",
+  "ocean","piano","ready","table","unity","value","water","yacht","trade","north",
+  "lunar","mount","point","queen","river","sugar","track","cabin","heart","light"
+];
+const WORDS = [...new Set([...ANSWERS, ...EXTRA])];
+
+let answer = "";
+let row = 0, col = 0;
+let current = "";
+let over = false;
+
+// key-state precedence: green > yellow > gray
+const RANK = { gray:0, yellow:1, green:2 };
+let keyState = {};                 // letter -> best color seen
+const keyEls = {};                 // letter -> button element
+
+// build the 6x5 board
+const tiles = [];
+for (let r = 0; r < ROWS; r++){
+  const rowEl = document.createElement("div");
+  rowEl.className = "row";
+  tiles[r] = [];
+  for (let c = 0; c < COLS; c++){
+    const t = document.createElement("div");
+    t.className = "tile";
+    rowEl.appendChild(t);
+    tiles[r][c] = t;
+  }
+  board.appendChild(rowEl);
+}
+
+// build the QWERTY keyboard
+const KB = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+KB.forEach((line, idx) => {
+  const rowEl = document.createElement("div");
+  rowEl.className = "kbrow";
+  if (idx === 2){
+    const enter = document.createElement("button");
+    enter.className = "key wide"; enter.textContent = "Enter";
+    enter.onclick = () => handleKey("ENTER");
+    rowEl.appendChild(enter);
+  }
+  for (const ch of line){
+    const k = document.createElement("button");
+    k.className = "key"; k.textContent = ch;
+    k.onclick = () => handleKey(ch);
+    rowEl.appendChild(k);
+    keyEls[ch] = k;
+  }
+  if (idx === 2){
+    const back = document.createElement("button");
+    back.className = "key wide"; back.textContent = "⌫";
+    back.onclick = () => handleKey("BACK");
+    rowEl.appendChild(back);
+  }
+  keyboard.appendChild(rowEl);
+});
+
+function handleKey(key){
+  if (over) return;
+  if (key === "ENTER") { submitGuess(); return; }
+  if (key === "BACK"){
+    if (col > 0){
+      col--;
+      current = current.slice(0, -1);
+      tiles[row][col].textContent = "";
+      tiles[row][col].classList.remove("filled");
+    }
+    return;
+  }
+  if (/^[A-Z]$/.test(key) && col < COLS){
+    tiles[row][col].textContent = key;
+    tiles[row][col].classList.add("filled");
+    current += key;
+    col++;
+  }
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter") handleKey("ENTER");
+  else if (e.key === "Backspace") handleKey("BACK");
+  else if (/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
+});
+
+// two-pass scoring — greens first, then yellows from what's left
+function score(guess, answer){
+  const result = Array(COLS).fill("gray");
+  const left = {};
+  for (const ch of answer) left[ch] = (left[ch] || 0) + 1;
+
+  // PASS 1: exact-position greens, consume from tally
+  for (let i = 0; i < COLS; i++){
+    if (guess[i] === answer[i]){
+      result[i] = "green";
+      left[guess[i]]--;
+    }
+  }
+  // PASS 2: yellows only if a copy remains
+  for (let i = 0; i < COLS; i++){
+    if (result[i] === "green") continue;
+    if (left[guess[i]] > 0){
+      result[i] = "yellow";
+      left[guess[i]]--;
+    }
+  }
+  return result;
+}
+
+function paintKey(letter, color){
+  const k = keyEls[letter];
+  if (!k) return;
+  const prev = keyState[letter];
+  if (prev === undefined || RANK[color] > RANK[prev]){
+    keyState[letter] = color;
+    k.classList.remove("green", "yellow", "gray");
+    k.classList.add(color);
+  }
+}
+
+function reveal(guess, result){
+  result.forEach((color, i) => {
+    const t = tiles[row][i];
+    setTimeout(() => {
+      t.classList.add("reveal");
+      setTimeout(() => t.classList.add(color), 270);   // colour mid-flip
+      paintKey(guess[i].toUpperCase(), color);
+    }, i * 280);
+  });
+}
+
+function shake(text){
+  msg.textContent = text;
+  const rowEl = tiles[row][0].parentElement;
+  rowEl.classList.add("shake");
+  setTimeout(() => rowEl.classList.remove("shake"), 400);
+}
+
+function submitGuess(){
+  if (current.length < COLS) return shake("Not enough letters");
+  const guess = current.toLowerCase();
+  if (!WORDS.includes(guess)) return shake("Not in word list");
+
+  msg.textContent = "";
+  const result = score(guess, answer);
+  reveal(guess, result);
+  finish(guess, result);
+}
+
+function finish(guess, result){
+  if (guess === answer){
+    over = true;
+    setTimeout(() => { msg.textContent = "🎉 You got it!"; }, COLS * 280);
+  } else if (row === ROWS - 1){
+    over = true;
+    setTimeout(() => { msg.textContent = "The word was: " + answer.toUpperCase(); }, COLS * 280);
+  } else {
+    row++; col = 0; current = "";
+  }
+}
+
+function newGame(){
+  answer = ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
+  row = 0; col = 0; current = ""; over = false;
+  msg.textContent = "";
+  for (let r = 0; r < ROWS; r++){
+    for (let c = 0; c < COLS; c++){
+      const t = tiles[r][c];
+      t.textContent = "";
+      t.className = "tile";
+    }
+  }
+  keyState = {};
+  Object.values(keyEls).forEach(k => k.classList.remove("green", "yellow", "gray"));
+}
+
+newBtn.onclick = newGame;
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The 6×5 board model", why:"Wordle's board is a fixed grid — six guesses tall and five letters wide, thirty tiles that never change in number. We build it once and keep a 2D array of references so any tile can be found by its row and column. A guess doesn't add tiles; it just fills the next empty row left to right. Seeing the board as a fixed table of tiles, addressed by (row, column), makes everything else — typing, revealing, colouring — a matter of writing into the right cell. CSS grid handles the visual layout so JavaScript only ever sets text and colour.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">6 rows × 5 cols = 30 tiles<br>tiles[row][col] = element<br>guesses fill rows top→down</div>`, code:`const ROWS = 6, COLS = 5;
+const tiles = [];                 // tiles[r][c] = element
+for (let r = 0; r < ROWS; r++){
+  tiles[r] = [];
+  for (let c = 0; c < COLS; c++){
+    const t = document.createElement("div");
+    tiles[r][c] = t;             // address every tile by (row,col)
+  }
+}` },
+  { title:"2. Capturing input + the active row", why:"All the player does is type, so two counters track the state: which row we're on and how many letters are in it. A letter writes into the current tile and nudges the column right, stopping at five. Backspace steps the column back and clears that tile. Enter submits the row. We funnel both the physical keyboard and the on-screen buttons through one handler, so a tap and a keypress are literally the same code path. Only the active row ever changes — earlier rows are frozen history.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">row = which guess<br>col = letters typed (0–5)<br>letter→write+col++ · ⌫→col-- · ⏎→submit</div>`, code:`let row = 0, col = 0, current = "";
+function handleKey(key){
+  if (key === "ENTER") submitGuess();
+  else if (key === "BACK") { /* col--, clear tile */ }
+  else if (/^[A-Z]$/.test(key) && col < COLS){
+    tiles[row][col].textContent = key;   // into the active row
+    current += key; col++;
+  }
+}` },
+  { title:"3. Why duplicate letters are tricky", why:"The naïve way to colour a guess is one pass: for each letter, green if it's in the right spot, else yellow if it's anywhere in the answer, else gray. That breaks the moment a letter repeats. Say the answer is APPLE and you guess KAYAK — the answer has only one A, but a single pass would happily paint both of your A's yellow, telling you there are two A's when there's one. Real Wordle never shows more coloured copies of a letter than the answer actually contains. To get that right we must count how many of each letter the answer has and hand out colours against that budget.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">answer APPLE has one A<br>guess KAYAK has two A's<br>one-pass → both yellow ✗<br>(answer only owns one A)</div>`, code:`// WRONG — single pass over-colours duplicates
+for (let i = 0; i < COLS; i++){
+  if (guess[i] === answer[i]) color = "green";
+  else if (answer.includes(guess[i])) color = "yellow"; // ✗ ignores counts
+  else color = "gray";
+}` },
+  { title:"4. The two-pass scoring algorithm", why:"The fix is two passes over a tally of the answer's letters. First build a count of each letter in the answer. Pass one: mark every exact-position match green and subtract that letter from the tally — greens always get first claim. Pass two: walk the non-green letters and give one a yellow only if the tally still has a copy left, decrementing as you go. Whatever's still uncoloured is gray. Because greens consume their letters first and yellows draw from the leftovers, a repeated guess letter can never light up more copies than the answer truly has.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">tally = count answer letters<br>PASS 1: greens, tally--<br>PASS 2: yellows if tally>0, tally--<br>rest = gray</div>`, code:`const left = {};
+for (const ch of answer) left[ch] = (left[ch]||0) + 1;
+for (let i=0;i<COLS;i++)                       // PASS 1: greens first
+  if (guess[i]===answer[i]){ result[i]="green"; left[guess[i]]--; }
+for (let i=0;i<COLS;i++){                       // PASS 2: yellows from leftovers
+  if (result[i]==="green") continue;
+  if (left[guess[i]]>0){ result[i]="yellow"; left[guess[i]]--; }
+}` },
+  { title:"5. The CSS flip reveal", why:"The colours pop in with a satisfying flip, and that's pure CSS — JavaScript just toggles a class. Each tile gets a keyframe animation that rotates it on the X axis from flat, to edge-on at the halfway point, back to flat. We apply the colour class right at the halfway mark, when the tile is edge-on, so the new colour is what you see as it turns back. Staggering the tiles by a couple hundred milliseconds each makes the row roll over left to right. The browser does the animation on the GPU; we only schedule when each colour lands.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">rotateX 0 → 90° → 0<br>add colour at the 90° point<br>stagger tiles → row rolls over</div>`, code:`@keyframes flip { 0%{transform:rotateX(0);} 50%{transform:rotateX(90deg);} 100%{transform:rotateX(0);} }
+result.forEach((color, i) => setTimeout(() => {
+  tiles[row][i].classList.add("reveal");                 // start the flip
+  setTimeout(() => tiles[row][i].classList.add(color), 270); // colour mid-turn
+}, i * 280));                                            // stagger per tile` },
+  { title:"6. The on-screen keyboard + key precedence", why:"The keyboard is a memory aid: every key shows the best news you've learned about that letter. We build the three QWERTY rows as buttons and route their clicks through the same handler as the physical keys. After each guess we upgrade a key's colour — but only ever upward. Green outranks yellow outranks gray, so a letter you've already confirmed green can never be demoted to yellow by a later guess where it appeared in the wrong spot. Storing a best-colour-per-letter and comparing ranks before repainting keeps the keyboard honest.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">green > yellow > gray<br>only upgrade a key, never downgrade<br>key = best colour ever seen</div>`, code:`const RANK = { gray:0, yellow:1, green:2 };
+function paintKey(letter, color){
+  const prev = keyState[letter];
+  if (prev === undefined || RANK[color] > RANK[prev]){  // only upgrade
+    keyState[letter] = color;
+    keyEls[letter].classList.add(color);
+  }
+}` },
+  { title:"7. Validating the guess", why:"Before a guess is scored it has to pass two checks. It must be exactly five letters — you can't submit a half-typed row. And it must be a real word from our built-in list, so random mashing like QWXZT is rejected. If either check fails we shake the row to signal 'try again' and stop, leaving the letters in place to edit. Only a valid word flows on to scoring and revealing. Doing all the rejecting up front means the scoring code can always assume it's handed a legal five-letter word.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">length === 5 ?<br>in WORDS list ?<br>both yes → score it<br>any no → shake the row</div>`, code:`function submitGuess(){
+  if (current.length < COLS) return shake("Not enough letters");
+  const guess = current.toLowerCase();
+  if (!WORDS.includes(guess)) return shake("Not in word list");
+  const result = score(guess, answer);          // valid → proceed
+  reveal(guess, result);
+  finish(guess, result);
+}` },
+  { title:"8. Win / lose detection", why:"A guess wins the instant it equals the answer, which we check right after revealing the row. On a win we flip a single game-over flag and show a victory message. If the guess was wrong but rows remain, we advance to the next row and reset the column for a fresh attempt. If it was the sixth and final row, the game is lost, so we reveal the hidden answer. The one over flag also blocks all further typing, so the game can't continue past its natural end whether you won or ran out.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">guess === answer → WIN<br>row 6 used up → LOSE (show answer)<br>else → next row</div>`, code:`if (guess === answer){ over = true; msg.textContent = "🎉 You got it!"; }
+else if (row === ROWS - 1){                    // last row used
+  over = true; msg.textContent = "The word was: " + answer.toUpperCase();
+} else { row++; col = 0; current = ""; }       // try the next row` },
+  { title:"9. Choosing & validating words", why:"Two lists drive the words. A pool of possible answers is what the game secretly picks from, and a wider list of accepted guesses lets the player try common words that won't be the answer. We merge them (de-duplicated) into the set we validate against, so any sensible five-letter word is allowed but only the curated pool is ever the target. Keeping the answer pool small and clean avoids obscure or unfair words, while the bigger guess list keeps the game from rejecting reasonable attempts. Both are just plain arrays baked into the page — no dictionary download needed.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">ANSWERS = secret targets<br>EXTRA = also-acceptable guesses<br>WORDS = unique(ANSWERS + EXTRA)</div>`, code:`const ANSWERS = ["crane","slate","ghost","mango", /* ~30 */];
+const EXTRA   = ["audio","raise","stare", /* common words */];
+const WORDS   = [...new Set([...ANSWERS, ...EXTRA])]; // what we validate against` },
+  { title:"10. Random vs daily answer, and a fresh game", why:"A new game wipes the board to a clean slate — clear every tile's text and colour, reset the row, column and typing buffer, drop the game-over flag, and recolour the keyboard back to neutral — then picks a fresh answer. By default that pick is random with Math.random, so every round differs. Real Wordle instead serves one shared word per day: derive an index from today's date so everyone in the world gets the same puzzle and can compare results. Swapping random for a date-seeded index is the only change needed to turn this into the daily game.", concept:`<div class="text-center w-full"><div class="text-4xl mb-2">🟩🟨⬛</div><p class="font-bold text-slate-700">6×5 board + typed row + two-pass colours + flip reveal + keyboard precedence + win/lose = Wordle.</p></div>`, code:`function newGame(){
+  answer = ANSWERS[Math.floor(Math.random()*ANSWERS.length)]; // random mode
+  // daily mode: answer = ANSWERS[daysSinceEpoch() % ANSWERS.length];
+  row = 0; col = 0; current = ""; over = false;
+  /* clear tiles + reset keyboard colours */
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>

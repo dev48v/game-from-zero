@@ -24,6 +24,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 15 — Doodle Jump](https://dev48v.infy.uk/game/day15-doodle-jump.html) — `day15-doodle-jump.html`
 - [GameFromZero · Day 16 — Whac-a-Mole](https://dev48v.infy.uk/game/day16-whack-a-mole.html) — `day16-whack-a-mole.html`
 - [GameFromZero · Day 17 — Memory Match](https://dev48v.infy.uk/game/day17-memory-match.html) — `day17-memory-match.html`
+- [GameFromZero · Day 18 — Wordle](https://dev48v.infy.uk/game/day18-wordle.html) — `day18-wordle.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
