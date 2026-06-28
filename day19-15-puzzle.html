@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 19 — 15-Puzzle</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* 15-puzzle board */
+  #board { position:relative; width:336px; height:336px; padding:8px; border-radius:16px; background:#ecfdf5; box-shadow:0 18px 40px rgba(0,0,0,.18); margin:0 auto; }
+  .tile { position:absolute; width:76px; height:76px; display:flex; align-items:center; justify-content:center;
+          font-size:30px; font-weight:800; border-radius:10px; color:#fff; background:#10b981; cursor:pointer; user-select:none;
+          box-shadow:0 4px 0 #059669, 0 6px 12px rgba(0,0,0,.18);
+          transition: left .16s ease, top .16s ease; }    /* smooth slide */
+  .tile:hover { background:#059669; }
+  .tile.locked { background:#34d399; box-shadow:0 4px 0 #10b981, 0 6px 12px rgba(0,0,0,.12); } /* tile already home */
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:24px; }
+  .game-wrap { position:relative; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 19</div>
+      <h1 class="text-xl font-bold">🔢 15-Puzzle — Slide the Tiles Into Order</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Slide the numbered tiles around the one empty square until they read 1 to 15 in order.</h2>
+      <p class="text-slate-500 mb-4">There are fifteen tiles and one blank gap in a 4×4 frame. Click any tile that sits directly next to the gap — above, below, left, or right — and it slides into the empty space. You can also use the arrow keys: an arrow slides the neighbouring tile <em>into</em> the blank in that direction. Keep sliding tiles around until they line up 1, 2, 3 … 15 with the gap back in the bottom-right corner. The move counter and timer track how efficient you are; beat your best on the next round.</p>
+      <div class="flex justify-center">
+        <div class="game-wrap">
+          <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+            <div>Moves: <span id="moves" class="stat text-emerald-600">0</span></div>
+            <div>Time: <span id="time" class="stat text-emerald-600">0:00</span></div>
+            <div>Best: <span id="best" class="stat text-emerald-600">—</span></div>
+          </div>
+          <div id="board"></div>
+        </div>
+      </div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-2 gap-2">
+        <button id="shuffleBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">🔀 Shuffle</button>
+        <button id="solveBtn" class="bg-slate-200 hover:bg-slate-300 px-5 py-2 rounded-lg font-semibold text-sm">↩ Reset to solved</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">The Shuffle button never deals an impossible board: it starts from the solved layout and makes hundreds of real, legal slides at random, so the scramble is always reachable — and therefore always solvable — by definition. (Exactly half of all 16! tile arrangements can't be solved; the inversion-parity theorem on the UNDERSTAND tab explains why.) A tile that's already sitting in its correct home glows a lighter green so you can see your progress. Everything runs offline in plain vanilla JS — both clicking tiles and the arrow keys work.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the 15-Puzzle works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A board held as a flat array of 16 cells (numbers 1–15 plus a 0 for the blank), absolute-positioned tiles that slide with a CSS transition, a click handler that swaps an adjacent tile with the blank, arrow keys that pull a tile into the gap, a shuffle that does many random legal moves so the result is always solvable, a win check that compares the array to its sorted order, and a move counter plus a timer. ~90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Model the board as a flat array</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole puzzle is one array of 16 numbers: 1 through 15 for the tiles and a <code>0</code> standing in for the blank. Index <code>i</code> in the array maps to grid position row <code>Math.floor(i/4)</code>, column <code>i%4</code>. The solved state is simply <code>[1,2,3,…,15,0]</code>. Keeping it flat (not a 2D array) makes swapping, shuffling, and win-checking one-liners — we only convert an index to row/column when we need to draw a tile.</p>
+        <div class="relative">
+          <pre>const SIZE = 4, N = SIZE * SIZE;            // 4×4 = 16 cells
+let cells = [];                            // cells[i] = tile number, 0 = blank
+const SOLVED = [...Array(N - 1)].map((_, i) =&gt; i + 1).concat(0); // [1..15, 0]
+
+function rowOf(i){ return Math.floor(i / SIZE); }
+function colOf(i){ return i % SIZE; }
+function blankIndex(){ return cells.indexOf(0); }   // where the gap is</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Render tiles by position</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every tile is one absolutely-positioned element whose <code>left</code> and <code>top</code> come from its current index. We build the fifteen tile elements once and keep them keyed by tile number; on each render we just move each tile to the pixel coordinates of wherever its number currently lives in the array. Because the elements keep their identity and only their position changes, the CSS transition animates them smoothly between renders. The blank is nothing — we simply don't draw a tile for the 0.</p>
+        <div class="relative">
+          <pre>const GAP = 8, TILE = 80;                   // padding + cell pitch (px)
+function render(){
+  for (let i = 0; i &lt; N; i++){
+    const n = cells[i];
+    if (n === 0) continue;                  // blank: draw nothing
+    const el = tileEls[n];                  // the element for tile #n
+    el.style.left = (GAP + colOf(i) * TILE) + "px";
+    el.style.top  = (GAP + rowOf(i) * TILE) + "px";
+    el.classList.toggle("locked", n === i + 1);  // glow if already home
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">A legal move = swap with the blank</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A tile can only move if it sits directly next to the blank. "Next to" means the same column one row apart, or the same row one column apart — never diagonal, and never wrapping around an edge. When a tile qualifies, the move is just swapping its array slot with the blank's slot. That single swap <em>is</em> the slide; the render step then animates the tile into the gap. We return whether the move happened so the caller can count it.</p>
+        <div class="relative">
+          <pre>function isAdjacent(a, b){                  // are cells a and b neighbours?
+  const dr = Math.abs(rowOf(a) - rowOf(b));
+  const dc = Math.abs(colOf(a) - colOf(b));
+  return dr + dc === 1;                     // exactly one step apart
+}
+function moveTileAt(i){
+  const b = blankIndex();
+  if (!isAdjacent(i, b)) return false;     // not next to the gap → ignore
+  [cells[i], cells[b]] = [cells[b], cells[i]];   // swap tile ↔ blank
+  return true;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Click and arrow-key controls</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Clicking a tile tries to move that specific tile. Arrow keys work the other way round: they describe which neighbour of the blank slides <em>into</em> it. Pressing ↑ pulls the tile <em>below</em> the gap upward, ↓ pulls the one above downward, and so on — the direction names the motion of the tile, not of the gap. Both paths end at the same <code>tryMove</code>, which moves the tile, re-renders, counts the move, and checks for a win.</p>
+        <div class="relative">
+          <pre>function tryMove(i){
+  if (moveTileAt(i)){ moves++; render(); checkWin(); }
+}
+board.addEventListener("click", e =&gt; {
+  const n = +e.target.dataset.n;           // which tile number was clicked
+  if (n) tryMove(cells.indexOf(n));
+});
+document.addEventListener("keydown", e =&gt; {
+  const b = blankIndex(), r = rowOf(b), c = colOf(b);
+  if (e.key === "ArrowUp"    &amp;&amp; r &lt; 3) tryMove(b + SIZE); // tile below slides up
+  if (e.key === "ArrowDown"  &amp;&amp; r &gt; 0) tryMove(b - SIZE); // tile above slides down
+  if (e.key === "ArrowLeft"  &amp;&amp; c &lt; 3) tryMove(b + 1);    // tile right slides left
+  if (e.key === "ArrowRight" &amp;&amp; c &gt; 0) tryMove(b - 1);    // tile left slides right
+});</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Shuffle that's always solvable</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The safe way to scramble is to start from the solved board and make a few hundred <em>real</em> moves at random — repeatedly slide a random neighbour of the blank into it. Because every step is a legal move, the result is guaranteed to be reachable from solved, and therefore solvable. We avoid instantly undoing the previous move so the board genuinely mixes. This sidesteps the inversion-parity check entirely: a randomly <em>shuffled</em> array has a 50% chance of being impossible, but a randomly <em>played</em> board never is.</p>
+        <div class="relative">
+          <pre>function shuffle(steps = 300){
+  cells = [...SOLVED];
+  let prev = -1;
+  for (let s = 0; s &lt; steps; s++){
+    const b = blankIndex();
+    const nbrs = [b - SIZE, b + SIZE, b - 1, b + 1]
+      .filter(j =&gt; j &gt;= 0 &amp;&amp; j &lt; N &amp;&amp; isAdjacent(j, b) &amp;&amp; j !== prev);
+    const pick = nbrs[Math.floor(Math.random() * nbrs.length)];
+    [cells[b], cells[pick]] = [cells[pick], cells[b]];   // slide it in
+    prev = b;                                            // don't undo next time
+  }
+  moves = 0; render();
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">The inversion-parity test (optional)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">If you'd rather scramble by shuffling the array directly, you must verify it's solvable. Count "inversions": every pair of tiles that appears in the wrong relative order. For a 4-wide board the rule is: the puzzle is solvable when the inversion count plus the row of the blank (counted from the bottom, 1-based) is even. Reject and reshuffle anything that fails this test. It's the mathematical guarantee behind why our move-based shuffle is always safe.</p>
+        <div class="relative">
+          <pre>function isSolvable(a){
+  const tiles = a.filter(n =&gt; n !== 0);     // ignore the blank
+  let inv = 0;
+  for (let i = 0; i &lt; tiles.length; i++)
+    for (let j = i + 1; j &lt; tiles.length; j++)
+      if (tiles[i] &gt; tiles[j]) inv++;        // a pair out of order
+  const blankRowFromBottom = SIZE - rowOf(a.indexOf(0));   // 1-based, from bottom
+  return (inv + blankRowFromBottom) % 2 === 1;   // the 4×4 (even-width) parity rule
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Win detection</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Winning is the simplest check in the whole game: the board is solved when the array equals <code>[1,2,…,15,0]</code>. We compare every cell to its target and, on a match, stop the timer and announce the result with the move count and elapsed time. A best-score in localStorage lets the player chase a personal record across rounds. Because the array fully describes the state, one equality scan is all the win logic we need.</p>
+        <div class="relative">
+          <pre>function isSolved(){
+  return cells.every((n, i) =&gt; n === SOLVED[i]);   // [1..15,0] in order
+}
+function checkWin(){
+  if (!isSolved()) return;
+  stopTimer();
+  const best = +localStorage.puzzleBest || Infinity;
+  if (moves &lt; best) localStorage.puzzleBest = moves;     // new record
+  msg.textContent = `🎉 Solved in ${moves} moves · ${fmt(seconds)}`;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Move counter and timer</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Two stats make the puzzle a challenge instead of idle fiddling. A counter ticks up once per successful slide. The timer starts on the first move after a shuffle and runs once per second until you solve it, formatting seconds as <code>m:ss</code>. We start lazily — no clock runs while the board sits untouched — and clear the interval the instant the puzzle is solved so the final time freezes. Display both on every render so the numbers stay in sync with the board.</p>
+        <div class="relative">
+          <pre>let moves = 0, seconds = 0, timer = null;
+function startTimer(){
+  if (timer) return;                        // already running
+  timer = setInterval(() =&gt; { seconds++; timeEl.textContent = fmt(seconds); }, 1000);
+}
+function stopTimer(){ clearInterval(timer); timer = null; }
+function fmt(s){ return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+// call startTimer() inside tryMove on the first move; movesEl shows `moves`</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 19 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built the 15-Puzzle with a flat 16-cell array, absolute tiles that slide via a CSS transition, an adjacency-checked swap-with-the-blank move, click and arrow-key controls, a move-based shuffle that's guaranteed solvable (and the inversion-parity theorem that proves why), a one-line win check, and a move counter plus timer. Try a 3×3 or 5×5 size selector, an undo stack, or an A* auto-solver that finds the shortest solution path.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== 15-PUZZLE =====
+const SIZE = 4, N = SIZE * SIZE;
+const GAP = 8, TILE = 80;                       // padding + cell pitch (px)
+const SOLVED = [...Array(N - 1)].map((_, i) => i + 1).concat(0); // [1..15, 0]
+
+const board   = document.getElementById("board");
+const msg     = document.getElementById("msg");
+const movesEl = document.getElementById("moves");
+const timeEl  = document.getElementById("time");
+const bestEl  = document.getElementById("best");
+const shuffleBtn = document.getElementById("shuffleBtn");
+const solveBtn   = document.getElementById("solveBtn");
+
+let cells = [...SOLVED];
+let moves = 0, seconds = 0, timer = null, over = false;
+
+function rowOf(i){ return Math.floor(i / SIZE); }
+function colOf(i){ return i % SIZE; }
+function blankIndex(){ return cells.indexOf(0); }
+function isAdjacent(a, b){
+  return Math.abs(rowOf(a) - rowOf(b)) + Math.abs(colOf(a) - colOf(b)) === 1;
+}
+
+// build the 15 tile elements once, keyed by number
+const tileEls = {};
+for (let n = 1; n < N; n++){
+  const el = document.createElement("div");
+  el.className = "tile";
+  el.textContent = n;
+  el.dataset.n = n;
+  board.appendChild(el);
+  tileEls[n] = el;
+}
+
+function render(){
+  for (let i = 0; i < N; i++){
+    const n = cells[i];
+    if (n === 0) continue;
+    const el = tileEls[n];
+    el.style.left = (GAP + colOf(i) * TILE) + "px";
+    el.style.top  = (GAP + rowOf(i) * TILE) + "px";
+    el.classList.toggle("locked", n === i + 1);   // glow if already home
+  }
+  movesEl.textContent = moves;
+}
+
+function moveTileAt(i){
+  const b = blankIndex();
+  if (!isAdjacent(i, b)) return false;
+  [cells[i], cells[b]] = [cells[b], cells[i]];
+  return true;
+}
+
+function tryMove(i){
+  if (over) return;
+  if (moveTileAt(i)){
+    moves++;
+    startTimer();
+    render();
+    checkWin();
+  }
+}
+
+board.addEventListener("click", e => {
+  const n = +e.target.dataset.n;
+  if (n) tryMove(cells.indexOf(n));
+});
+
+document.addEventListener("keydown", e => {
+  if (over) return;
+  const b = blankIndex(), r = rowOf(b), c = colOf(b);
+  if      (e.key === "ArrowUp"    && r < SIZE - 1){ e.preventDefault(); tryMove(b + SIZE); }
+  else if (e.key === "ArrowDown"  && r > 0)        { e.preventDefault(); tryMove(b - SIZE); }
+  else if (e.key === "ArrowLeft"  && c < SIZE - 1){ e.preventDefault(); tryMove(b + 1); }
+  else if (e.key === "ArrowRight" && c > 0)        { e.preventDefault(); tryMove(b - 1); }
+});
+
+// move-based shuffle: always reachable from solved → always solvable
+function shuffle(steps = 300){
+  cells = [...SOLVED];
+  let prev = -1;
+  for (let s = 0; s < steps; s++){
+    const b = blankIndex();
+    const nbrs = [b - SIZE, b + SIZE, b - 1, b + 1]
+      .filter(j => j >= 0 && j < N && isAdjacent(j, b) && j !== prev);
+    const pick = nbrs[Math.floor(Math.random() * nbrs.length)];
+    [cells[b], cells[pick]] = [cells[pick], cells[b]];
+    prev = b;
+  }
+  // guard against the rare fully-solved shuffle
+  if (isSolved()) return shuffle(steps);
+  resetStats();
+  over = false;
+  msg.textContent = "";
+  render();
+}
+
+// inversion-parity test — the mathematical guarantee (used as a sanity check)
+function isSolvable(a){
+  const tiles = a.filter(n => n !== 0);
+  let inv = 0;
+  for (let i = 0; i < tiles.length; i++)
+    for (let j = i + 1; j < tiles.length; j++)
+      if (tiles[i] > tiles[j]) inv++;
+  const blankRowFromBottom = SIZE - rowOf(a.indexOf(0));   // 1-based, from bottom
+  return (inv + blankRowFromBottom) % 2 === 1;   // the 4×4 (even-width) parity rule
+}
+
+function isSolved(){ return cells.every((n, i) => n === SOLVED[i]); }
+
+function checkWin(){
+  if (!isSolved()) return;
+  over = true;
+  stopTimer();
+  const best = +localStorage.puzzleBest || Infinity;
+  if (moves < best){ localStorage.puzzleBest = moves; }
+  updateBest();
+  msg.textContent = `🎉 Solved in ${moves} moves · ${fmt(seconds)}`;
+}
+
+// ----- timer + stats -----
+function startTimer(){
+  if (timer) return;
+  timer = setInterval(() => { seconds++; timeEl.textContent = fmt(seconds); }, 1000);
+}
+function stopTimer(){ clearInterval(timer); timer = null; }
+function fmt(s){ return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+function resetStats(){ moves = 0; seconds = 0; stopTimer(); timeEl.textContent = "0:00"; movesEl.textContent = "0"; }
+function updateBest(){ bestEl.textContent = localStorage.puzzleBest ? localStorage.puzzleBest + " moves" : "—"; }
+
+function resetSolved(){
+  cells = [...SOLVED];
+  resetStats();
+  over = false;
+  msg.textContent = "";
+  render();
+}
+
+shuffleBtn.onclick = () => shuffle();
+solveBtn.onclick   = resetSolved;
+
+updateBest();
+shuffle();                                       // start scrambled & ready
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The board is just an array", why:"The entire puzzle lives in one array of sixteen numbers: 1 through 15 for the tiles and a 0 standing in for the blank. The solved state is simply [1,2,3,…,15,0]. Each array index maps to a grid cell — index i is at row floor(i/4) and column i%4 — so we can always translate a position in the list into a spot on the 4×4 grid. Keeping the state flat rather than as a grid of rows makes every operation (move, shuffle, win-check) a short array operation. We only convert an index to row and column when it's time to draw a tile on screen.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">[1,2,3,4,<br>5,6,7,8,<br>9,10,11,12,<br>13,14,15,<b>0</b>] = solved<br>0 = the blank gap</div>`, code:`const SIZE = 4, N = 16;
+let cells = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,0]; // 0 = blank
+function rowOf(i){ return Math.floor(i / SIZE); }    // index → row
+function colOf(i){ return i % SIZE; }                // index → column
+function blankIndex(){ return cells.indexOf(0); }    // where the gap is` },
+  { title:"2. Finding the blank", why:"Almost everything in the puzzle is described relative to the empty square, so the first thing any move needs is the blank's location. Because the blank is just the 0 in our array, finding it is a single indexOf call that returns its index. From that index we get its row and column with the same divide-and-mod trick used for any tile. Tracking the gap rather than the tiles is the key insight: a 'tile move' is really the gap trading places with one of its neighbours. Everything downstream — legal moves, arrow keys, shuffling — is phrased in terms of where the 0 sits.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">blank = cells.indexOf(0)<br>row = floor(blank / 4)<br>col = blank % 4<br>think in terms of the gap</div>`, code:`function blankIndex(){ return cells.indexOf(0); }
+const b = blankIndex();
+const r = rowOf(b);   // which row the gap is in
+const c = colOf(b);   // which column the gap is in
+// a "tile move" is the gap swapping with a neighbour` },
+  { title:"3. What makes a move legal", why:"A tile can only slide if it is directly next to the blank — sharing an edge, not a corner. Two cells are neighbours when their grid positions differ by exactly one step: same row and adjacent columns, or same column and adjacent rows. The clean way to test this is to add the absolute row difference and the absolute column difference; neighbours sum to exactly one. This single rule rejects diagonal moves, far-away tiles, and the sneaky bug of 'wrapping' off one edge onto the other, since wrapping would make the column difference three, not one.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">|Δrow| + |Δcol| === 1<br>↑ ↓ ← → only, never diagonal<br>edge ≠ wrap (Δ would be 3)</div>`, code:`function isAdjacent(a, b){
+  const dr = Math.abs(rowOf(a) - rowOf(b));
+  const dc = Math.abs(colOf(a) - colOf(b));
+  return dr + dc === 1;        // exactly one orthogonal step apart
+}` },
+  { title:"4. A move is a swap with the blank", why:"Once we know a tile is adjacent to the gap, the move itself is trivially a swap: exchange the tile's array slot with the blank's slot. After the swap the tile occupies the cell that used to be empty and the 0 moves to where the tile was. That one array swap fully captures the slide — there is no separate 'shift' logic. The render step then reads the new positions and animates each element to its new coordinates, so the data change and the visible slide stay perfectly in step. Return a flag so the caller knows whether a real move happened.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">before:  [7][_]   after:  [_][7]<br>swap cells[tile] ↔ cells[blank]<br>one swap = one slide</div>`, code:`function moveTileAt(i){
+  const b = blankIndex();
+  if (!isAdjacent(i, b)) return false;          // not next to gap → ignore
+  [cells[i], cells[b]] = [cells[b], cells[i]];  // swap tile ↔ blank
+  return true;                                  // a real move happened
+}` },
+  { title:"5. Arrow keys move tiles into the gap", why:"Arrow keys are the source of the most common bug, because they name the tile's motion, not the gap's. Pressing Up should slide a tile upward — which means the tile sitting just below the blank moves up into it. So Up acts on the cell at blank + 4, Down acts on blank − 4, Left on blank + 1, and Right on blank − 1. Each arrow is guarded so it does nothing when the blank is already against that edge. Get the direction inverted and the puzzle feels backwards; thinking 'which tile fills the gap' keeps it intuitive.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">↑ → tile below gap slides up (b+4)<br>↓ → tile above gap slides down (b−4)<br>← → tile right of gap (b+1)<br>→ → tile left of gap (b−1)</div>`, code:`document.addEventListener("keydown", e => {
+  const b = blankIndex(), r = rowOf(b), c = colOf(b);
+  if (e.key === "ArrowUp"    && r < 3) tryMove(b + 4); // tile below → up
+  if (e.key === "ArrowDown"  && r > 0) tryMove(b - 4); // tile above → down
+  if (e.key === "ArrowLeft"  && c < 3) tryMove(b + 1); // tile right → left
+  if (e.key === "ArrowRight" && c > 0) tryMove(b - 1); // tile left → right
+});` },
+  { title:"6. Shuffling by playing the game", why:"You cannot scramble a sliding puzzle by just randomising the array, because half of all arrangements are physically impossible to solve. The reliable trick is to start from the solved board and make a few hundred real, legal moves at random — repeatedly slide a random neighbour of the blank into it. Since every step is a move you could undo, the scramble is always reachable from solved, hence always solvable. We also skip immediately reversing the previous move, otherwise the board would jiggle in place and barely mix. This is the simplest correct shuffle there is.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">start solved<br>× 300: slide a random neighbour in<br>never undo the last move<br>⇒ always reachable ⇒ always solvable</div>`, code:`function shuffle(steps = 300){
+  cells = [...SOLVED];
+  let prev = -1;
+  for (let s = 0; s < steps; s++){
+    const b = blankIndex();
+    const nbrs = neighbours(b).filter(j => j !== prev); // don't undo
+    const pick = nbrs[Math.random() * nbrs.length | 0];
+    [cells[b], cells[pick]] = [cells[pick], cells[b]];
+    prev = b;
+  }
+}` },
+  { title:"7. Why half of all boards are unsolvable", why:"Every legal slide swaps the blank with an adjacent tile, and crucially it always changes the puzzle's parity in a fixed way. Mathematicians count 'inversions' — pairs of tiles listed out of their natural order — and track the blank's row. For a 4-wide board, a position is solvable exactly when the number of inversions plus the blank's row counted from the bottom is even. Sliding tiles can never break this invariant, so positions split into two equal islands: the solvable half and the unreachable half. That is why a randomly poured-out array has a fifty-fifty chance of being impossible, and why move-based shuffling sidesteps the problem completely.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">inversions = pairs out of order<br>solvable ⇔ (inv + blankRowFromBottom) even<br>16! positions split 50 / 50<br>a slide never changes the parity</div>`, code:`function isSolvable(a){
+  const t = a.filter(n => n !== 0);
+  let inv = 0;
+  for (let i = 0; i < t.length; i++)
+    for (let j = i + 1; j < t.length; j++)
+      if (t[i] > t[j]) inv++;                  // count inversions
+  const blankRowFromBottom = 4 - rowOf(a.indexOf(0));
+  return (inv + blankRowFromBottom) % 2 === 0; // the 4×4 parity rule
+}` },
+  { title:"8. Detecting a win", why:"Because the array is the complete state, winning is just an equality check: the board is solved when it equals [1,2,…,15,0]. We compare every cell to its target index in one scan, and the moment they all match we declare victory. On a win we stop the timer so the final time freezes and lock further input. Comparing the live array to the solved array is far more robust than trying to detect a win during a move, and it costs only a single linear pass that runs after every slide.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">cells === [1..15, 0] ?<br>scan all 16 cells<br>all match → 🎉 solved<br>freeze the timer + lock input</div>`, code:`function isSolved(){
+  return cells.every((n, i) => n === SOLVED[i]);   // [1..15,0] in order
+}
+function checkWin(){
+  if (!isSolved()) return;
+  stopTimer();
+  msg.textContent = "🎉 Solved!";    // show moves + time too
+}` },
+  { title:"9. Counting moves and timing the solve", why:"Two stats turn fiddling into a challenge. A counter increments once per successful slide, and a timer starts on the very first move after a shuffle, ticking every second until you solve it. We start the clock lazily so an untouched board shows 0:00, and we clear the interval the instant the puzzle is solved so the time stops dead. Formatting is a quick minutes-and-padded-seconds helper. Saving the lowest move count in the browser's localStorage gives the player a personal best to beat on the next round.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">moves++ on each slide<br>timer starts on first move<br>m:ss format · stops on solve<br>best move-count saved in localStorage</div>`, code:`let moves = 0, seconds = 0, timer = null;
+function startTimer(){
+  if (timer) return;                           // lazy: only once
+  timer = setInterval(() => { seconds++; timeEl.textContent = fmt(seconds); }, 1000);
+}
+function fmt(s){ return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); }` },
+  { title:"10. Sliding smoothly + the A* solver note", why:"The slide animation costs no JavaScript at all: each tile is absolutely positioned, and a CSS transition on its left and top properties means that whenever render moves a tile to new coordinates, the browser animates it gliding there on the GPU. For a bonus, the puzzle can be solved automatically with A* search — treat each board as a node, each legal move as an edge, and guide the search with a heuristic like the total Manhattan distance of every tile from its home. A* then finds the shortest sequence of slides, which is the same idea that powers route-finding and many other game AIs.", concept:`<div class="text-center w-full"><div class="text-4xl mb-2">🔢➡️✅</div><p class="font-bold text-slate-700">flat array + swap-with-blank + arrow keys + solvable shuffle + win check + timer = the 15-Puzzle.</p></div>`, code:`/* CSS does the slide — JS only sets coordinates */
+.tile { position:absolute; transition: left .16s ease, top .16s ease; }
+
+/* Auto-solve sketch: A* over board states */
+//   node      = a board arrangement
+//   edge      = one legal slide
+//   heuristic = Σ Manhattan distance of each tile from home
+//   A* → shortest sequence of slides to the solved board` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>
