@@ -26,6 +26,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 17 — Memory Match](https://dev48v.infy.uk/game/day17-memory-match.html) — `day17-memory-match.html`
 - [GameFromZero · Day 18 — Wordle](https://dev48v.infy.uk/game/day18-wordle.html) — `day18-wordle.html`
 - [GameFromZero · Day 19 — 15-Puzzle](https://dev48v.infy.uk/game/day19-15-puzzle.html) — `day19-15-puzzle.html`
+- [GameFromZero · Day 20 — Sudoku](https://dev48v.infy.uk/game/day20-sudoku.html) — `day20-sudoku.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

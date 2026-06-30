@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 20 — Sudoku</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* sudoku board */
+  #board { display:grid; grid-template-columns:repeat(9,40px); grid-template-rows:repeat(9,40px);
+           gap:0; background:#0f172a; border:3px solid #0f172a; border-radius:10px; margin:0 auto;
+           box-shadow:0 18px 40px rgba(0,0,0,.18); width:max-content; }
+  .cell { width:40px; height:40px; display:flex; align-items:center; justify-content:center;
+          font-size:20px; font-weight:700; background:#fff; color:#0f172a; cursor:pointer; user-select:none;
+          border:1px solid #cbd5e1; box-sizing:border-box; }
+  /* bold 3×3 box borders */
+  .cell[data-c="2"], .cell[data-c="5"] { border-right:2px solid #0f172a; }
+  .cell[data-r="2"], .cell[data-r="5"] { border-bottom:2px solid #0f172a; }
+  .cell.given     { background:#ecfdf5; color:#065f46; font-weight:800; cursor:default; }   /* fixed clue */
+  .cell.peer      { background:#f1f5f9; }                                                    /* same row/col/box */
+  .cell.samenum   { background:#d1fae5; }                                                    /* matches selected number */
+  .cell.selected  { background:#10b981; color:#fff; }                                        /* the active cell */
+  .cell.conflict  { color:#dc2626; }                                                         /* clashes in row/col/box */
+  .cell.wrong     { background:#fee2e2; color:#dc2626; }                                      /* Check flagged wrong */
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:24px; }
+  .game-wrap { position:relative; }
+  /* on-screen number pad */
+  .pad { width:44px; height:44px; border-radius:10px; font-weight:800; font-size:18px;
+         background:#10b981; color:#fff; box-shadow:0 4px 0 #059669; }
+  .pad:hover { background:#059669; }
+  .pad.erase { background:#64748b; box-shadow:0 4px 0 #475569; }
+  .pad.erase:hover { background:#475569; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 20</div>
+      <h1 class="text-xl font-bold">🔢 Sudoku — Fill the Grid, One Constraint at a Time</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Fill every row, every column, and every 3×3 box with the digits 1 to 9 — no repeats anywhere.</h2>
+      <p class="text-slate-500 mb-4">The dark-green cells are the <em>givens</em> — fixed clues you can't change. Every white cell is yours to fill. Click a cell to select it (its row, column, and 3×3 box light up, and any cell already holding the same number glows), then type a digit 1–9 or tap the on-screen pad; backspace or the ⌫ key clears it. If a digit you place clashes with the same digit elsewhere in its row, column, or box it turns red instantly. Use <strong>Hint</strong> to reveal one correct cell, <strong>Check</strong> to flag every wrong entry, <strong>Solve</strong> to fill the whole solution, and <strong>New puzzle</strong> for a fresh, guaranteed-solvable board.</p>
+      <div class="flex justify-center">
+        <div class="game-wrap">
+          <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+            <div>Empty: <span id="remaining" class="stat text-emerald-600">0</span></div>
+            <div>Hints: <span id="hints" class="stat text-emerald-600">0</span></div>
+            <div>Difficulty: <span id="diff" class="stat text-emerald-600">—</span></div>
+          </div>
+          <div id="board"></div>
+          <div class="flex justify-center gap-2 mt-4" id="pad"></div>
+        </div>
+      </div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-2 gap-2 flex-wrap">
+        <button id="newBtn"   class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">🎲 New puzzle</button>
+        <button id="hintBtn"  class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">💡 Hint</button>
+        <button id="checkBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">✓ Check</button>
+        <button id="solveBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">★ Solve</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Every board is generated live: a backtracking algorithm first fills a complete, valid 9×9 solution, then cells are removed one at a time while a uniqueness check guarantees the puzzle still has exactly one answer — so it is always solvable and never ambiguous. <strong>Difficulty</strong> is simply how many givens remain. The same backtracking routine powers the <strong>Solve</strong> button. Everything runs offline in plain vanilla JS — clicking, keyboard, and the on-screen pad all work.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Sudoku works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A board held as a flat array of 81 cells (0 means empty), a render that draws a 9×9 grid with bold 3×3 borders, an <code>isValid(r,c,n)</code> guard that enforces the three Sudoku constraints, a backtracking solver that tries 1–9 and recurses, a generator that fills a full solution then digs out cells while keeping the answer unique, plus input handling with live conflict highlighting and a win check. ~110 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Model the grid as a flat array</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole puzzle is one array of 81 numbers, where <code>0</code> means an empty cell and 1–9 are filled digits. Cell index <code>i</code> maps to row <code>Math.floor(i/9)</code> and column <code>i%9</code>. The 3×3 box a cell belongs to is found by rounding its row and column down to the nearest multiple of three. Keeping the state flat makes copying, scanning, and solving simple array operations — we only convert an index into row, column, and box coordinates when we apply a constraint or draw the cell.</p>
+        <div class="relative">
+          <pre>const N = 9, CELLS = N * N;                 // 9×9 = 81 cells
+let grid  = new Array(CELLS).fill(0);       // 0 = empty, 1..9 = a digit
+let given = new Array(CELLS).fill(false);   // true = a fixed clue
+let answer = new Array(CELLS).fill(0);      // the full solution
+
+const rowOf = i =&gt; Math.floor(i / N);
+const colOf = i =&gt; i % N;
+const boxTop = r =&gt; r - r % 3, boxLeft = c =&gt; c - c % 3;   // 3×3 box origin</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Render the 9×9 grid</h3></div>
+        <p class="text-sm text-slate-600 mb-3">We build 81 cell elements once, each tagged with its row and column in data attributes. CSS uses those attributes to thicken the right and bottom borders after columns 2 and 5 and rows 2 and 5, which visually carves the grid into nine 3×3 boxes. On every render we write each cell's digit (blank for 0), mark the givens with a distinct style, and let the player edit the rest. Re-rendering simply re-reads the array, so the display and the data never drift apart.</p>
+        <div class="relative">
+          <pre>const board = document.getElementById("board");
+const cellEls = [];
+for (let i = 0; i &lt; CELLS; i++){
+  const el = document.createElement("div");
+  el.className = "cell";
+  el.dataset.r = rowOf(i); el.dataset.c = colOf(i); el.dataset.i = i;
+  board.appendChild(el); cellEls.push(el);
+}
+function render(){
+  for (let i = 0; i &lt; CELLS; i++){
+    const el = cellEls[i];
+    el.textContent = grid[i] || "";
+    el.classList.toggle("given", given[i]);
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">isValid — the three constraints</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A digit <code>n</code> may go in row <code>r</code>, column <code>c</code> only if it appears nowhere else in that row, that column, or that 3×3 box. We scan the nine cells of the row, the nine of the column, and the nine of the box; if any already holds <code>n</code> the placement is illegal. This one function is the heart of Sudoku — it is what the solver consults at every step and what conflict highlighting uses to flag mistakes. We pass the grid in so the same check works on the player's board and on the solver's working copy.</p>
+        <div class="relative">
+          <pre>function isValid(g, r, c, n){
+  for (let k = 0; k &lt; N; k++){
+    if (g[r * N + k] === n) return false;          // same row
+    if (g[k * N + c] === n) return false;          // same column
+  }
+  const r0 = r - r % 3, c0 = c - c % 3;            // box origin
+  for (let dr = 0; dr &lt; 3; dr++)
+    for (let dc = 0; dc &lt; 3; dc++)
+      if (g[(r0 + dr) * N + (c0 + dc)] === n) return false;   // same box
+  return true;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The backtracking solver</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The solver finds the first empty cell and tries digits 1–9 in it. For each digit that passes <code>isValid</code>, it places it and recurses to fill the rest. If the recursion eventually fails, it undoes the digit (sets the cell back to 0) and tries the next one. If no digit works, it returns false to let the previous cell try again. When there are no empty cells left, the board is complete and it returns true. This try-recurse-undo pattern is the classic backtracking search.</p>
+        <div class="relative">
+          <pre>function solve(g){
+  const i = g.indexOf(0);            // first empty cell
+  if (i === -1) return true;         // none left → solved
+  const r = rowOf(i), c = colOf(i);
+  for (let n = 1; n &lt;= 9; n++){
+    if (isValid(g, r, c, n)){
+      g[i] = n;                      // try n
+      if (solve(g)) return true;     // recurse
+      g[i] = 0;                      // dead end → undo
+    }
+  }
+  return false;                      // no digit fits → backtrack
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Generate a full solution</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To make a fresh puzzle we first need a complete, valid grid. We run the same backtracking fill, but at each empty cell we try the digits 1–9 in a <em>shuffled</em> order. Randomising the candidate order means the solver carves out a different complete grid every time instead of always the same canonical one. The result is a fully filled 9×9 board obeying all three constraints — the answer key we'll dig holes into next.</p>
+        <div class="relative">
+          <pre>function shuffled(){                  // [1..9] in random order
+  const a = [1,2,3,4,5,6,7,8,9];
+  for (let i = a.length - 1; i &gt; 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function fill(g){
+  const i = g.indexOf(0);
+  if (i === -1) return true;
+  const r = rowOf(i), c = colOf(i);
+  for (const n of shuffled()){       // random candidate order
+    if (isValid(g, r, c, n)){
+      g[i] = n;
+      if (fill(g)) return true;
+      g[i] = 0;
+    }
+  }
+  return false;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Dig holes, keeping one solution</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A puzzle is the solution with cells removed. We walk the 81 cells in random order and try to clear each one — but before committing, we count how many solutions the board now has. If removing the digit leaves more than one possible answer the puzzle would be ambiguous, so we put the digit back. Counting stops as soon as it finds a second solution, so it stays fast. The cells that survive become the givens; how many we leave sets the difficulty.</p>
+        <div class="relative">
+          <pre>function countSolutions(g, limit = 2){
+  const i = g.indexOf(0);
+  if (i === -1) return 1;
+  const r = rowOf(i), c = colOf(i); let total = 0;
+  for (let n = 1; n &lt;= 9; n++){
+    if (isValid(g, r, c, n)){
+      g[i] = n; total += countSolutions(g, limit); g[i] = 0;
+      if (total &gt;= limit) break;       // two is enough to reject
+    }
+  }
+  return total;
+}
+function dig(g, clues = 32){
+  const order = shuffledIndices();      // 0..80 shuffled
+  let filled = CELLS;
+  for (const i of order){
+    if (filled &lt;= clues) break;
+    const saved = g[i]; g[i] = 0;
+    if (countSolutions(g.slice()) !== 1) g[i] = saved; // ambiguous → restore
+    else filled--;
+  }
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Input + live conflict highlighting</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Clicking a non-given cell selects it; typing 1–9 (keyboard or on-screen pad) writes that digit, backspace clears it. After every change we recompute highlights: the selected cell's whole row, column, and box get a soft tint, cells holding the same number glow, and any digit that violates a constraint turns red. The conflict test reuses <code>isValid</code> — temporarily blank the cell, then ask whether its digit would be legal there; if not, it clashes. Pure visual feedback, no state mutated.</p>
+        <div class="relative">
+          <pre>let selected = -1;
+board.addEventListener("click", e =&gt; {
+  const el = e.target.closest(".cell"); if (!el) return;
+  selected = +el.dataset.i; paint();
+});
+function setDigit(n){
+  if (selected &lt; 0 || given[selected]) return;
+  grid[selected] = n; render(); paint(); checkWin();
+}
+function conflicts(i){
+  const n = grid[i]; if (!n) return false;
+  grid[i] = 0;                                   // hide self
+  const bad = !isValid(grid, rowOf(i), colOf(i), n);
+  grid[i] = n;                                   // restore
+  return bad;
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Win detection</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Because we kept the full solution around when we generated the puzzle, winning is a single comparison: the player has won when every cell equals the stored answer. That automatically means the grid is completely full and obeys all three constraints, since the answer does. We run the check after every digit; the moment the board matches the solution we lock input and celebrate. Comparing against the known answer is simpler and more reliable than re-scanning all 27 rows, columns, and boxes.</p>
+        <div class="relative">
+          <pre>function checkWin(){
+  for (let i = 0; i &lt; CELLS; i++)
+    if (grid[i] !== answer[i]) return;     // not done yet
+  msg.textContent = "🎉 Solved! Every row, column and box is complete.";
+  // optionally lock further input here
+}
+// Hint = reveal one correct empty cell:
+function hint(){
+  const empties = [];
+  for (let i = 0; i &lt; CELLS; i++) if (!grid[i]) empties.push(i);
+  if (!empties.length) return;
+  const i = empties[Math.floor(Math.random() * empties.length)];
+  grid[i] = answer[i]; given[i] = true; render(); checkWin();
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 20 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Sudoku with a flat 81-cell array, a 9×9 render with bold 3×3 borders, an <code>isValid</code> guard for the row/column/box constraints, a backtracking solver, a generator that fills a full solution then digs holes while a uniqueness check keeps exactly one answer, live conflict highlighting, and a win check. Try pencil-mark notes (small candidate digits per cell), a difficulty selector that targets a clue count, or a constraint-propagation solver that's faster than plain backtracking.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== SUDOKU =====
+const N = 9, CELLS = N * N;
+
+const board     = document.getElementById("board");
+const pad       = document.getElementById("pad");
+const msg       = document.getElementById("msg");
+const remainEl  = document.getElementById("remaining");
+const hintsEl   = document.getElementById("hints");
+const diffEl    = document.getElementById("diff");
+const newBtn    = document.getElementById("newBtn");
+const hintBtn   = document.getElementById("hintBtn");
+const checkBtn  = document.getElementById("checkBtn");
+const solveBtn  = document.getElementById("solveBtn");
+
+let grid   = new Array(CELLS).fill(0);     // 0 = empty
+let given  = new Array(CELLS).fill(false); // fixed clue?
+let answer = new Array(CELLS).fill(0);     // full solution
+let selected = -1, hintCount = 0, over = false;
+
+const rowOf = i => Math.floor(i / N);
+const colOf = i => i % N;
+
+// the core constraint check: can n go at (r,c) in grid g?
+function isValid(g, r, c, n){
+  for (let k = 0; k < N; k++){
+    if (g[r * N + k] === n) return false;       // same row
+    if (g[k * N + c] === n) return false;       // same column
+  }
+  const r0 = r - r % 3, c0 = c - c % 3;
+  for (let dr = 0; dr < 3; dr++)
+    for (let dc = 0; dc < 3; dc++)
+      if (g[(r0 + dr) * N + (c0 + dc)] === n) return false;  // same 3×3 box
+  return true;
+}
+
+// backtracking solver (deterministic order) — solves in place
+function solve(g){
+  const i = g.indexOf(0);
+  if (i === -1) return true;
+  const r = rowOf(i), c = colOf(i);
+  for (let n = 1; n <= 9; n++){
+    if (isValid(g, r, c, n)){
+      g[i] = n;
+      if (solve(g)) return true;
+      g[i] = 0;
+    }
+  }
+  return false;
+}
+
+function shuffled(){
+  const a = [1,2,3,4,5,6,7,8,9];
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// fill a complete valid grid using random candidate order
+function fill(g){
+  const i = g.indexOf(0);
+  if (i === -1) return true;
+  const r = rowOf(i), c = colOf(i);
+  for (const n of shuffled()){
+    if (isValid(g, r, c, n)){
+      g[i] = n;
+      if (fill(g)) return true;
+      g[i] = 0;
+    }
+  }
+  return false;
+}
+
+// count solutions up to `limit` (2 is enough to detect ambiguity)
+function countSolutions(g, limit){
+  const i = g.indexOf(0);
+  if (i === -1) return 1;
+  const r = rowOf(i), c = colOf(i);
+  let total = 0;
+  for (let n = 1; n <= 9; n++){
+    if (isValid(g, r, c, n)){
+      g[i] = n;
+      total += countSolutions(g, limit);
+      g[i] = 0;
+      if (total >= limit) break;
+    }
+  }
+  return total;
+}
+
+function shuffledIndices(){
+  const a = [...Array(CELLS).keys()];
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// generate: full solution → dig holes keeping a unique solution
+function generate(clues = 36){
+  const sol = new Array(CELLS).fill(0);
+  fill(sol);                          // complete valid grid
+  answer = sol.slice();
+
+  const puzzle = sol.slice();
+  const order = shuffledIndices();
+  let filled = CELLS;
+  for (const i of order){
+    if (filled <= clues) break;
+    const saved = puzzle[i];
+    puzzle[i] = 0;
+    if (countSolutions(puzzle.slice(), 2) !== 1) puzzle[i] = saved; // keep unique
+    else filled--;
+  }
+
+  grid  = puzzle.slice();
+  given = puzzle.map(v => v !== 0);
+  selected = -1; hintCount = 0; over = false;
+  msg.textContent = "";
+  diffEl.textContent = labelFor(filled);
+  render(); paint();
+}
+
+function labelFor(clues){
+  if (clues >= 40) return "Easy";
+  if (clues >= 34) return "Medium";
+  return "Hard";
+}
+
+// build the 81 cell elements once
+const cellEls = [];
+for (let i = 0; i < CELLS; i++){
+  const el = document.createElement("div");
+  el.className = "cell";
+  el.dataset.r = rowOf(i);
+  el.dataset.c = colOf(i);
+  el.dataset.i = i;
+  board.appendChild(el);
+  cellEls.push(el);
+}
+
+function render(){
+  let empty = 0;
+  for (let i = 0; i < CELLS; i++){
+    const el = cellEls[i];
+    el.textContent = grid[i] || "";
+    el.classList.toggle("given", given[i]);
+    if (!grid[i]) empty++;
+  }
+  remainEl.textContent = empty;
+  hintsEl.textContent  = hintCount;
+}
+
+// does grid[i] clash with the same digit elsewhere in row/col/box?
+function conflicts(i){
+  const n = grid[i];
+  if (!n) return false;
+  grid[i] = 0;
+  const bad = !isValid(grid, rowOf(i), colOf(i), n);
+  grid[i] = n;
+  return bad;
+}
+
+// recompute all highlight classes
+function paint(){
+  const sr = selected >= 0 ? rowOf(selected) : -1;
+  const sc = selected >= 0 ? colOf(selected) : -1;
+  const sBoxR = sr - (sr % 3), sBoxC = sc - (sc % 3);
+  const selVal = selected >= 0 ? grid[selected] : 0;
+
+  for (let i = 0; i < CELLS; i++){
+    const el = cellEls[i];
+    el.classList.remove("peer", "samenum", "selected", "conflict", "wrong");
+    const r = rowOf(i), c = colOf(i);
+
+    if (selected >= 0){
+      const samePeer = r === sr || c === sc ||
+        (r >= sBoxR && r < sBoxR + 3 && c >= sBoxC && c < sBoxC + 3);
+      if (samePeer) el.classList.add("peer");
+      if (selVal && grid[i] === selVal) el.classList.add("samenum");
+      if (i === selected) el.classList.add("selected");
+    }
+    if (conflicts(i)) el.classList.add("conflict");
+  }
+}
+
+board.addEventListener("click", e => {
+  const el = e.target.closest(".cell");
+  if (!el) return;
+  selected = +el.dataset.i;
+  paint();
+});
+
+function setDigit(n){
+  if (over || selected < 0 || given[selected]) return;
+  grid[selected] = n;
+  render(); paint(); checkWin();
+}
+function clearCell(){
+  if (over || selected < 0 || given[selected]) return;
+  grid[selected] = 0;
+  render(); paint();
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key >= "1" && e.key <= "9"){ setDigit(+e.key); }
+  else if (e.key === "Backspace" || e.key === "Delete" || e.key === "0"){ e.preventDefault(); clearCell(); }
+  else if (e.key === "ArrowUp"    && selected >= N)            { selected -= N; paint(); }
+  else if (e.key === "ArrowDown"  && selected >= 0 && selected < CELLS - N){ selected += N; paint(); }
+  else if (e.key === "ArrowLeft"  && selected % N > 0)         { selected -= 1; paint(); }
+  else if (e.key === "ArrowRight" && selected % N < N - 1 && selected >= 0){ selected += 1; paint(); }
+});
+
+// build the on-screen number pad 1-9 + erase
+for (let n = 1; n <= 9; n++){
+  const b = document.createElement("button");
+  b.className = "pad"; b.textContent = n;
+  b.onclick = () => setDigit(n);
+  pad.appendChild(b);
+}
+const er = document.createElement("button");
+er.className = "pad erase"; er.textContent = "⌫";
+er.onclick = clearCell;
+pad.appendChild(er);
+
+function checkWin(){
+  for (let i = 0; i < CELLS; i++)
+    if (grid[i] !== answer[i]) return;
+  over = true;
+  selected = -1;
+  paint();
+  msg.textContent = "🎉 Solved! Every row, column and 3×3 box is complete.";
+}
+
+// ----- buttons -----
+hintBtn.onclick = () => {
+  if (over) return;
+  const empties = [];
+  for (let i = 0; i < CELLS; i++) if (!grid[i]) empties.push(i);
+  if (!empties.length) return;
+  const i = empties[Math.floor(Math.random() * empties.length)];
+  grid[i] = answer[i];
+  given[i] = true;          // a revealed correct cell becomes fixed
+  hintCount++;
+  render(); paint(); checkWin();
+};
+
+checkBtn.onclick = () => {
+  if (over) return;
+  let bad = 0;
+  for (let i = 0; i < CELLS; i++){
+    cellEls[i].classList.remove("wrong");
+    if (grid[i] && grid[i] !== answer[i]){
+      cellEls[i].classList.add("wrong");
+      bad++;
+    }
+  }
+  msg.textContent = bad ? `❌ ${bad} cell${bad > 1 ? "s" : ""} wrong or conflicting.`
+                        : "✓ So far so good — no mistakes.";
+};
+
+solveBtn.onclick = () => {
+  const g = grid.slice();
+  if (solve(g)){
+    grid = g;
+    over = true; selected = -1;
+    render(); paint();
+    msg.textContent = "★ Solved for you.";
+  } else {
+    msg.textContent = "No solution from the current entries.";
+  }
+};
+
+newBtn.onclick = () => generate(36);
+
+generate(36);   // start with a fresh puzzle
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. The grid is just an array", why:"The entire puzzle lives in one array of eighty-one numbers, where a 0 marks an empty cell and 1 through 9 are filled digits. Cell index i sits at row floor(i/9) and column i%9, so any position in the flat list maps to a spot on the 9×9 grid. The 3×3 box a cell belongs to is found by rounding its row and column down to the nearest multiple of three. Keeping the state flat makes copying, scanning, and solving short array operations. We only translate an index into row, column, and box coordinates when we apply a rule or draw a cell.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">81 numbers · 0 = empty<br>index i → row = floor(i/9), col = i%9<br>box = (row−row%3, col−col%3)<br>9 rows · 9 cols · 9 boxes</div>`, code:`const N = 9, CELLS = 81;
+let grid = new Array(CELLS).fill(0);   // 0 = empty, 1..9 = digit
+const rowOf = i => Math.floor(i / N);  // index → row
+const colOf = i => i % N;              // index → column
+const boxTop  = r => r - r % 3;        // 3×3 box origin row
+const boxLeft = c => c - c % 3;        // 3×3 box origin column` },
+
+  { title:"2. The three constraints", why:"Sudoku has exactly three rules, and they are all the same shape: a digit may appear only once per region. Each row of nine cells must hold 1–9 with no repeat, each column of nine must too, and each of the nine 3×3 boxes must as well. Every cell belongs to one row, one column, and one box at the same time, so a single digit is bound by all three rules together. Almost every piece of logic in the game — validity, conflict highlighting, solving — is just enforcing 'no repeat in row, column, or box.' Understand these three regions and you understand the whole puzzle.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">each ROW: 1–9, no repeat<br>each COLUMN: 1–9, no repeat<br>each 3×3 BOX: 1–9, no repeat<br>every cell answers to all three</div>`, code:`// every cell lives in exactly one of each region:
+const row = rowOf(i);            // its row    (9 cells)
+const col = colOf(i);            // its column (9 cells)
+const box = [boxTop(row), boxLeft(col)];   // its 3×3 box (9 cells)
+// the only rule: a digit appears once per region` },
+
+  { title:"3. Is this placement valid?", why:"Before writing a digit anywhere we ask one question: does it already appear in this cell's row, column, or box? We scan the nine cells of the row, the nine of the column, and the nine of the box; if any of them already holds the digit, the placement is illegal. Adding the absolute row and column tricks aside, this single function is the heart of Sudoku — the solver consults it at every step and conflict highlighting uses it to flag mistakes. We pass the grid in as an argument so the very same check works on the player's board and on the solver's scratch copy.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">isValid(g, r, c, n) ?<br>scan 9 row cells + 9 col cells<br>+ 9 box cells<br>none holds n → legal ✓</div>`, code:`function isValid(g, r, c, n){
+  for (let k = 0; k < N; k++){
+    if (g[r*N + k] === n) return false;   // same row
+    if (g[k*N + c] === n) return false;   // same column
+  }
+  const r0 = r - r%3, c0 = c - c%3;       // box origin
+  for (let dr = 0; dr < 3; dr++)
+    for (let dc = 0; dc < 3; dc++)
+      if (g[(r0+dr)*N + (c0+dc)] === n) return false;  // same box
+  return true;
+}` },
+
+  { title:"4. Givens vs editable cells", why:"A puzzle starts with some cells already filled — the givens, or clues. These are fixed: you can't change them, and they're shown in a distinct colour so the player knows what's locked. Every other cell is empty and editable. We track this with a parallel boolean array that is true wherever the original puzzle had a digit. Input is then easy to gate: ignore clicks and keystrokes aimed at a given. The number of givens left on the board is exactly what makes one puzzle harder than another.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">given[i] = true  → fixed clue (locked)<br>given[i] = false → empty, you fill it<br>givens get a distinct colour<br>edits to a given are ignored</div>`, code:`let given = puzzle.map(v => v !== 0);  // true where a clue exists
+function setDigit(n){
+  if (selected < 0) return;
+  if (given[selected]) return;          // can't edit a given
+  grid[selected] = n;
+  render();
+}` },
+
+  { title:"5. Conflict detection & highlighting", why:"When the player types a digit we instantly show whether it clashes. The clever trick is to reuse the validity check: temporarily blank the cell, then ask whether its own digit would be legal there — if not, the same digit lives somewhere in its row, column, or box, so it's a conflict and we paint it red. Selecting a cell also tints its entire row, column, and box, and makes every cell holding the same number glow, which is how human solvers spot where a digit can go. None of this changes the board; it's pure visual feedback recomputed after each move.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">clash in row/col/box → 🔴 red<br>selected cell → highlight its row+col+box<br>same number elsewhere → glow<br>blank-self-then-isValid = the clash test</div>`, code:`function conflicts(i){
+  const n = grid[i]; if (!n) return false;
+  grid[i] = 0;                                  // hide the cell's own digit
+  const bad = !isValid(grid, rowOf(i), colOf(i), n);
+  grid[i] = n;                                  // put it back
+  return bad;          // illegal → it clashes somewhere
+}` },
+
+  { title:"6. The backtracking solver", why:"To solve any Sudoku, take the first empty cell and try digits 1 through 9 in it. For each digit that passes the validity check, place it and recurse to fill the rest of the board. If that recursion eventually hits a dead end, undo the digit — set the cell back to 0 — and try the next candidate. If no digit fits, return failure so the previous cell can try a different choice. When there are no empty cells left, the board is complete. This try-place-recurse-undo loop is classic backtracking, and it is guaranteed to find a solution if one exists.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">find first empty cell<br>try 1..9 that pass isValid<br>place → recurse → on dead end, undo<br>no empties left → solved ✅</div>`, code:`function solve(g){
+  const i = g.indexOf(0);          // first empty cell
+  if (i === -1) return true;       // none → solved
+  const r = rowOf(i), c = colOf(i);
+  for (let n = 1; n <= 9; n++){
+    if (isValid(g, r, c, n)){
+      g[i] = n;                    // try n
+      if (solve(g)) return true;   // recurse deeper
+      g[i] = 0;                    // dead end → undo
+    }
+  }
+  return false;                    // backtrack
+}` },
+
+  { title:"7. Generating a full solution", why:"Before we can make a puzzle we need a finished board to carve from. We run the very same backtracking fill, but at each empty cell we try the digits in a shuffled order rather than 1-to-9. That randomness means the search lands on a different complete, valid grid every time instead of the one canonical board. The output is a fully filled 9×9 that already satisfies all three constraints — our answer key. Generating the solution first, then removing cells, is far easier than trying to place clues directly and hope they're consistent.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">same backtracking, random digit order<br>⇒ a different full grid each run<br>obeys all three constraints<br>this is the answer key</div>`, code:`function shuffled(){               // [1..9] randomised
+  const a = [1,2,3,4,5,6,7,8,9];
+  for (let i = a.length-1; i > 0; i--){
+    const j = Math.random() * (i+1) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function fill(g){                  // like solve(), but random order
+  const i = g.indexOf(0); if (i === -1) return true;
+  const r = rowOf(i), c = colOf(i);
+  for (const n of shuffled())
+    if (isValid(g, r, c, n)){ g[i] = n; if (fill(g)) return true; g[i] = 0; }
+  return false;
+}` },
+
+  { title:"8. Removing cells, keeping it unique", why:"A puzzle is the full solution with cells emptied out. We visit the eighty-one cells in random order and try to clear each one — but a good puzzle must have exactly one answer, so before committing a removal we count how many solutions the board now has. If clearing a cell would leave two or more possible answers, the puzzle becomes ambiguous, so we put the digit back. The solution counter stops the instant it finds a second solution, which keeps it fast. The clues that survive this process are the givens.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">walk cells in random order<br>blank one → count solutions<br>still exactly 1 → keep it empty<br>2 or more → restore (ambiguous)</div>`, code:`function countSolutions(g, limit){
+  const i = g.indexOf(0); if (i === -1) return 1;
+  const r = rowOf(i), c = colOf(i); let total = 0;
+  for (let n = 1; n <= 9; n++)
+    if (isValid(g, r, c, n)){
+      g[i] = n; total += countSolutions(g, limit); g[i] = 0;
+      if (total >= limit) break;        // two is enough to reject
+    }
+  return total;
+}
+// keep a removal only if countSolutions stays exactly 1` },
+
+  { title:"9. Difficulty = how many givens", why:"There's no separate 'hardness' algorithm — difficulty falls out of how many clues you leave on the board. Stop removing cells early and many givens remain, so the puzzle is easy; dig out more and fewer clues survive, forcing harder chains of reasoning. A typical easy board has around 40 givens, a hard one closer to 26 (a proper Sudoku needs at least 17). We just pass a target clue count to the generator and label the result Easy, Medium, or Hard. Crucially, no matter how few clues remain, the uniqueness check guarantees the puzzle still has exactly one answer.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">many givens (≈40) → Easy<br>fewer givens (≈26) → Hard<br>minimum proper puzzle = 17 clues<br>uniqueness holds at every level</div>`, code:`function generate(clues){
+  const sol = new Array(81).fill(0);
+  fill(sol); answer = sol.slice();      // full solution
+  const puzzle = sol.slice();
+  // ...dig holes until ~clues remain, keeping uniqueness...
+  given = puzzle.map(v => v !== 0);
+  diffEl.textContent = clues >= 40 ? "Easy" : clues >= 34 ? "Medium" : "Hard";
+}` },
+
+  { title:"10. Win, hints & pencil marks", why:"Because we kept the full solution when generating, winning is one comparison: the player wins when every cell equals the stored answer, which automatically means the board is full and legal. A Hint reveals one correct empty cell straight from that answer. A natural next feature is pencil marks — small candidate digits a solver jots into a cell to remember which numbers are still possible there; you'd store a little set per cell and toggle digits in and out. These same candidate sets are also what a smarter constraint-propagation solver uses to deduce cells before resorting to backtracking.", concept:`<div class="text-center w-full"><div class="text-4xl mb-2">🔢➡️✅</div><p class="font-bold text-slate-700">flat array + isValid + backtracking solver + dig-with-uniqueness + conflict highlight + win check = Sudoku.</p></div>`, code:`function checkWin(){
+  for (let i = 0; i < 81; i++)
+    if (grid[i] !== answer[i]) return;   // not finished
+  msg.textContent = "🎉 Solved!";
+}
+// Hint: copy one empty cell straight from the answer
+// Pencil marks: store a Set of candidate digits per cell,
+//   toggle them, and let a solver narrow them down` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>
