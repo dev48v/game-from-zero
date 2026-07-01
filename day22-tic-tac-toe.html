@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 22 — Tic-Tac-Toe (Minimax)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  #ttt { display:grid; grid-template-columns:repeat(3, 90px); grid-template-rows:repeat(3, 90px); gap:6px;
+         background:#0f172a; padding:6px; border-radius:14px; margin:0 auto; width:max-content;
+         box-shadow:0 18px 40px rgba(0,0,0,.18); }
+  .sq { background:#fff; border-radius:8px; font-size:52px; font-weight:800; line-height:1;
+        display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none;
+        color:#0f172a; transition:background .12s; }
+  .sq:hover { background:#ecfdf5; }
+  .sq.x { color:#059669; }
+  .sq.o { color:#0ea5e9; }
+  .sq.win { background:#bbf7d0; }
+  .sq.taken { cursor:not-allowed; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 22</div>
+      <h1 class="text-xl font-bold">⭕ Tic-Tac-Toe — the AI That Never Loses</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Try to beat it. On "Unbeatable" you can't — the best you'll ever get is a draw.</h2>
+      <p class="text-slate-500 mb-5">This computer opponent plays with <strong>minimax</strong>: before every move it mentally plays out <em>every</em> possible continuation of the game to the end, scores each ending (win, lose, draw), and assumes both sides play perfectly. Because tic-tac-toe is small enough to search completely, the AI always finds a move that can never lead to a loss. Switch to <strong>Easy</strong> to see it play random moves instead, or flip whether you're X or O (X always moves first).</p>
+      <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+        <div>You: <span id="youMark" class="stat text-emerald-600">X</span></div>
+        <div>Wins: <span id="wW" class="stat text-emerald-600">0</span></div>
+        <div>Losses: <span id="wL" class="stat text-rose-500">0</span></div>
+        <div>Draws: <span id="wD" class="stat text-slate-500">0</span></div>
+      </div>
+      <div id="ttt"></div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="resetBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↻ New game</button>
+        <button id="swapBtn"  class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">🔄 Play as <span id="swapTo">O</span></button>
+      </div>
+      <div class="flex justify-center items-center mt-3 gap-3 flex-wrap text-sm text-slate-600">
+        <span class="font-bold">Difficulty</span>
+        <button data-diff="hard" id="diffHard" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Unbeatable (minimax)</button>
+        <button data-diff="easy" id="diffEasy" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">Easy (random)</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">On <strong>Unbeatable</strong> the AI runs a full minimax search of the game tree (with a small depth bonus so it prefers to win <em>sooner</em> and stall losses <em>later</em>). Perfect play by both sides always ends in a draw — so a perfect opponent can never be beaten, only tied. Everything runs offline in vanilla JS.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How an unbeatable AI works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A board held as a 9-slot array, a winner check over the eight winning lines, a recursive <code>minimax()</code> that scores every possible ending, a move-picker that chooses the highest-scoring move, and a bit of UI glue. ~90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Model the board</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The board is one array of nine cells, indexed 0–8 (top-left to bottom-right). Each cell holds <code>"X"</code>, <code>"O"</code>, or <code>""</code> for empty. This flat model makes it trivial to copy the board for the AI's what-if search and to list the empty cells that are the legal moves.</p>
+        <div class="relative"><pre>let board = ["","","","","","","","",""];  // 9 cells, 0..8
+const HUMAN = "X", AI = "O";                // who is who
+const empties = b =&gt; b.map((v,i)=&gt;v?-1:i).filter(i=&gt;i&gt;=0);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Detect a winner</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There are exactly eight ways to win: three rows, three columns, two diagonals. We list those triples once, then check whether any line holds the same non-empty mark in all three cells. This function is the AI's "terminal test" — it tells the search when a game has ended and who won.</p>
+        <div class="relative"><pre>const LINES = [[0,1,2],[3,4,5],[6,7,8],   // rows
+               [0,3,6],[1,4,7],[2,5,8],   // cols
+               [0,4,8],[2,4,6]];          // diagonals
+function winner(b){
+  for (const [a,c,d] of LINES)
+    if (b[a] &amp;&amp; b[a] === b[c] &amp;&amp; b[a] === b[d]) return b[a];
+  return b.every(Boolean) ? "draw" : null;   // full board = draw
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Minimax — score every ending</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Minimax recursively plays out the game. On the AI's turn it wants the <em>maximum</em> score; on your turn it assumes you'll pick the <em>minimum</em> (best for you). At a finished game it returns +10 if the AI won, −10 if you won, 0 for a draw. We subtract the search depth from a win and add it to a loss so the AI prefers to win quickly and lose slowly.</p>
+        <div class="relative"><pre>function minimax(b, isAI, depth){
+  const w = winner(b);
+  if (w === AI)    return  10 - depth;   // win sooner = better
+  if (w === HUMAN) return -10 + depth;   // lose later = less bad
+  if (w === "draw") return 0;
+
+  const scores = empties(b).map(i =&gt; {
+    b[i] = isAI ? AI : HUMAN;            // try the move
+    const s = minimax(b, !isAI, depth+1);// opponent responds
+    b[i] = "";                          // undo
+    return s;
+  });
+  return isAI ? Math.max(...scores) : Math.min(...scores);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Pick the best move</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To choose a move, the AI tries each empty cell, runs minimax on the resulting position (now it's your turn, so <code>isAI = false</code>), and keeps the move with the highest score. Because minimax already looked all the way to the end of every line, this greedy pick of the top-scoring move <em>is</em> optimal play.</p>
+        <div class="relative"><pre>function bestMove(b){
+  let best = -Infinity, move = -1;
+  for (const i of empties(b)){
+    b[i] = AI;
+    const s = minimax(b, false, 0);   // human replies next
+    b[i] = "";
+    if (s &gt; best){ best = s; move = i; }
+  }
+  return move;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Wire up turns &amp; rendering</h3></div>
+        <p class="text-sm text-slate-600 mb-3">On a human click we place the mark, check for a result, and if the game is still going, let the AI move (minimax on Unbeatable, a random empty cell on Easy). Rendering just reads the array into nine cells and highlights the winning line. Alpha-beta pruning would speed a bigger game up, but tic-tac-toe's ~9! ≈ 362,880 leaf nodes search instantly as-is.</p>
+        <div class="relative"><pre>function humanMove(i){
+  if (board[i] || winner(board)) return;
+  board[i] = HUMAN; render();
+  if (winner(board)) return finish();
+  const ai = difficulty === "hard"
+    ? bestMove(board)
+    : empties(board)[Math.random()*empties(board).length|0];
+  board[ai] = AI; render(); finish();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 22 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built an unbeatable tic-tac-toe AI: a 9-slot board, an eight-line winner check, a recursive minimax that scores every possible ending with a depth tie-breaker, and a move-picker that plays optimally. Next: add alpha-beta pruning, then try the same idea on a bigger game like Connect Four (Day 13) where you can't search to the very end and need a heuristic + a depth limit. <strong>👉 Tomorrow — Day 23: Sokoban.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== TIC-TAC-TOE =====
+const boardEl = document.getElementById("ttt");
+const msg = document.getElementById("msg");
+let HUMAN = "X", AI = "O";
+let board = Array(9).fill("");
+let difficulty = "hard";
+let wins = 0, losses = 0, draws = 0;
+let locked = false;
+
+const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const empties = b => b.map((v,i)=>v?-1:i).filter(i=>i>=0);
+
+function winInfo(b){
+  for (const L of LINES){ const [a,c,d]=L; if (b[a] && b[a]===b[c] && b[a]===b[d]) return {who:b[a], line:L}; }
+  return b.every(Boolean) ? {who:"draw", line:null} : null;
+}
+function winner(b){ const r = winInfo(b); return r ? r.who : null; }
+
+function minimax(b, isAI, depth){
+  const w = winner(b);
+  if (w === AI)    return 10 - depth;
+  if (w === HUMAN) return -10 + depth;
+  if (w === "draw") return 0;
+  const es = empties(b);
+  let best = isAI ? -Infinity : Infinity;
+  for (const i of es){
+    b[i] = isAI ? AI : HUMAN;
+    const s = minimax(b, !isAI, depth+1);
+    b[i] = "";
+    best = isAI ? Math.max(best, s) : Math.min(best, s);
+  }
+  return best;
+}
+function bestMove(b){
+  let best = -Infinity, move = -1;
+  for (const i of empties(b)){
+    b[i] = AI; const s = minimax(b, false, 0); b[i] = "";
+    if (s > best){ best = s; move = i; }
+  }
+  return move;
+}
+
+// build 9 squares
+const sqEls = [];
+for (let i=0;i<9;i++){
+  const el = document.createElement("div");
+  el.className = "sq"; el.dataset.i = i;
+  el.onclick = () => humanMove(i);
+  boardEl.appendChild(el); sqEls.push(el);
+}
+function render(){
+  const info = winInfo(board);
+  for (let i=0;i<9;i++){
+    const v = board[i];
+    sqEls[i].textContent = v;
+    sqEls[i].className = "sq" + (v==="X"?" x":v==="O"?" o":"") + (v?" taken":"");
+    if (info && info.line && info.line.includes(i)) sqEls[i].classList.add("win");
+  }
+}
+function updateScore(){
+  document.getElementById("wW").textContent = wins;
+  document.getElementById("wL").textContent = losses;
+  document.getElementById("wD").textContent = draws;
+}
+function finish(){
+  const w = winner(board);
+  if (!w){ locked = false; return; }
+  locked = true;
+  if (w === "draw"){ draws++; msg.textContent = "Draw — perfect play on both sides."; msg.className="mt-4 font-bold text-slate-500"; }
+  else if (w === HUMAN){ wins++; msg.textContent = "🎉 You win!"; msg.className="mt-4 font-bold text-emerald-600"; }
+  else { losses++; msg.textContent = "The AI wins."; msg.className="mt-4 font-bold text-rose-500"; }
+  updateScore();
+}
+function aiMove(){
+  const es = empties(board); if (!es.length) return;
+  const i = difficulty === "hard" ? bestMove(board) : es[(Math.random()*es.length)|0];
+  board[i] = AI; render(); finish();
+}
+function humanMove(i){
+  if (locked || board[i]) return;
+  board[i] = HUMAN; render();
+  if (winner(board)) return finish();
+  aiMove();
+}
+function newGame(){
+  board = Array(9).fill(""); locked = false; msg.textContent = "";
+  render();
+  if (AI === "X"){ locked = false; aiMove(); }  // AI moves first when it's X
+}
+
+document.getElementById("resetBtn").onclick = newGame;
+document.getElementById("swapBtn").onclick = () => {
+  [HUMAN, AI] = [AI, HUMAN];
+  document.getElementById("youMark").textContent = HUMAN;
+  document.getElementById("swapTo").textContent = AI;   // "play as" shows the other side
+  newGame();
+};
+document.getElementById("diffHard").onclick = () => setDiff("hard");
+document.getElementById("diffEasy").onclick = () => setDiff("easy");
+function setDiff(d){
+  difficulty = d;
+  document.getElementById("diffHard").className = d==="hard" ? "bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm" : "bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm";
+  document.getElementById("diffEasy").className = d==="easy" ? "bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm" : "bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm";
+  newGame();
+}
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. Games as trees of moves", why:"Any turn-based game can be drawn as a tree: the current position is the root, each legal move is a branch to a new position, and those positions branch again for the opponent's replies. A full game is one path from the root down to a leaf where someone has won or the board is full. Tic-tac-toe's tree is small — at most nine moves deep and about 255,000 reachable positions — small enough that a computer can walk the entire thing in a blink. That completeness is exactly why a perfect tic-tac-toe player is possible: the AI can literally see every future.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">position (root)<br>├─ move A → new position<br>├─ move B → new position<br>│&nbsp;&nbsp;&nbsp;└─ opponent reply → ...<br>└─ move C → ... down to WIN / LOSE / DRAW</div>`, code:`// The game is a tree. Each node is a board;
+// each edge is a legal move. A leaf is a finished
+// game (someone won, or the board is full = draw).
+// Tic-tac-toe's whole tree is tiny → searchable.` },
+ { title:"2. The board and the moves", why:"We store the board as nine cells, each 'X', 'O', or empty. The legal moves from any position are simply the empty cells. Keeping the board as a plain array is what lets the AI cheaply copy-or-undo a move while it explores hypothetical futures: place a mark, recurse, then erase it to restore the position exactly. This 'make / recurse / unmake' pattern is the backbone of nearly every game search.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">board = 9 cells [X / O / empty]<br>legal moves = the empty cells<br>make → recurse → unmake</div>`, code:`let board = Array(9).fill("");   // 0..8
+const empties = b => b.map((v,i)=>v?-1:i).filter(i=>i>=0);
+// try a move, then undo it:
+board[i] = AI; /* ...recurse... */ board[i] = "";` },
+ { title:"3. Knowing when the game is over", why:"Before the AI can score a position it must know if the game has ended. There are eight winning lines — three rows, three columns, two diagonals. If any line holds three of the same mark, that mark wins; if the board is full with no line, it's a draw; otherwise the game continues. This 'terminal test' is what stops the recursion: the search only keeps branching while the game is unfinished.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">8 winning lines:<br>3 rows · 3 cols · 2 diagonals<br>line of 3 same → winner<br>full board, no line → draw</div>`, code:`const LINES = [[0,1,2],[3,4,5],[6,7,8],
+               [0,3,6],[1,4,7],[2,5,8],
+               [0,4,8],[2,4,6]];
+function winner(b){
+  for (const [a,c,d] of LINES)
+    if (b[a] && b[a]===b[c] && b[a]===b[d]) return b[a];
+  return b.every(Boolean) ? "draw" : null;
+}` },
+ { title:"4. Scoring an ending", why:"To compare futures the AI needs numbers. We give a finished game a score from the AI's point of view: a win for the AI is a big positive (+10), a win for the human is a big negative (−10), and a draw is 0. These are the only positions we actually know the value of for certain — every other position's value is worked out by assuming perfect play from there, which is what minimax does next.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">AI wins&nbsp;&nbsp;→ +10<br>human wins → −10<br>draw&nbsp;&nbsp;&nbsp;&nbsp;→ &nbsp;&nbsp;0<br>(scored from the AI's perspective)</div>`, code:`if (w === AI)    return  10;   // great for AI
+if (w === HUMAN) return -10;   // bad for AI
+if (w === "draw") return  0;   // neutral` },
+ { title:"5. Minimax — assume both play perfectly", why:"Here's the key insight. The two players want opposite things: the AI wants to maximise the score, the human wants to minimise it. So on the AI's turn we take the best (maximum) child score, and on the human's turn we assume they'll take the worst-for-the-AI (minimum) child score. By recursing all the way down and bubbling these min/max choices back up, every position gets the value it would have under perfect play by both sides. That's minimax.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">AI's turn → take MAX of children<br>human's turn → take MIN of children<br>recurse to leaves, bubble values up<br>= value under perfect play</div>`, code:`function minimax(b, isAI){
+  const w = winner(b);
+  if (w) return w===AI?10 : w===HUMAN?-10 : 0;
+  const scores = empties(b).map(i => {
+    b[i] = isAI ? AI : HUMAN;
+    const s = minimax(b, !isAI);
+    b[i] = ""; return s;
+  });
+  return isAI ? Math.max(...scores) : Math.min(...scores);
+}` },
+ { title:"6. Win sooner, lose later (depth)", why:"Plain minimax treats all wins as equally good, so the AI might toy with you — taking a win in five moves when one was available in two, or walking into an unavoidable loss immediately instead of stalling. We fix this by folding the search depth into the score: subtract depth from a win and add it to a loss. Now a faster win scores higher and a delayed loss scores 'less bad', so the AI finishes you off quickly and clings on as long as possible when it's doomed.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">win in 2 moves&nbsp;&nbsp;→ 10 − 2 = 8<br>win in 5 moves&nbsp;&nbsp;→ 10 − 5 = 5&nbsp;&nbsp;(worse)<br>loss now&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ −10 + 0<br>loss later&nbsp;&nbsp;&nbsp;&nbsp;→ −10 + depth (better)</div>`, code:`if (w === AI)    return  10 - depth;  // prefer quick wins
+if (w === HUMAN) return -10 + depth;  // prefer slow losses
+if (w === "draw") return 0;` },
+ { title:"7. Choosing the move to play", why:"Minimax scores positions; to actually play, the AI tries each legal move, runs minimax on the resulting position (where it's now the human's turn), and keeps the move with the highest score. Because minimax already accounted for every possible reply all the way to the end, greedily picking the top-scoring first move is provably optimal — there's no deeper trick needed.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each empty cell:<br>&nbsp;&nbsp;place AI mark → minimax(...)<br>keep the highest-scoring cell<br>= the optimal move</div>`, code:`function bestMove(b){
+  let best = -Infinity, move = -1;
+  for (const i of empties(b)){
+    b[i] = AI;
+    const s = minimax(b, false, 0);
+    b[i] = "";
+    if (s > best){ best = s; move = i; }
+  }
+  return move;
+}` },
+ { title:"8. Why it's literally unbeatable", why:"Tic-tac-toe is a 'solved' game: with perfect play by both sides the result is always a draw. Because minimax searches the entire tree, the AI always plays perfectly — it will take a win if you ever give it one, and otherwise steer every line to at worst a draw. So the best any human can achieve is a tie. The only reason it ever seems to 'let' you win is if you switch it to Easy mode, where it throws away the search and moves at random.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">tic-tac-toe is SOLVED<br>perfect vs perfect → always a draw<br>minimax = perfect play<br>⇒ you can tie, never beat it</div>`, code:`// Solved game: optimal play → guaranteed draw.
+// Minimax plays optimally, so:
+//   you blunder → AI wins
+//   you play perfectly → draw
+//   AI never loses. Ever.` },
+ { title:"9. Scaling up — alpha-beta & heuristics", why:"Full minimax works here only because the tree is tiny. Real games like chess have more positions than atoms in the universe, so you can't search to the end. Two ideas rescue the approach: alpha-beta pruning skips branches that can't affect the result (often halving the work or more), and a depth limit plus a heuristic 'evaluation function' estimates a position's value without reaching a leaf. Connect Four (Day 13) already needs these. The same min/max skeleton you built today underpins the engines that beat world champions.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">big games can't search to the end<br>alpha-beta → prune dead branches<br>depth limit + heuristic → estimate value<br>same minimax core, smarter search</div>`, code:`// alpha-beta: stop exploring a branch once it
+// can't beat a result you've already found.
+function minimax(b,isAI,depth,alpha,beta){
+  // ...cutoff when beta <= alpha...
+}
+// + evaluate(b) heuristic when depth limit is hit.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
