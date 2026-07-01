@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 21 — Game of Life</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  /* life grid */
+  #board { display:grid; gap:1px; background:#cbd5e1; border:3px solid #0f172a; border-radius:10px;
+           margin:0 auto; box-shadow:0 18px 40px rgba(0,0,0,.18); width:max-content;
+           touch-action:none; }
+  .cell { width:15px; height:15px; background:#fff; cursor:pointer; user-select:none; }
+  .cell.alive { background:#10b981; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:24px; }
+  .game-wrap { position:relative; }
+  .preset { background:#10b981; color:#fff; box-shadow:0 3px 0 #059669; }
+  .preset:hover { background:#059669; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 21</div>
+      <h1 class="text-xl font-bold">🦠 Game of Life — Simple Rules, Endless Emergence</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Four tiny rules on a grid of cells produce gliders, oscillators and endless surprise.</h2>
+      <p class="text-slate-500 mb-4">This is Conway's Game of Life. Every green square is a <em>live</em> cell, every white one is <em>dead</em>. There are no players — you set up a starting pattern, press <strong>Play</strong>, and each generation every cell looks at its eight neighbours and follows the same rules at once: a live cell with 2 or 3 live neighbours survives, otherwise it dies; a dead cell with exactly 3 live neighbours is born. Click or drag on the grid to toggle cells, use <strong>Step</strong> to advance one generation at a time, <strong>Randomize</strong> to sprinkle life, and the preset buttons to drop in famous patterns. This grid is <strong>toroidal</strong> — the edges wrap around, so a glider that leaves the right side reappears on the left.</p>
+      <div class="flex justify-center">
+        <div class="game-wrap">
+          <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+            <div>Generation: <span id="gen" class="stat text-emerald-600">0</span></div>
+            <div>Live cells: <span id="pop" class="stat text-emerald-600">0</span></div>
+            <div>Status: <span id="state" class="stat text-emerald-600">Paused</span></div>
+          </div>
+          <div id="board"></div>
+        </div>
+      </div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="playBtn"  class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">▶ Play</button>
+        <button id="stepBtn"  class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">⏭ Step</button>
+        <button id="randBtn"  class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">🎲 Randomize</button>
+        <button id="clearBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">🧹 Clear</button>
+      </div>
+      <div class="flex justify-center items-center mt-3 gap-3 flex-wrap text-sm text-slate-600">
+        <span class="font-bold">Speed</span>
+        <input id="speed" type="range" min="1" max="30" value="10" class="w-48 accent-emerald-600">
+        <span id="speedVal" class="stat font-bold text-emerald-600">10</span> gen/s
+      </div>
+      <div class="flex justify-center mt-4 gap-2 flex-wrap">
+        <span class="text-sm font-bold text-slate-500 self-center">Presets:</span>
+        <button data-preset="glider"  class="preset px-3 py-2 rounded-lg font-semibold text-sm">Glider</button>
+        <button data-preset="blinker" class="preset px-3 py-2 rounded-lg font-semibold text-sm">Blinker</button>
+        <button data-preset="pulsar"  class="preset px-3 py-2 rounded-lg font-semibold text-sm">Pulsar</button>
+        <button data-preset="lwss"    class="preset px-3 py-2 rounded-lg font-semibold text-sm">LWSS</button>
+        <button data-preset="gun"     class="preset px-3 py-2 rounded-lg font-semibold text-sm">Gosper Glider Gun</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">The rules are <strong>B3/S23</strong>: a cell is <em>Born</em> if it has exactly 3 live neighbours, and it <em>Survives</em> if it has 2 or 3 — every other cell ends up dead. Each generation is computed into a fresh buffer and then swapped in, so every cell decides its next state from the <em>same</em> snapshot of the current generation. Everything runs offline in plain vanilla JS — clicking, dragging, presets, and the toroidal wrap-around all work.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the Game of Life works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A grid held as a flat array of 0/1 cells, a render that draws a CSS-grid of squares, a <code>neighbours(r,c)</code> counter that looks at the eight surrounding cells (wrapping at the edges), a <code>step()</code> that computes the next generation into a <em>separate</em> buffer using the B3/S23 rules and then swaps it in, click/drag toggling, a play loop driven by <code>setInterval</code> at an adjustable speed, and a handful of preset patterns. ~90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Model the grid as a flat array</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole universe is one array of <code>ROWS × COLS</code> numbers, where <code>0</code> means a dead cell and <code>1</code> means alive. Cell index <code>i</code> maps to row <code>Math.floor(i/COLS)</code> and column <code>i%COLS</code>. Keeping the state flat makes copying and scanning simple loops, and lets us allocate a matching "next generation" buffer in one line. We only translate an index into row and column coordinates when we count neighbours or draw a cell.</p>
+        <div class="relative">
+          <pre>const COLS = 40, ROWS = 30, CELLS = COLS * ROWS;
+let grid = new Uint8Array(CELLS);      // 0 = dead, 1 = alive
+
+const rowOf = i =&gt; Math.floor(i / COLS);
+const colOf = i =&gt; i % COLS;
+const idx   = (r, c) =&gt; r * COLS + c;  // (row,col) → flat index</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Render the grid of cells</h3></div>
+        <p class="text-sm text-slate-600 mb-3">We build one small <code>&lt;div&gt;</code> per cell once, arranged by a CSS grid with 40 columns. On every render we read the array and toggle an <code>alive</code> class, which paints the cell green or leaves it white. Re-rendering just re-reads the array, so what you see and the data behind it never drift apart. Building the DOM once and only flipping classes keeps redraws fast even at 30 generations a second.</p>
+        <div class="relative">
+          <pre>const board = document.getElementById("board");
+board.style.gridTemplateColumns = `repeat(${COLS}, 15px)`;
+const cellEls = [];
+for (let i = 0; i &lt; CELLS; i++){
+  const el = document.createElement("div");
+  el.className = "cell"; el.dataset.i = i;
+  board.appendChild(el); cellEls.push(el);
+}
+function render(){
+  for (let i = 0; i &lt; CELLS; i++)
+    cellEls[i].classList.toggle("alive", grid[i] === 1);
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Count the eight neighbours (with wrap)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every cell has eight neighbours — up, down, left, right, and the four diagonals. We loop over the nine offsets from −1 to +1 and skip the centre (the cell itself). To make the grid <em>toroidal</em>, we wrap coordinates with modular arithmetic: adding <code>ROWS</code>/<code>COLS</code> before the <code>%</code> keeps the result positive, so a cell on the top edge counts the bottom edge as its neighbour. The count returned is a number from 0 to 8 — the single input every rule depends on.</p>
+        <div class="relative">
+          <pre>function neighbours(g, r, c){
+  let n = 0;
+  for (let dr = -1; dr &lt;= 1; dr++)
+    for (let dc = -1; dc &lt;= 1; dc++){
+      if (dr === 0 &amp;&amp; dc === 0) continue;      // skip self
+      const rr = (r + dr + ROWS) % ROWS;        // wrap rows
+      const cc = (c + dc + COLS) % COLS;        // wrap cols
+      n += g[idx(rr, cc)];
+    }
+  return n;                                     // 0..8
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The four rules → the B3/S23 test</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Conway's four rules collapse into two conditions. A <em>live</em> cell survives only with 2 or 3 neighbours — fewer is underpopulation (it dies), more is overpopulation (it dies). A <em>dead</em> cell becomes alive only with exactly 3 neighbours (reproduction). Written compactly this is "Born on 3, Survives on 2 or 3", or B3/S23. This one expression is the entire law of the universe — everything else is just applying it to every cell.</p>
+        <div class="relative">
+          <pre>// given a cell's current state and its neighbour count,
+// return its next state (0 or 1) under B3/S23
+function nextState(alive, n){
+  if (alive) return (n === 2 || n === 3) ? 1 : 0;   // survive
+  return (n === 3) ? 1 : 0;                          // birth
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Compute the next generation into a buffer</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the crux. We allocate a brand-new array for the next generation and fill it by reading the <em>current</em> grid. Every cell decides its fate from the same untouched snapshot, then we swap the buffer in as the new grid. If we mutated cells in place, a cell we already updated would corrupt the neighbour count of the next one, and the simulation would be wrong. Buffer-then-swap (double buffering) keeps all cells stepping simultaneously — the whole point of a cellular automaton.</p>
+        <div class="relative">
+          <pre>function step(){
+  const next = new Uint8Array(CELLS);   // fresh buffer
+  for (let i = 0; i &lt; CELLS; i++){
+    const n = neighbours(grid, rowOf(i), colOf(i));
+    next[i] = nextState(grid[i] === 1, n);
+  }
+  grid = next;                          // swap in — never mutate in place
+  generation++;
+  render(); updateStats();
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Click &amp; drag to toggle cells</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To seed a pattern the player paints cells on and off. On mousedown we flip the clicked cell and remember we're dragging; while dragging over other cells we set them alive too, so you can sketch shapes in one stroke. Pointer events (rather than separate mouse/touch handlers) make this work on phones as well. We only flip the array value and re-render — no simulation runs until you press Play or Step.</p>
+        <div class="relative">
+          <pre>let painting = false;
+board.addEventListener("pointerdown", e =&gt; {
+  const el = e.target.closest(".cell"); if (!el) return;
+  painting = true;
+  const i = +el.dataset.i;
+  grid[i] = grid[i] ? 0 : 1;   // toggle the clicked cell
+  render(); updateStats();
+});
+board.addEventListener("pointerover", e =&gt; {
+  if (!painting) return;
+  const el = e.target.closest(".cell"); if (!el) return;
+  grid[+el.dataset.i] = 1;     // drag paints cells alive
+  render(); updateStats();
+});
+window.addEventListener("pointerup", () =&gt; painting = false);</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">The play loop &amp; adjustable speed</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Playing is just calling <code>step()</code> on a timer. We use <code>setInterval</code> whose delay is <code>1000 / speed</code> milliseconds, so a speed slider of 10 means ten generations a second. Play toggles the timer on and off; changing the speed clears and restarts the interval with the new delay. Because each tick is one clean <code>step()</code>, pausing, single-stepping, and running fast all share the exact same logic.</p>
+        <div class="relative">
+          <pre>let timer = null, speed = 10;
+function play(){
+  if (timer) return;
+  timer = setInterval(step, 1000 / speed);
+}
+function pause(){ clearInterval(timer); timer = null; }
+speedInput.oninput = () =&gt; {
+  speed = +speedInput.value;
+  if (timer){ pause(); play(); }   // restart at the new rate
+};</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Preset patterns</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Famous patterns are just lists of live-cell coordinates. We clear the grid, then stamp each <code>[row, col]</code> pair (offset to roughly centre it) as alive. A Glider walks diagonally forever; a Blinker flips between two states; a Pulsar is a period-3 oscillator; a Lightweight Spaceship (LWSS) glides sideways; and the Gosper Glider Gun endlessly fires new gliders. Press Play after stamping to watch them come alive.</p>
+        <div class="relative">
+          <pre>const PATTERNS = {
+  glider:  [[0,1],[1,2],[2,0],[2,1],[2,2]],
+  blinker: [[1,0],[1,1],[1,2]],
+  // ...pulsar, lwss, gun: bigger coordinate lists...
+};
+function stamp(name, top = 2, left = 2){
+  grid = new Uint8Array(CELLS);          // clear
+  for (const [r, c] of PATTERNS[name])
+    grid[idx(top + r, left + c)] = 1;    // set alive
+  generation = 0; render(); updateStats();
+}</pre>
+          <button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button>
+        </div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 21 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Conway's Game of Life with a flat 0/1 grid, a CSS-grid render, an eight-neighbour counter with toroidal wrap, the B3/S23 rule, a double-buffered <code>step()</code> that computes the next generation without mutating in place, click-and-drag seeding, an adjustable play loop, and preset patterns. Try counting neighbours from a padded copy to speed things up, adding other rulesets (HighLife B36/S23 has self-replicating patterns), or letting the player draw and save their own patterns.</p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== GAME OF LIFE =====
+const COLS = 40, ROWS = 30, CELLS = COLS * ROWS;
+
+const board     = document.getElementById("board");
+const msg       = document.getElementById("msg");
+const genEl     = document.getElementById("gen");
+const popEl     = document.getElementById("pop");
+const stateEl   = document.getElementById("state");
+const playBtn   = document.getElementById("playBtn");
+const stepBtn   = document.getElementById("stepBtn");
+const randBtn   = document.getElementById("randBtn");
+const clearBtn  = document.getElementById("clearBtn");
+const speedInput= document.getElementById("speed");
+const speedVal  = document.getElementById("speedVal");
+
+let grid = new Uint8Array(CELLS);   // 0 = dead, 1 = alive
+let generation = 0, timer = null, speed = 10;
+
+const rowOf = i => Math.floor(i / COLS);
+const colOf = i => i % COLS;
+const idx   = (r, c) => r * COLS + c;
+
+// count the 8 neighbours of (r,c) on a toroidal (wrap-around) grid
+function neighbours(g, r, c){
+  let n = 0;
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++){
+      if (dr === 0 && dc === 0) continue;
+      const rr = (r + dr + ROWS) % ROWS;
+      const cc = (c + dc + COLS) % COLS;
+      n += g[idx(rr, cc)];
+    }
+  return n;
+}
+
+// B3/S23: born on 3, survives on 2 or 3
+function nextState(alive, n){
+  if (alive) return (n === 2 || n === 3) ? 1 : 0;
+  return (n === 3) ? 1 : 0;
+}
+
+// compute the next generation into a SEPARATE buffer, then swap in
+function step(){
+  const next = new Uint8Array(CELLS);
+  for (let i = 0; i < CELLS; i++){
+    const n = neighbours(grid, rowOf(i), colOf(i));
+    next[i] = nextState(grid[i] === 1, n);
+  }
+  grid = next;               // never mutate in place
+  generation++;
+  render(); updateStats();
+}
+
+// build the cell elements once
+board.style.gridTemplateColumns = `repeat(${COLS}, 15px)`;
+const cellEls = [];
+for (let i = 0; i < CELLS; i++){
+  const el = document.createElement("div");
+  el.className = "cell";
+  el.dataset.i = i;
+  board.appendChild(el);
+  cellEls.push(el);
+}
+
+function render(){
+  for (let i = 0; i < CELLS; i++)
+    cellEls[i].classList.toggle("alive", grid[i] === 1);
+}
+
+function population(){
+  let p = 0;
+  for (let i = 0; i < CELLS; i++) p += grid[i];
+  return p;
+}
+
+function updateStats(){
+  genEl.textContent = generation;
+  popEl.textContent = population();
+  stateEl.textContent = timer ? "Running" : "Paused";
+}
+
+// ----- paint by click & drag -----
+let painting = false;
+board.addEventListener("pointerdown", e => {
+  const el = e.target.closest(".cell"); if (!el) return;
+  e.preventDefault();
+  painting = true;
+  const i = +el.dataset.i;
+  grid[i] = grid[i] ? 0 : 1;
+  render(); updateStats();
+});
+board.addEventListener("pointerover", e => {
+  if (!painting) return;
+  const el = e.target.closest(".cell"); if (!el) return;
+  grid[+el.dataset.i] = 1;
+  render(); updateStats();
+});
+window.addEventListener("pointerup", () => painting = false);
+
+// ----- controls -----
+function play(){
+  if (timer) return;
+  timer = setInterval(step, 1000 / speed);
+  playBtn.textContent = "⏸ Pause";
+  updateStats();
+}
+function pause(){
+  clearInterval(timer); timer = null;
+  playBtn.textContent = "▶ Play";
+  updateStats();
+}
+playBtn.onclick = () => timer ? pause() : play();
+stepBtn.onclick = () => { pause(); step(); };
+clearBtn.onclick = () => {
+  pause();
+  grid = new Uint8Array(CELLS);
+  generation = 0;
+  msg.textContent = "";
+  render(); updateStats();
+};
+randBtn.onclick = () => {
+  pause();
+  for (let i = 0; i < CELLS; i++) grid[i] = Math.random() < 0.28 ? 1 : 0;
+  generation = 0;
+  render(); updateStats();
+};
+speedInput.oninput = () => {
+  speed = +speedInput.value;
+  speedVal.textContent = speed;
+  if (timer){ pause(); play(); }
+};
+
+// ----- preset patterns (lists of [row, col] live cells) -----
+const PATTERNS = {
+  glider: [[0,1],[1,2],[2,0],[2,1],[2,2]],
+  blinker: [[1,0],[1,1],[1,2]],
+  // period-3 pulsar (13×13)
+  pulsar: (() => {
+    const base = [2,3,4,8,9,10];
+    const pts = [];
+    // top/bottom horizontal bars
+    for (const c of base){ pts.push([0,c]); pts.push([5,c]); pts.push([7,c]); pts.push([12,c]); }
+    // left/right vertical bars
+    for (const r of base){ pts.push([r,0]); pts.push([r,5]); pts.push([r,7]); pts.push([r,12]); }
+    return pts;
+  })(),
+  // lightweight spaceship
+  lwss: [[0,1],[0,4],[1,0],[2,0],[2,4],[3,0],[3,1],[3,2],[3,3]],
+  // Gosper glider gun
+  gun: [
+    [5,1],[5,2],[6,1],[6,2],
+    [5,11],[6,11],[7,11],[4,12],[8,12],[3,13],[9,13],[3,14],[9,14],
+    [6,15],[4,16],[8,16],[5,17],[6,17],[7,17],[6,18],
+    [3,21],[4,21],[5,21],[3,22],[4,22],[5,22],[2,23],[6,23],
+    [1,25],[2,25],[6,25],[7,25],
+    [3,35],[4,35],[3,36],[4,36]
+  ]
+};
+
+function stamp(name){
+  pause();
+  grid = new Uint8Array(CELLS);
+  const pts = PATTERNS[name];
+  // centre small patterns; anchor the big gun near the top-left
+  let top = 3, left = 3;
+  if (name === "glider")  { top = 3;  left = 3; }
+  if (name === "blinker") { top = 14; left = 18; }
+  if (name === "pulsar")  { top = 8;  left = 13; }
+  if (name === "lwss")    { top = 13; left = 4; }
+  if (name === "gun")     { top = 2;  left = 1; }
+  for (const [r, c] of pts){
+    const rr = top + r, cc = left + c;
+    if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS) grid[idx(rr, cc)] = 1;
+  }
+  generation = 0;
+  msg.textContent = {
+    glider:  "Glider — a spaceship that walks diagonally forever. Press Play.",
+    blinker: "Blinker — the simplest oscillator, period 2. Press Play.",
+    pulsar:  "Pulsar — a period-3 oscillator. Press Play.",
+    lwss:    "Lightweight Spaceship — glides sideways. Press Play.",
+    gun:     "Gosper Glider Gun — fires a new glider every 30 generations. Press Play."
+  }[name] || "";
+  render(); updateStats();
+}
+document.querySelectorAll("[data-preset]").forEach(b => {
+  b.onclick = () => stamp(b.dataset.preset);
+});
+
+// start on a glider so the grid isn't empty
+stamp("glider");
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+  { title:"1. What is a cellular automaton?", why:"Conway's Game of Life is a cellular automaton: a grid of cells that all update themselves at the same instant by following one shared rule based only on their immediate surroundings. There is no player, no goal, and no score — you set a starting arrangement and let it run. Despite being invented by mathematician John Conway in 1970 as a bit of recreational maths, it turns out to model surprisingly life-like behaviour. From a handful of rules you get patterns that move, blink, collide, and even build things. It is the classic demonstration that enormous complexity can emerge from utterly simple local rules.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">grid of cells · one shared rule<br>all update at the same instant<br>each cell sees only its neighbours<br>simple rules → complex behaviour</div>`, code:`// A cellular automaton = grid + one local rule.
+// Every cell's next state depends ONLY on
+// its current state and its neighbours' states.
+// No player, no score — just evolution over "generations".` },
+
+  { title:"2. The grid and cell state", why:"The universe is a two-dimensional grid, and each cell is in one of just two states: alive or dead. We store the whole thing as one flat array of 0s and 1s, which is compact and quick to scan. A cell's index maps to a row and column with simple integer maths. Because the state is so tiny — a single bit per cell — millions of cells are cheap, and copying the grid to make the next generation is trivial. Everything the game does is built on this minimal model.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">0 = dead · 1 = alive<br>grid = flat array of ROWS×COLS<br>index i → row floor(i/COLS), col i%COLS<br>one bit of state per cell</div>`, code:`const COLS = 40, ROWS = 30, CELLS = COLS * ROWS;
+let grid = new Uint8Array(CELLS);       // 0 = dead, 1 = alive
+const rowOf = i => Math.floor(i / COLS);
+const colOf = i => i % COLS;
+const idx   = (r, c) => r * COLS + c;` },
+
+  { title:"3. Counting the eight neighbours", why:"Every cell has eight neighbours: the cells above, below, left, right, and the four diagonals. The single number that drives every rule is how many of those eight are currently alive. We loop over the nine offsets around a cell and add up the live ones, skipping the cell itself. To keep the grid seamless we wrap around the edges — the top row's neighbours include the bottom row — which turns the flat grid into a torus (a doughnut shape). The result is always a number from 0 to 8.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">⬜⬜⬜<br>⬜🟩⬜  count the 8 around 🟩<br>⬜⬜⬜<br>edges wrap → toroidal grid · result 0..8</div>`, code:`function neighbours(g, r, c){
+  let n = 0;
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++){
+      if (dr === 0 && dc === 0) continue;   // skip self
+      const rr = (r + dr + ROWS) % ROWS;    // wrap rows
+      const cc = (c + dc + COLS) % COLS;    // wrap cols
+      n += g[idx(rr, cc)];
+    }
+  return n;   // 0..8
+}` },
+
+  { title:"4. Rule one — survival", why:"The first rule governs cells that are already alive and comfortable. A live cell with exactly two or three live neighbours survives into the next generation — it has enough company to keep going but is not crowded. This is the rule that lets stable shapes persist and oscillators keep ticking. Two or three is the sweet spot Conway tuned by hand until the game produced interesting, balanced behaviour rather than dying out or exploding. Every other neighbour count spells trouble, as the next two rules describe.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">LIVE cell + 2 or 3 neighbours<br>→ stays ALIVE ✅<br>the "just right" amount of company</div>`, code:`// Rule 1 — survival:
+// a LIVE cell with 2 or 3 live neighbours stays alive.
+if (alive && (n === 2 || n === 3)) return 1;` },
+
+  { title:"5. Rule two — death by under- or overpopulation", why:"Two rules cover how a live cell dies. If it has fewer than two live neighbours it dies of underpopulation — too isolated to survive, like a lone cell with no support. If it has more than three live neighbours it dies of overpopulation — too crowded, its resources exhausted. So a live cell only survives in that narrow two-or-three window; zero, one, four, five, six, seven, or eight neighbours all kill it. These two failure modes are what stop the grid from either fading to nothing or filling up completely.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">LIVE + &lt; 2 neighbours → dies (lonely) 💀<br>LIVE + &gt; 3 neighbours → dies (crowded) 💀<br>only 2 or 3 keeps it alive</div>`, code:`// Rule 2 — death:
+// fewer than 2 neighbours → underpopulation (die)
+// more than 3 neighbours → overpopulation (die)
+if (alive && (n < 2 || n > 3)) return 0;` },
+
+  { title:"6. Rule three — birth", why:"The final rule brings new cells to life. A dead cell with exactly three live neighbours becomes alive in the next generation — three parents are just enough to reproduce. Exactly three, no more and no less: two isn't enough and four is too many. This is the only way empty space fills in, and it is what makes patterns grow, move, and reproduce. Together with the survival and death rules it forms the complete ruleset written as B3/S23 — Born on 3, Survives on 2 or 3.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">DEAD cell + exactly 3 neighbours<br>→ becomes ALIVE 🐣<br>the whole ruleset = B3 / S23</div>`, code:`// Rule 3 — birth:
+// a DEAD cell with exactly 3 live neighbours is born.
+if (!alive && n === 3) return 1;
+
+// all four rules in one function:
+function nextState(alive, n){
+  if (alive) return (n === 2 || n === 3) ? 1 : 0;
+  return (n === 3) ? 1 : 0;
+}` },
+
+  { title:"7. Why you compute into a separate buffer", why:"Here is the mistake almost everyone makes first: updating cells in the same array they are reading. If you kill a cell and then look at its neighbour, that neighbour now sees a changed grid — but the rules say every cell must decide based on the SAME snapshot of the current generation. The fix is double buffering: read from the current grid, write every result into a fresh buffer, and only when all cells are done do you swap the buffer in as the new grid. This guarantees the whole board steps simultaneously, exactly as a cellular automaton demands.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">read CURRENT grid → write NEXT buffer<br>swap buffer in when done<br>never mutate in place ⚠️<br>all cells step at the same instant</div>`, code:`function step(){
+  const next = new Uint8Array(CELLS);   // fresh buffer
+  for (let i = 0; i < CELLS; i++){
+    const n = neighbours(grid, rowOf(i), colOf(i));
+    next[i] = nextState(grid[i] === 1, n);
+  }
+  grid = next;        // swap in — the old grid is never mutated mid-scan
+  generation++;
+}` },
+
+  { title:"8. Emergence — still lifes, oscillators, spaceships", why:"Run those rules and life-like patterns emerge that nobody explicitly programmed. Still lifes (like a 2×2 block) never change. Oscillators (like the Blinker or Pulsar) cycle through a repeating loop of shapes. Spaceships (like the Glider and the Lightweight Spaceship) actually travel across the grid, translating themselves one step at a time. The famous Gosper Glider Gun is a pattern that periodically fires off gliders forever — a stationary factory producing moving objects. All of this falls out of just B3/S23; it is designed into the rules only in the sense that Conway chose numbers that make it happen.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">still life → never changes (block)<br>oscillator → repeats (blinker, pulsar)<br>spaceship → travels (glider, LWSS)<br>gun → fires gliders forever</div>`, code:`const PATTERNS = {
+  block:   [[0,0],[0,1],[1,0],[1,1]],          // still life
+  blinker: [[1,0],[1,1],[1,2]],                // oscillator (period 2)
+  glider:  [[0,1],[1,2],[2,0],[2,1],[2,2]]     // spaceship (moves!)
+};
+// stamp any of these, press Play, and watch behaviour emerge.` },
+
+  { title:"9. Turing-completeness — a computer made of cells", why:"The Game of Life is not just pretty — it is Turing-complete, meaning you can build a fully general computer inside it. Using glider guns as signal sources, streams of gliders as wires carrying bits, and carefully arranged collisions as logic gates, people have constructed AND, OR and NOT gates, memory, and even working clocks and calculators entirely out of Life patterns. In principle anything a normal computer can compute can be computed by a big enough Life board. That a two-state grid with four rules can host universal computation is one of the most astonishing facts in all of computer science.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">glider streams = wires (bits)<br>collisions = logic gates (AND/OR/NOT)<br>guns = signal sources<br>⇒ Life is Turing-complete 🤯</div>`, code:`// Glider guns fire glider "signals";
+// engineered collisions act as logic gates;
+// combine enough of them and you get a general-purpose
+// computer built entirely out of Game-of-Life cells.
+// (People have built clocks, memory, even a calculator.)` },
+
+  { title:"10. Putting it all together", why:"The whole game is a tiny stack: a flat 0/1 grid, an eight-neighbour counter that wraps at the edges, the B3/S23 rule expressed as one function, and a step that reads the current grid and writes a fresh buffer before swapping it in. Wrap that step in a timer for continuous play, add click-and-drag to seed patterns, and drop in a few famous presets, and you have a complete, mesmerising simulation. From four rules on a grid you get gliders, guns, oscillators, and — remarkably — universal computation. That is the enduring magic of the Game of Life.", concept:`<div class="text-center w-full"><div class="text-4xl mb-2">🦠➡️♾️</div><p class="font-bold text-slate-700">flat grid + 8-neighbour count + B3/S23 + double-buffered step + a timer = Conway's Game of Life.</p></div>`, code:`// The complete loop:
+function tick(){
+  step();              // next gen into a buffer, then swap
+}
+setInterval(tick, 1000 / speed);   // press Play to run
+// four rules on a grid → emergence → Turing-completeness.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },2800); };
+show(0);
+
+// ===== BUILD copy buttons =====
+function copy(btn) {
+  const pre = btn.parentElement.querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent);
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  setTimeout(() => btn.textContent = orig, 1500);
+}
+</script>
+</body>
+</html>
