@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 23 — Sokoban (Push the Boxes)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  #board { display:grid; gap:3px; background:#0f172a; padding:8px; border-radius:14px; margin:0 auto; width:max-content;
+           box-shadow:0 18px 40px rgba(0,0,0,.18); }
+  .cell { width:46px; height:46px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+          font-size:26px; line-height:1; user-select:none; transition:background .1s; }
+  .cell.wall  { background:#334155; }
+  .cell.floor { background:#f1f5f9; }
+  .cell.goal  { background:#a7f3d0; }
+  .cell.box   { color:#b45309; }
+  .cell.boxok { color:#059669; }
+  .cell.player{ color:#0ea5e9; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+  .pad-btn { width:52px; height:52px; font-size:22px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 23</div>
+      <h1 class="text-xl font-bold">📦 Sokoban — Push Every Box Onto a Goal</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Push every 📦 onto a 🟩. You can only <em>push</em> boxes — never pull.</h2>
+      <p class="text-slate-500 mb-5">Use the <strong>arrow keys</strong> (or the on-screen pad) to walk the little worker 🧍 around the warehouse. Walk into a box and you'll <strong>push</strong> it one cell — but only if the square just beyond it is empty. You can never push two boxes at once, and you can never push a box into a wall. The puzzle is solved the instant <em>every</em> goal square has a box sitting on it. The catch: shove a box into a corner it can't come out of and the level becomes impossible — so think before you push.</p>
+      <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+        <div>Level: <span id="lvlNo" class="stat text-emerald-600">1</span></div>
+        <div>Moves: <span id="moves" class="stat text-emerald-600">0</span></div>
+        <div>Pushes: <span id="pushes" class="stat text-slate-500">0</span></div>
+        <div>Boxes home: <span id="onGoal" class="stat text-slate-500">0/0</span></div>
+      </div>
+      <div id="board"></div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="resetBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↻ Reset level</button>
+        <button id="hintBtn"  class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">💡 Is it still solvable?</button>
+      </div>
+      <div class="flex justify-center items-center mt-3 gap-2 flex-wrap text-sm text-slate-600">
+        <span class="font-bold mr-1">Level</span>
+        <button data-lvl="0" class="lvlBtn bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">1 · warm-up</button>
+        <button data-lvl="1" class="lvlBtn bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">2 · two boxes</button>
+        <button data-lvl="2" class="lvlBtn bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">3 · the squeeze</button>
+      </div>
+      <div class="flex flex-col items-center mt-4 gap-1 select-none">
+        <button id="up" class="pad-btn bg-white border border-slate-300 rounded-lg font-bold hover:bg-emerald-50">↑</button>
+        <div class="flex gap-1">
+          <button id="left" class="pad-btn bg-white border border-slate-300 rounded-lg font-bold hover:bg-emerald-50">←</button>
+          <button id="down" class="pad-btn bg-white border border-slate-300 rounded-lg font-bold hover:bg-emerald-50">↓</button>
+          <button id="right" class="pad-btn bg-white border border-slate-300 rounded-lg font-bold hover:bg-emerald-50">→</button>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">The board is just a 2D grid of characters — <code>#</code> wall, <code>.</code> goal, <code>$</code> box, <code>@</code> worker. Every move looks one cell ahead (and for a push, two cells ahead) to decide what's legal. The <strong>Is it still solvable?</strong> button runs a breadth-first search over box+worker positions to tell you whether a solution still exists from here. Everything runs offline in vanilla JS.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Sokoban works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A level held as a grid of characters, a "what's at row r, col c?" helper, one <code>move(dr,dc)</code> function that carries the whole push rule, a win check that scans for uncovered goals, and a bit of UI glue. About 90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Model the level as a grid</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A Sokoban level is a rectangle of tiles, so store it as an array of strings — one string per row, one character per cell. The characters are the classic Sokoban alphabet: <code>#</code> wall, space is floor, <code>.</code> goal, <code>$</code> box, <code>@</code> worker. Splitting each row string into a 2D array of cells lets you read any tile with <code>grid[r][c]</code>. This one data structure is the entire game state.</p>
+        <div class="relative"><pre>const LEVEL = [
+  "#####",
+  "#@$.#",   // worker, box, goal
+  "#####",
+];
+// # wall · (space) floor · . goal · $ box · @ worker
+let grid = LEVEL.map(row =&gt; row.split(""));  // grid[r][c]</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Separate the moving pieces from the floor</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Here's the tricky bit: a goal (<code>.</code>) and a box (<code>$</code>) can occupy the <em>same</em> tile — a box parked on its goal. So it's cleaner to keep two layers: a static <code>floor</code> layer that only remembers walls and goals, and dynamic sets for the box positions and the worker position. Then rendering just overlays the movers on top of the floor, and nothing gets lost.</p>
+        <div class="relative"><pre>let boxes = new Set();          // "r,c" strings
+let goals = new Set();
+let player = {r:0, c:0};
+grid.forEach((row,r) =&gt; row.forEach((ch,c) =&gt; {
+  if (ch === "$") boxes.add(r+","+c);
+  if (ch === ".") goals.add(r+","+c);
+  if (ch === "@") player = {r, c};
+}));</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Turn a key press into a direction</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Movement is always one step in one of four directions, so map each arrow key to a <code>(dr, dc)</code> delta: up is <code>(-1,0)</code>, down is <code>(+1,0)</code>, left is <code>(0,-1)</code>, right is <code>(0,+1)</code>. Row grows downward, so "up" subtracts from the row index. Every move — walking or pushing — funnels through a single <code>move(dr,dc)</code> function, which keeps the rules in one place.</p>
+        <div class="relative"><pre>const DIRS = {
+  ArrowUp:[-1,0], ArrowDown:[1,0],
+  ArrowLeft:[0,-1], ArrowRight:[0,1],
+};
+document.onkeydown = e =&gt; {
+  const d = DIRS[e.key];
+  if (d) { e.preventDefault(); move(d[0], d[1]); }
+};</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The push rule — look one (and two) cells ahead</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the heart of Sokoban. Compute the tile in front of the worker. If it's a wall, do nothing. If it's floor, just step there. If it's a box, look <em>one more</em> cell in the same direction: only if that far tile is floor (not a wall, not another box) can you push — move the box forward and step into where it was. Two look-aheads, and the whole game's legality lives right here.</p>
+        <div class="relative"><pre>function move(dr, dc){
+  const nr = player.r + dr, nc = player.c + dc;   // tile ahead
+  if (isWall(nr, nc)) return;                     // blocked
+  if (boxes.has(nr+","+nc)) {                     // a box is there
+    const br = nr + dr, bc = nc + dc;             // tile beyond box
+    if (isWall(br, bc) || boxes.has(br+","+bc)) return; // can't push
+    boxes.delete(nr+","+nc);                      // push the box
+    boxes.add(br+","+bc);
+  }
+  player = {r:nr, c:nc};                           // worker steps in
+  render();  checkWin();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Win check — every goal covered</h3></div>
+        <p class="text-sm text-slate-600 mb-3">You win when every goal square has a box on it. Since goals never move, the simplest test is: is each goal position also in the box set? Because a level always has exactly as many boxes as goals, "every goal covered" is the same as "every box home". Count the overlap to drive the "boxes home 3/3" readout too.</p>
+        <div class="relative"><pre>function boxesOnGoal(){
+  let n = 0;
+  for (const g of goals) if (boxes.has(g)) n++;
+  return n;
+}
+function checkWin(){
+  if (boxesOnGoal() === goals.size)
+    msg.textContent = "🎉 Solved!";
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Render the grid + wire the pad</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Rendering paints one <code>&lt;div&gt;</code> per tile: draw the floor/wall/goal from the static layer, then overlay a box or the worker on top. A box on a goal gets a "done" colour so progress is visible. Point the on-screen arrow buttons at the same <code>move()</code> the keyboard uses, add a Reset that reloads the level, and the game is complete.</p>
+        <div class="relative"><pre>function render(){
+  board.innerHTML = "";
+  board.style.gridTemplateColumns = `repeat(${cols}, 46px)`;
+  for (let r=0; r&lt;rows; r++) for (let c=0; c&lt;cols; c++){
+    const key = r+","+c, div = document.createElement("div");
+    div.className = "cell " + (isWall(r,c) ? "wall"
+      : goals.has(key) ? "goal" : "floor");
+    if (boxes.has(key)) div.textContent = goals.has(key) ? "✅" : "📦";
+    else if (player.r===r &amp;&amp; player.c===c) div.textContent = "🧍";
+    board.appendChild(div);
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 23 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Sokoban: a character-grid level, a box/worker/goal state, one <code>move()</code> function that carries the whole push-only rule with a two-cell look-ahead, and a win check that scans for uncovered goals. Next: add undo (keep a stack of past states), detect corner deadlocks, then write a real solver — BFS or A* over <em>(worker, boxes)</em> states. <strong>👉 Tomorrow — Day 24: Lights Out.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== SOKOBAN =====
+// # wall · space floor · . goal · $ box · @ worker · * box-on-goal · + worker-on-goal
+const LEVELS = [
+  [ "#######",
+    "#     #",
+    "# @$. #",
+    "#     #",
+    "#######" ],
+  [ "########",
+    "#      #",
+    "# $  . #",
+    "# @    #",
+    "# $  . #",
+    "#      #",
+    "########" ],
+  [ "########",
+    "#. #   #",
+    "#  $ $.#",
+    "#  @   #",
+    "#.$ $ .#",
+    "#      #",
+    "########" ],
+];
+
+const boardEl = document.getElementById("board");
+const msg = document.getElementById("msg");
+let floor = [];              // static: '#', '.', or ' '
+let boxes = new Set();       // "r,c"
+let goals = new Set();       // "r,c"
+let player = {r:0, c:0};
+let rows = 0, cols = 0;
+let moves = 0, pushes = 0;
+let lvlIdx = 0, solved = false;
+
+function loadLevel(idx){
+  lvlIdx = idx; solved = false; moves = 0; pushes = 0;
+  const map = LEVELS[idx];
+  rows = map.length; cols = Math.max(...map.map(r => r.length));
+  floor = []; boxes = new Set(); goals = new Set(); player = {r:0,c:0};
+  for (let r=0; r<rows; r++){
+    floor.push([]);
+    for (let c=0; c<cols; c++){
+      const ch = map[r][c] || " ";
+      if (ch === "#") floor[r].push("#");
+      else if (ch === "." || ch === "*" || ch === "+"){ floor[r].push("."); goals.add(r+","+c); }
+      else floor[r].push(" ");
+      if (ch === "$" || ch === "*") boxes.add(r+","+c);
+      if (ch === "@" || ch === "+") player = {r, c};
+    }
+  }
+  document.getElementById("lvlNo").textContent = idx + 1;
+  msg.textContent = "";
+  render();
+}
+
+function isWall(r,c){ return r<0 || c<0 || r>=rows || c>=cols || floor[r][c] === "#"; }
+function boxesOnGoal(){ let n=0; for (const g of goals) if (boxes.has(g)) n++; return n; }
+
+function move(dr, dc){
+  if (solved) return;
+  const nr = player.r + dr, nc = player.c + dc;   // tile ahead
+  if (isWall(nr, nc)) return;                     // blocked by wall
+  const aheadKey = nr + "," + nc;
+  if (boxes.has(aheadKey)){                        // a box sits ahead
+    const br = nr + dr, bc = nc + dc;              // tile beyond the box
+    if (isWall(br, bc) || boxes.has(br+","+bc)) return; // can't push into wall/box
+    boxes.delete(aheadKey);                        // push the box forward
+    boxes.add(br + "," + bc);
+    pushes++;
+  }
+  player = {r:nr, c:nc};                            // worker steps in
+  moves++;
+  render();
+  checkWin();
+}
+
+function render(){
+  boardEl.innerHTML = "";
+  boardEl.style.gridTemplateColumns = "repeat(" + cols + ", 46px)";
+  for (let r=0; r<rows; r++){
+    for (let c=0; c<cols; c++){
+      const key = r + "," + c;
+      const div = document.createElement("div");
+      const isGoal = goals.has(key);
+      let cls = "cell " + (isWall(r,c) ? "wall" : isGoal ? "goal" : "floor");
+      let txt = "";
+      if (boxes.has(key)){ txt = isGoal ? "✅" : "📦"; cls += isGoal ? " boxok" : " box"; }
+      else if (player.r === r && player.c === c){ txt = "🧍"; cls += " player"; }
+      div.className = cls; div.textContent = txt;
+      boardEl.appendChild(div);
+    }
+  }
+  document.getElementById("moves").textContent = moves;
+  document.getElementById("pushes").textContent = pushes;
+  document.getElementById("onGoal").textContent = boxesOnGoal() + "/" + goals.size;
+}
+
+function checkWin(){
+  if (boxesOnGoal() === goals.size && goals.size > 0){
+    solved = true;
+    msg.textContent = "🎉 Solved in " + moves + " moves (" + pushes + " pushes)!";
+    msg.className = "mt-4 font-bold text-emerald-600";
+  }
+}
+
+// ---- BFS solvability check over (player, boxes) states ----
+function boxesKey(set){ return [...set].sort().join("|"); }
+function stateKey(p, set){ return p.r + "," + p.c + ":" + boxesKey(set); }
+
+function isSolvable(startPlayer, startBoxes){
+  const goalKey = boxesKey(goals);
+  const startBK = boxesKey(startBoxes);
+  if (startBK === goalKey) return true;
+  const seen = new Set();
+  const queue = [{p:startPlayer, b:startBoxes}];
+  seen.add(stateKey(startPlayer, startBoxes));
+  const DELTAS = [[-1,0],[1,0],[0,-1],[0,1]];
+  let expansions = 0;
+  while (queue.length && expansions < 200000){
+    const {p, b} = queue.shift(); expansions++;
+    for (const [dr,dc] of DELTAS){
+      const nr = p.r + dr, nc = p.c + dc;
+      if (isWall(nr, nc)) continue;
+      const aheadKey = nr + "," + nc;
+      let nb = b;
+      if (b.has(aheadKey)){
+        const br = nr + dr, bc = nc + dc;
+        if (isWall(br, bc) || b.has(br+","+bc)) continue;   // push blocked
+        nb = new Set(b); nb.delete(aheadKey); nb.add(br+","+bc);
+      }
+      const np = {r:nr, c:nc};
+      const k = stateKey(np, nb);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (boxesKey(nb) === goalKey) return true;   // all boxes home
+      queue.push({p:np, b:nb});
+    }
+  }
+  return false;
+}
+
+// build buttons + input
+document.getElementById("resetBtn").onclick = () => loadLevel(lvlIdx);
+document.querySelectorAll(".lvlBtn").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".lvlBtn").forEach(x => x.className = "lvlBtn bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm");
+  b.className = "lvlBtn bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm";
+  loadLevel(+b.dataset.lvl);
+});
+document.getElementById("hintBtn").onclick = () => {
+  if (solved){ msg.textContent = "Already solved 🎉"; return; }
+  const ok = isSolvable(player, boxes);
+  msg.textContent = ok
+    ? "✅ Still solvable — a solution exists from here."
+    : "🚫 Deadlocked — no solution from here. Reset the level.";
+  msg.className = ok ? "mt-4 font-bold text-emerald-600" : "mt-4 font-bold text-rose-500";
+};
+
+const DIRS = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] };
+document.addEventListener("keydown", e => {
+  const d = DIRS[e.key];
+  if (d){ e.preventDefault(); move(d[0], d[1]); }
+});
+document.getElementById("up").onclick    = () => move(-1, 0);
+document.getElementById("down").onclick  = () => move( 1, 0);
+document.getElementById("left").onclick  = () => move( 0,-1);
+document.getElementById("right").onclick = () => move( 0, 1);
+
+loadLevel(0);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. A level is just a grid of characters", why:"Sokoban is a warehouse seen from above, and every warehouse is a rectangle of tiles, so the natural way to store a level is a 2D grid. We use the classic Sokoban alphabet where each character is one tile: a hash for a wall, a space for open floor, a dot for a goal square, a dollar for a box, and an at-sign for the worker. Reading a whole level then becomes as simple as looping over rows and columns and looking at grid[r][c]. This single grid holds the entire state of the puzzle, which is exactly what makes the rest of the code short and predictable.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono"># # # # #<br># @ $ . #&nbsp;&nbsp;&larr; worker, box, goal<br># # # # #<br><br># wall · (space) floor · . goal · $ box · @ worker</div>`, code:`const LEVEL = [
+  "#####",
+  "#@$.#",   // worker, box, goal
+  "#####",
+];
+// grid[r][c] gives the tile at row r, column c
+let grid = LEVEL.map(row => row.split(""));` },
+
+ { title:"2. Rows, columns and coordinates", why:"Because the grid is a list of rows and each row is a list of columns, every tile has an address written as (row, column). Row indices grow downward and column indices grow to the right — the opposite of how you might first imagine a graph, and a very common source of bugs. Getting comfortable with this convention early matters, because 'move up' will mean subtracting one from the row, not adding. We also decide that anything off the edge of the grid counts as a wall, so the worker can never wander out of the level.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">(0,0) (0,1) (0,2)<br>(1,0) (1,1) (1,2)<br>(2,0) (2,1) (2,2)<br><br>row ↓ grows down · col → grows right</div>`, code:`function isWall(r, c){
+  // off the edge = wall, so the worker stays inside
+  if (r < 0 || c < 0 || r >= rows || c >= cols) return true;
+  return floor[r][c] === "#";
+}` },
+
+ { title:"3. Keeping movers separate from the floor", why:"A subtle trap in Sokoban is that a box can sit on top of a goal, so a single tile sometimes needs to be 'goal AND box' at once. Trying to squeeze that into one character gets messy fast. The clean fix is to keep two layers: a static floor layer that only ever remembers walls and goals, and separate collections for the things that move — the boxes and the worker. Rendering then draws the floor first and overlays the movers on top, so a box on a goal simply shows as 'box, and the goal is still underneath'.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">STATIC floor: walls + goals (never change)<br>DYNAMIC: boxes {..} + worker (r,c)<br><br>render = floor first, then movers on top<br>⇒ a box can sit on a goal, nothing lost</div>`, code:`let floor  = [];             // '#', '.', or ' '  (static)
+let boxes  = new Set();      // "r,c" positions   (moves)
+let goals  = new Set();      // "r,c" positions   (static)
+let player = {r:0, c:0};     //                    (moves)` },
+
+ { title:"4. Turning a key press into a direction", why:"Every action in Sokoban is a single step in one of four directions, so we translate each arrow key into a small change in coordinates called a delta. Up is (-1, 0) because rows grow downward, down is (+1, 0), left is (0, -1), and right is (0, +1). Funnelling all four through one move(dr, dc) function means the movement and push rules are written exactly once, no matter whether the player used the keyboard or tapped an on-screen button. Keeping the rule in a single place is what stops the four directions from slowly drifting out of sync.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">↑ = (-1, 0)&nbsp;&nbsp;&nbsp;↓ = (+1, 0)<br>← = ( 0,-1)&nbsp;&nbsp;→ = ( 0,+1)<br><br>all four → one move(dr, dc)</div>`, code:`const DIRS = {
+  ArrowUp:[-1,0], ArrowDown:[1,0],
+  ArrowLeft:[0,-1], ArrowRight:[0,1],
+};
+document.onkeydown = e => {
+  const d = DIRS[e.key];
+  if (d){ e.preventDefault(); move(d[0], d[1]); }
+};` },
+
+ { title:"5. The push rule — look one cell ahead", why:"This is the rule that makes Sokoban Sokoban. When the worker tries to move, first compute the tile directly ahead of it. If that tile is a wall, nothing happens and the move is refused. If it is empty floor, the worker simply steps onto it. If it holds a box, we are not done yet — a box can only be pushed, never pulled, so we have to look further. Everything else in the game is bookkeeping around this one moment of deciding what is in front of you.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">tile ahead is a WALL&nbsp;&nbsp;→ do nothing<br>tile ahead is FLOOR&nbsp;→ step onto it<br>tile ahead is a BOX&nbsp;&nbsp;→ check step 6<br><br>you can push, never pull</div>`, code:`function move(dr, dc){
+  const nr = player.r + dr, nc = player.c + dc; // tile ahead
+  if (isWall(nr, nc)) return;                   // wall → blocked
+  if (!boxes.has(nr+","+nc)){                   // floor → just walk
+    player = {r:nr, c:nc}; render(); return;
+  }
+  // ...box ahead: decide whether we can push it (next step)
+}` },
+
+ { title:"6. Pushing needs a SECOND look-ahead", why:"If there is a box in front of the worker, whether the push is legal depends entirely on the tile one step beyond the box, in the same direction. That far tile has to be genuinely empty — not a wall, and not another box — because you can never push a box into a wall and you can never push two boxes at once. When the far tile is clear, we move the box forward into it and let the worker step into the space the box just vacated. So a single push touches two tiles, and needs the worker's tile, the box's tile, and the tile beyond all lined up.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">🧍 📦 ⬜  → push OK  → &nbsp;🧍 📦<br>🧍 📦 🧱  → blocked (wall beyond)<br>🧍 📦 📦  → blocked (box beyond)<br><br>one push moves TWO tiles</div>`, code:`// inside move(), a box is at (nr,nc):
+const br = nr + dr, bc = nc + dc;   // tile BEYOND the box
+if (isWall(br, bc) || boxes.has(br+","+bc)) return; // can't push
+boxes.delete(nr+","+nc);            // box leaves its tile
+boxes.add(br+","+bc);               // box moves forward
+player = {r:nr, c:nc};              // worker steps into old box tile
+render();` },
+
+ { title:"7. Winning — every goal covered", why:"The puzzle is won the moment every goal square has a box standing on it. Since goals never move, the cleanest test is to walk through the goal positions and ask whether each one is also in the set of box positions. A well-formed level always has exactly as many boxes as goals, so 'every goal is covered' and 'every box is home' are two ways of saying the same thing. We run this check after every single move, and the same count drives the little 'boxes home 2/3' progress readout so you can feel yourself getting closer.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each goal g:<br>&nbsp;&nbsp;is there a box on g?<br>all goals covered → 🎉 solved<br><br>#boxes always == #goals</div>`, code:`function boxesOnGoal(){
+  let n = 0;
+  for (const g of goals) if (boxes.has(g)) n++;
+  return n;
+}
+function checkWin(){
+  if (boxesOnGoal() === goals.size)
+    msg.textContent = "🎉 Solved!";
+}` },
+
+ { title:"8. Deadlocks — how you get stuck", why:"Sokoban is unforgiving because there is no pull move, which means some mistakes can never be undone within the rules. The classic example is pushing a box into a corner where two walls meet: from a corner a box cannot be pushed in any direction, so unless that corner happens to be a goal, the level is now impossible even though nothing looks 'over' yet. A whole family of these dead states exists — a box pinned against a wall with no goal along it is another. Good players learn to spot deadlocks before committing, and real solvers actively prune them away.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">🧱 🧱<br>🧱 📦&nbsp;&nbsp;← box in a corner<br><br>can't push up, can't push left<br>not a goal ⇒ level is now UNSOLVABLE</div>`, code:`// A box in a non-goal corner is a dead state:
+function inDeadCorner(r, c){
+  if (goals.has(r+","+c)) return false;   // corner goal is fine
+  const vBlock = isWall(r-1,c) || isWall(r+1,c);
+  const hBlock = isWall(r,c-1) || isWall(r,c+1);
+  return vBlock && hBlock;                // walls on both axes
+}` },
+
+ { title:"9. Searching states — BFS over the whole puzzle", why:"To answer 'is this still solvable?' or 'what is a good next push?', we treat the puzzle as a graph of states. A single state is a snapshot: where the worker is plus where all the boxes are. From one state, the four moves lead to up to four neighbouring states, and the goal state is any snapshot where every box sits on a goal. Breadth-first search fans outward from the current state, remembering every snapshot it has already seen so it never loops, until it either reaches a solved state or runs out of new states to try. Because the number of states can explode, we cap the search and skip repeats aggressively.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">state = (worker position, all box positions)<br>neighbours = the ≤4 legal moves<br>BFS from now, mark seen states<br>reach 'all boxes on goals' → solvable ✅</div>`, code:`function isSolvable(startP, startBoxes){
+  const goalK = boxesKey(goals);
+  const seen = new Set(), queue = [{p:startP, b:startBoxes}];
+  seen.add(stateKey(startP, startBoxes));
+  while (queue.length){
+    const {p, b} = queue.shift();
+    for (const [dr,dc] of DELTAS){
+      const nb = tryMove(p, b, dr, dc);   // null if illegal
+      if (!nb) continue;
+      if (boxesKey(nb.b) === goalK) return true;
+      const k = stateKey(nb.p, nb.b);
+      if (!seen.has(k)){ seen.add(k); queue.push(nb); }
+    }
+  }
+  return false;   // exhausted every reachable state
+}` },
+
+ { title:"10. From BFS to A* — smarter hints", why:"Plain breadth-first search finds a solution with the fewest moves, but it explores blindly and can drown in states on a big level. A* keeps the same idea of exploring states but adds a guess of how far each state is from being solved, and it always expands the most promising state first. A cheap and popular guess for Sokoban is the total distance from each box to its nearest goal — it never overestimates, which is exactly what A* needs to stay correct. Layer deadlock pruning on top so hopeless branches are dropped early, and the same core you built today grows into a genuine puzzle solver that can hint your next move.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">BFS: explore everything evenly (fewest moves)<br>A*: score = moves so far + guess-to-goal<br>guess = Σ box→nearest-goal distance<br>+ prune deadlocks ⇒ a real solver</div>`, code:`// A* priority = cost so far (g) + optimistic guess (h)
+function heuristic(boxSet){
+  let sum = 0;
+  for (const b of boxSet)
+    sum += minDistToAnyGoal(b);   // never overestimates
+  return sum;
+}
+// pick the state with the smallest g + h next.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>

@@ -32,3 +32,4 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
 - Day 22 — Tic-Tac-Toe (minimax AI) → `day22-tic-tac-toe.html`
+- Day 23 — Sokoban (push the boxes) → `day23-sokoban.html`
