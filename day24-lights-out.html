@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 24 — Lights Out (Toggle Grid Puzzle)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  #board { display:grid; gap:6px; background:#0f172a; padding:12px; border-radius:14px; margin:0 auto; width:max-content;
+           box-shadow:0 18px 40px rgba(0,0,0,.18); }
+  .cell { width:60px; height:60px; border-radius:10px; cursor:pointer; user-select:none; transition:background .12s, transform .06s;
+          border:2px solid rgba(255,255,255,.06); }
+  .cell:active { transform:scale(.94); }
+  .cell.on  { background:#10b981; box-shadow:0 0 14px rgba(16,185,129,.65); }
+  .cell.off { background:#1e293b; }
+  .cell.hint { outline:3px solid #fbbf24; outline-offset:-3px; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 24</div>
+      <h1 class="text-xl font-bold">💡 Lights Out — Switch Off Every Light</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Turn <em>every</em> light off. Clicking a tile flips it — and its four neighbours.</h2>
+      <p class="text-slate-500 mb-5">Every tile is a light that is either on (green) or off (dark). Click any tile and it flips: on becomes off, off becomes on — but so do the tiles directly <strong>above, below, left and right</strong> of it. That coupling is the whole puzzle: you can never touch a single light on its own, so switching one off often flicks its neighbours back on. The board is solved the instant <em>all</em> lights are off. Because every "New puzzle" is built by starting from an all-off board and applying random clicks, a solution is always guaranteed to exist — and the <strong>Solve</strong> button will find it.</p>
+      <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+        <div>Moves: <span id="moves" class="stat text-emerald-600">0</span></div>
+        <div>Lights on: <span id="onCount" class="stat text-slate-500">0</span></div>
+        <div>Size: <span id="sizeLbl" class="stat text-slate-500">5×5</span></div>
+      </div>
+      <div id="board"></div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn"   class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">✦ New puzzle</button>
+        <button id="resetBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">↻ Reset</button>
+        <button id="solveBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">💡 Show a solution</button>
+      </div>
+      <div class="flex justify-center items-center mt-3 gap-2 flex-wrap text-sm text-slate-600">
+        <span class="font-bold mr-1">Grid</span>
+        <button data-size="5" class="sizeBtn bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">5 × 5</button>
+        <button data-size="3" class="sizeBtn bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">3 × 3</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">The board is a grid of 0/1 bits. A click XORs a fixed "plus-shaped" pattern (the tile and its four neighbours) into that bit-grid, and the win test is simply "are all bits zero?". <strong>New puzzle</strong> generates by applying random clicks to a solved board, so it is always solvable. <strong>Show a solution</strong> uses <em>light chasing</em> — sweep top to bottom pressing any lit tile from the row above, then correct the top row using a small lookup — the classic linear-algebra-over-GF(2) trick. Everything runs offline in vanilla JS.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Lights Out works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A grid of 0/1 bits, one <code>press(r,c)</code> that XORs a plus-shape into the grid, a win check that asks "are all bits zero?", a generator that scrambles a solved board with random presses, and a light-chasing solver. About 90 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Model the board as a grid of bits</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every tile is a light that is either on or off, so the whole board is just an N×N grid of 1s and 0s. Store it as a 2D array where <code>grid[r][c]</code> is 1 for a lit tile and 0 for a dark one. Because the only two states are on and off, "flip a light" is exactly the XOR operation <code>bit ^= 1</code>. That single data structure is the entire game state.</p>
+        <div class="relative"><pre>const N = 5;
+let grid = Array.from({length:N}, () =&gt;
+  Array(N).fill(0));           // grid[r][c] = 1 (on) or 0 (off)
+
+function flip(r, c){ grid[r][c] ^= 1; }   // on↔off is just XOR 1</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">A press flips a tile AND its four neighbours</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the rule that makes Lights Out. Pressing tile (r,c) flips five lights in a plus shape: the tile itself plus up, down, left and right — anything off the edge is simply skipped. You never touch a light in isolation, which is what makes the puzzle a puzzle. All the game logic lives in this one function.</p>
+        <div class="relative"><pre>const DELTAS = [[0,0],[-1,0],[1,0],[0,-1],[0,1]]; // self + 4 neighbours
+function press(r, c){
+  for (const [dr,dc] of DELTAS){
+    const nr = r+dr, nc = c+dc;
+    if (nr&gt;=0 &amp;&amp; nr&lt;N &amp;&amp; nc&gt;=0 &amp;&amp; nc&lt;N) grid[nr][nc] ^= 1;
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Win check — are all the lights off?</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The board is solved the instant every light is off. Since off is stored as 0, the whole win test is "does any cell still hold a 1?". Scan the grid; if you find no lit tile, the puzzle is done. Run this after every press.</p>
+        <div class="relative"><pre>function isSolved(){
+  for (let r=0; r&lt;N; r++)
+    for (let c=0; c&lt;N; c++)
+      if (grid[r][c]) return false;   // a light is still on
+  return true;                        // every light is off 🎉
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Generate a puzzle that is always solvable</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Do NOT fill the grid with random bits — most random boards are unsolvable. Instead start from a fully-solved (all-off) board and apply a handful of random presses. Whatever those presses did, pressing the same tiles again undoes it, so a solution is guaranteed to exist. This is the safe way to make a scramble.</p>
+        <div class="relative"><pre>function generate(k = 8){
+  grid = Array.from({length:N}, () =&gt; Array(N).fill(0)); // solved
+  for (let i=0; i&lt;k; i++){
+    const r = (Math.random()*N)|0, c = (Math.random()*N)|0;
+    press(r, c);            // random legal moves keep it solvable
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Light chasing — clear everything but the top row</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Here is the classic solve. Sweep from the second row down: whenever the tile <em>directly above</em> is lit, press the current tile to turn it off. After one full top-to-bottom pass, every row except the very top is guaranteed dark — each press was forced, so there is nothing to think about.</p>
+        <div class="relative"><pre>function chase(){
+  const moves = [];
+  for (let r=1; r&lt;N; r++)
+    for (let c=0; c&lt;N; c++)
+      if (grid[r-1][c]){        // light above is on
+        press(r, c);            // press here to kill it
+        moves.push([r, c]);
+      }
+  return moves;   // now only the top row may still be lit
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Pick the right top-row presses, then chase</h3></div>
+        <p class="text-sm text-slate-600 mb-3">After a chase only the top row can still be lit, and exactly which top-row tiles to press first is what finishes the job. There are only 2<sup>N</sup> possible top-row press combinations (32 for a 5-wide board), so just try each one: press that combination, chase down, and keep whichever leaves the whole board dark. Point the on-screen <strong>Solve</strong> button at this and Lights Out is complete.</p>
+        <div class="relative"><pre>function solve(){
+  for (let mask=0; mask &lt; (1&lt;&lt;N); mask++){
+    const g = grid.map(row =&gt; row.slice());   // work on a copy
+    for (let c=0; c&lt;N; c++)
+      if (mask &amp; (1&lt;&lt;c)) pressOn(g, 0, c);    // try these top presses
+    chaseOn(g);                               // then sweep down
+    if (allOff(g)) return mask;               // this one cleared it
+  }
+  return null;   // (never happens for a generated board)
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 24 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Lights Out: a bit-grid, one <code>press()</code> that XORs a plus-shape, a win check that asks "all off?", a generator that scrambles a solved board so it stays solvable, and a light-chasing solver rooted in linear algebra over GF(2). Next: build the whole solver as a matrix and Gaussian-eliminate over the two-element field, count how many boards are unsolvable on each size, or find the <em>minimum</em> press set. <strong>👉 Tomorrow — Day 25: Nonogram (Picross).</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== LIGHTS OUT =====
+const boardEl = document.getElementById("board");
+const msg = document.getElementById("msg");
+let N = 5;
+let grid = [];            // grid[r][c] = 1 (on) / 0 (off)
+let moves = 0, solved = false;
+const DELTAS = [[0,0],[-1,0],[1,0],[0,-1],[0,1]];   // self + 4 neighbours
+
+function blank(){ return Array.from({length:N}, () => Array(N).fill(0)); }
+
+// press: XOR the plus-shape (tile + 4 neighbours) into the grid
+function pressGrid(g, r, c){
+  for (const [dr,dc] of DELTAS){
+    const nr = r+dr, nc = c+dc;
+    if (nr>=0 && nr<N && nc>=0 && nc<N) g[nr][nc] ^= 1;
+  }
+}
+
+// player click
+function press(r, c){
+  if (solved) return;
+  pressGrid(grid, r, c);
+  moves++;
+  clearHints();
+  render();
+  checkWin();
+}
+
+function onCount(){ let n=0; for (let r=0;r<N;r++) for (let c=0;c<N;c++) n+=grid[r][c]; return n; }
+function isSolved(){ return onCount() === 0; }
+
+// generate a solvable board: start solved, apply K random presses
+function generate(){
+  grid = blank();
+  solved = false; moves = 0;
+  const k = N===5 ? 8 : 5;
+  let attempts = 0;
+  do {
+    grid = blank();
+    for (let i=0;i<k;i++) pressGrid(grid, (Math.random()*N)|0, (Math.random()*N)|0);
+    attempts++;
+  } while (isSolved() && attempts < 20);   // avoid handing out an already-solved board
+  clearHints();
+  msg.textContent = "";
+  msg.className = "mt-4 font-bold text-emerald-600";
+  render();
+}
+
+// ---- light chasing solver over a COPY, returns the list of presses ----
+// chase: sweep top→bottom, pressing any tile whose light-above is on.
+function chase(g, out){
+  for (let r=1;r<N;r++)
+    for (let c=0;c<N;c++)
+      if (g[r-1][c]){ pressGrid(g, r, c); out.push([r,c]); }
+}
+// After a chase, only the top row can still be lit. The correct set of
+// top-row presses to fix it is one of the 2^N combinations — so try each
+// first-row press pattern, chase, and keep whichever clears the whole board.
+function solveMoves(){
+  for (let mask=0; mask < (1<<N); mask++){
+    const g = grid.map(row => row.slice());   // work on a copy
+    const out = [];
+    for (let c=0;c<N;c++) if (mask & (1<<c)){ pressGrid(g, 0, c); out.push([0,c]); }
+    chase(g, out);
+    let ok = true;
+    for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (g[r][c]) ok = false;
+    if (ok) return out;   // this top-row choice cleared everything
+  }
+  return null;            // no solution (shouldn't happen for generated boards)
+}
+
+let hintCells = [];
+function clearHints(){ hintCells = []; }
+
+// find remaining presses from the CURRENT board and highlight them
+function showSolution(){
+  if (solved){ msg.textContent = "Already all off 🎉"; return; }
+  const mv = solveMoves();
+  if (!mv){
+    msg.textContent = "🚫 No pure solve found for this board.";
+    msg.className = "mt-4 font-bold text-rose-500";
+    return;
+  }
+  // net-toggle: a tile pressed an even number of times cancels out
+  const count = {};
+  for (const [r,c] of mv){ const k=r+","+c; count[k]=(count[k]||0)+1; }
+  hintCells = Object.keys(count).filter(k => count[k]%2===1);
+  msg.textContent = "💡 Press the " + hintCells.length + " highlighted tiles (order doesn't matter).";
+  msg.className = "mt-4 font-bold text-emerald-600";
+  render();
+}
+
+function render(){
+  boardEl.innerHTML = "";
+  boardEl.style.gridTemplateColumns = "repeat(" + N + ", 60px)";
+  const hintSet = new Set(hintCells);
+  for (let r=0;r<N;r++){
+    for (let c=0;c<N;c++){
+      const div = document.createElement("div");
+      let cls = "cell " + (grid[r][c] ? "on" : "off");
+      if (hintSet.has(r+","+c)) cls += " hint";
+      div.className = cls;
+      div.onclick = () => press(r, c);
+      boardEl.appendChild(div);
+    }
+  }
+  document.getElementById("moves").textContent = moves;
+  document.getElementById("onCount").textContent = onCount();
+  document.getElementById("sizeLbl").textContent = N + "×" + N;
+}
+
+function checkWin(){
+  if (isSolved()){
+    solved = true;
+    msg.textContent = "🎉 All lights out in " + moves + " moves!";
+    msg.className = "mt-4 font-bold text-emerald-600";
+  }
+}
+
+// ---- buttons ----
+let lastGrid = null;
+function newPuzzle(){ generate(); lastGrid = grid.map(row => row.slice()); }
+document.getElementById("newBtn").onclick   = newPuzzle;
+document.getElementById("resetBtn").onclick = () => {
+  if (lastGrid){ grid = lastGrid.map(row => row.slice()); moves = 0; solved = false; clearHints(); msg.textContent=""; render(); }
+};
+document.getElementById("solveBtn").onclick = showSolution;
+document.querySelectorAll(".sizeBtn").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".sizeBtn").forEach(x => x.className = "sizeBtn bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm");
+  b.className = "sizeBtn bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm";
+  N = +b.dataset.size;
+  newPuzzle();
+});
+
+newPuzzle();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is a grid of on/off bits", why:"Lights Out is a square of lamps seen head-on, and every lamp is in exactly one of two states — on or off — so the most natural way to store the board is a grid of 1s and 0s. We keep it as a 2D array where grid[r][c] is 1 for a lit tile and 0 for a dark one, which means reading the whole board is just a loop over rows and columns. Because there are only two states, flipping a light is nothing more than the XOR operation, bit becomes bit-xor-1: 0 flips to 1 and 1 flips to 0. This one tiny grid holds the entire state of the puzzle, and everything else is built on top of it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">1 0 0 1 0&nbsp;&nbsp;&larr; 1 = light on<br>0 1 1 0 0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0 = light off<br>0 0 1 0 0<br>1 0 0 0 1<br>0 0 1 0 0<br><br>flip a light = bit ^ 1</div>`, code:`const N = 5;
+let grid = Array.from({length:N}, () => Array(N).fill(0));
+// grid[r][c] = 1 (on) or 0 (off)
+function flip(r, c){ grid[r][c] ^= 1; }   // on ↔ off is XOR 1` },
+
+ { title:"2. A press flips a plus-shape, not one tile", why:"The rule that turns a boring grid into a puzzle is that you can never touch a single light on its own. Pressing tile (r,c) flips five lights arranged in a plus: the tile you pressed, plus the ones directly above, below, left and right of it. Any of those neighbours that fall off the edge of the board are simply skipped, so a corner press flips only three lights and an edge press flips four. Because you always disturb neighbours, switching one light off very often flicks another back on, and that coupling is the entire difficulty of the game.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">press the centre ✦:<br>· ✦ ·<br>✦ ✦ ✦&nbsp;&nbsp;&larr; all 5 flip<br>· ✦ ·<br><br>corner press flips 3, edge press flips 4</div>`, code:`const DELTAS = [[0,0],[-1,0],[1,0],[0,-1],[0,1]]; // self + 4
+function press(r, c){
+  for (const [dr,dc] of DELTAS){
+    const nr = r+dr, nc = c+dc;
+    if (nr>=0 && nr<N && nc>=0 && nc<N) grid[nr][nc] ^= 1;
+  }
+}` },
+
+ { title:"3. Winning — every light is off", why:"The board is solved the instant every single light is off, which in our representation means every cell holds a 0. So the whole win test is: does any cell still hold a 1? We scan the grid and, the moment we find a lit tile, we know we are not done; if we get all the way through without finding one, the puzzle is solved. This check is cheap, so we run it after every press and light up the celebration message. There is no score to beat and no partial credit — it is strictly all-off or not-yet.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">any cell still 1? → not solved<br>every cell 0? → 🎉 solved<br><br>0 0 0 0 0<br>0 0 0 0 0&nbsp;&nbsp;← this wins<br>0 0 0 0 0</div>`, code:`function isSolved(){
+  for (let r=0; r<N; r++)
+    for (let c=0; c<N; c++)
+      if (grid[r][c]) return false;   // a light is on
+  return true;                        // all off 🎉
+}` },
+
+ { title:"4. Order of presses never matters", why:"A surprising and important fact: the order in which you press tiles has absolutely no effect on the final board. This falls straight out of XOR — flipping a bit and then flipping it again returns it to where it started, and XOR does not care about sequence, so pressing A then B lands you in exactly the same place as pressing B then A. A direct consequence is that pressing the same tile twice is a wasted pair of moves that cancels out completely, so no sensible solution ever presses a tile more than once. That means a solution is not a sequence at all — it is simply a set of tiles to press, each either pressed once or not at all.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">press A then B  ==  press B then A<br>press X twice   ==  press X zero times<br><br>⇒ a solution is a SET of tiles,<br>each pressed 0 or 1 times</div>`, code:`// XOR is commutative and self-inverse:
+//   a ^ b ^ b === a          (double press cancels)
+//   a ^ b     === b ^ a      (order is irrelevant)
+// so we only care WHICH tiles are pressed an odd
+// number of times — never the order.` },
+
+ { title:"5. Making a puzzle that is guaranteed solvable", why:"It is tempting to build a random level by filling every cell with a coin-flip bit, but that is a trap: on a 5×5 board only about one in every four random patterns can ever be turned all-off, so most random boards are impossible. The safe method is to work backwards. Start from a board that is already solved — every light off — and then apply a handful of random presses. Since each of those presses is a legal move, undoing them (by pressing the very same tiles again) is also legal, so a solution is guaranteed to exist by construction. This 'scramble a solved state' trick is the same idea used to generate solvable Rubik's cubes and sliding puzzles.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">❌ random bits → ~75% unsolvable<br><br>✅ start ALL-OFF (solved)<br>&nbsp;&nbsp;&nbsp;apply K random presses<br>&nbsp;&nbsp;&nbsp;→ pressing them again undoes it<br>&nbsp;&nbsp;&nbsp;→ always solvable</div>`, code:`function generate(k = 8){
+  grid = Array.from({length:N}, () => Array(N).fill(0)); // solved
+  for (let i=0; i<k; i++){
+    const r = (Math.random()*N)|0, c = (Math.random()*N)|0;
+    press(r, c);            // legal moves ⇒ stays solvable
+  }
+}` },
+
+ { title:"6. Light chasing — the top-down sweep", why:"There is a beautifully simple way to solve almost the whole board without any cleverness, called light chasing. Sweep the grid from the second row downward, and for every tile whose neighbour directly above is still lit, press that tile to switch the light above off. Because the only thing that can flip a tile in row r from below is a press in row r itself, once you have passed a row it never lights up again. After a single top-to-bottom pass, every row except the very top is guaranteed to be completely dark — and none of those presses required a single decision.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each row from the 2nd down:<br>&nbsp;&nbsp;if the light ABOVE me is on,<br>&nbsp;&nbsp;press me to turn it off<br><br>after one sweep → only the TOP row<br>can still have lights on</div>`, code:`function chase(){
+  const moves = [];
+  for (let r=1; r<N; r++)
+    for (let c=0; c<N; c++)
+      if (grid[r-1][c]){    // light above is on
+        press(r, c);        // press here to kill it
+        moves.push([r, c]);
+      }
+  return moves;             // only top row may still be lit
+}` },
+
+ { title:"7. Choosing the right top-row presses", why:"After a full chase, only the top row can still hold lights, and the whole solve comes down to picking exactly which top-row tiles to press before chasing one final time. The key realisation is that only the top row is a free choice — every press below it was forced by the chase — so on a five-wide board there are just thirty-two possible top-row combinations to consider. That is small enough to simply try them all: for each combination, press that set of top tiles, chase the board down, and check whether every light went off. Whichever combination clears the board is a valid solution, and because a generated board is always solvable, at least one combination is guaranteed to work.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">only the TOP row is a free choice<br>5 wide → just 2⁵ = 32 combinations<br><br>for each: press it, chase down,<br>keep the one that leaves all off ✅</div>`, code:`function solve(){
+  for (let mask=0; mask < (1<<N); mask++){
+    const g = grid.map(row => row.slice());   // work on a copy
+    for (let c=0;c<N;c++)
+      if (mask & (1<<c)) pressOn(g, 0, c);     // try these top presses
+    chaseOn(g);                                // then sweep down
+    if (allOff(g)) return mask;                // this combo cleared it
+  }
+  return null;   // (never happens for a generated board)
+}` },
+
+ { title:"8. It is really linear algebra over GF(2)", why:"Everything above is a shadow of one clean idea: Lights Out is a system of linear equations over the two-element field GF(2), where the only numbers are 0 and 1 and addition is XOR. Each tile contributes one equation saying 'the total number of presses that touch me must have the right parity to switch me off', and pressing patterns are the unknowns. Written as a matrix, solving the puzzle is exactly solving A·x = b over GF(2), which you can do with ordinary Gaussian elimination as long as you replace every add with XOR. This is why order never matters and why a solution is a set rather than a sequence — it is the algebra of a vector space, not a game tree.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">unknowns x = which tiles to press (0/1)<br>A = the plus-shape 'who touches whom' matrix<br>b = the starting lit pattern<br><br>solve&nbsp;&nbsp;A · x = b&nbsp;&nbsp;over GF(2)<br>(every + is XOR)</div>`, code:`// Build one row of A per tile: a 1 wherever a press
+// would toggle that tile (itself + its 4 neighbours).
+// Then Gaussian-eliminate over GF(2): the ONLY change
+// from normal elimination is that '+' becomes '^'
+// and there is no division — every pivot is 1.` },
+
+ { title:"9. Some boards are unsolvable — and some sizes are special", why:"Because the puzzle is a linear system, whether a board is solvable depends on whether its lit pattern lies in the column space of the press-matrix A. On a 5×5 grid that matrix is actually invertible, so every single starting pattern is solvable and the solution is unique — which is exactly why our lookup-table solve always works there. Other sizes are not so lucky: the classic example is that a matrix can be singular, leaving some patterns unreachable and others solvable in several different ways. The dimension of the matrix's null space tells you both how many boards are unsolvable and, for the solvable ones, how many distinct solutions each one has.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">5×5: matrix invertible<br>&nbsp;&nbsp;→ every board solvable, one unique solution<br><br>some sizes: matrix singular<br>&nbsp;&nbsp;→ some boards impossible,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;others have MANY solutions</div>`, code:`// Solvable ⇔ b lies in the column space of A.
+// nullity = number of free variables after elimination.
+//   nullity 0  → A invertible → every board unique (5×5)
+//   nullity k  → 2^k solutions when solvable,
+//                and most patterns are UNSOLVABLE.` },
+
+ { title:"10. Beyond the sweep — minimal and matrix solvers", why:"Light chasing always finds a solution, but not necessarily the shortest one, and it only knows the top-row fix-up table for sizes people have precomputed. The fully general approach is to build the press-matrix explicitly and run Gaussian elimination over GF(2), which works for any board size and any variant, including toroidal boards that wrap around the edges or rules that flip a different neighbour shape. Once you have the null space you can enumerate every valid solution and pick the one that presses the fewest tiles — the true minimum-move answer. The same little bit-grid you built today is the seed of a solver that scales to arbitrary Lights Out puzzles.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">chase: quick, any-solution<br>matrix + GF(2) elimination: ANY size/variant<br>enumerate null space: find the FEWEST-press solve<br><br>same bit-grid → a general solver</div>`, code:`// General solver, any N or variant:
+//   1. build A (one row per tile) and b (lit pattern)
+//   2. Gaussian-eliminate [A | b] over GF(2)
+//   3. base solution + null-space vectors
+//   4. XOR combinations → enumerate all solutions
+//   5. keep the one with the fewest 1s (minimum presses)` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>

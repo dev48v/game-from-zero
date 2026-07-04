@@ -30,6 +30,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 21 — Game of Life](https://dev48v.infy.uk/game/day21-game-of-life.html) — `day21-game-of-life.html`
 - [GameFromZero · Day 22 — Tic-Tac-Toe (minimax AI)](https://dev48v.infy.uk/game/day22-tic-tac-toe.html) — `day22-tic-tac-toe.html`
 - [GameFromZero · Day 23 — Sokoban](https://dev48v.infy.uk/game/day23-sokoban.html) — `day23-sokoban.html`
+- [GameFromZero · Day 24 — Lights Out](https://dev48v.infy.uk/game/day24-lights-out.html) — `day24-lights-out.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
