@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 25 — Nonogram (Picross)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  #nono { display:grid; grid-template-columns:auto auto; grid-template-rows:auto auto;
+          background:#0f172a; padding:14px; border-radius:14px; margin:0 auto; width:max-content;
+          box-shadow:0 18px 40px rgba(0,0,0,.18); --cs:46px; --fs:15px; }
+  #corner { }
+  #colclues { display:grid; gap:2px; align-self:end; }
+  #rowclues { display:grid; gap:2px; justify-self:end; }
+  #grid     { display:grid; gap:2px; }
+
+  /* a column-clue box: numbers stacked, bottom-aligned */
+  .clue.col { width:var(--cs); display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+              gap:1px; padding-bottom:4px; color:#cbd5e1; font-size:var(--fs); font-weight:700; line-height:1;
+              font-variant-numeric:tabular-nums; position:relative; }
+  /* a row-clue box: numbers in a row, right-aligned */
+  .clue.row { height:var(--cs); display:flex; flex-direction:row; align-items:center; justify-content:flex-end;
+              gap:5px; padding-right:8px; color:#cbd5e1; font-size:var(--fs); font-weight:700; line-height:1;
+              font-variant-numeric:tabular-nums; position:relative; }
+  .clue.done { color:#34d399; }
+  .clue .chk { visibility:hidden; color:#34d399; font-weight:900; }
+  .clue.done .chk { visibility:visible; }
+  .clue.col .chk { position:absolute; top:-2px; font-size:11px; }
+  .clue.row .chk { position:absolute; left:2px; font-size:11px; }
+
+  .ncell { width:var(--cs); height:var(--cs); border-radius:6px; cursor:pointer; user-select:none;
+           background:#334155; transition:background .1s, transform .05s; display:flex; align-items:center;
+           justify-content:center; color:#64748b; font-weight:900; font-size:calc(var(--cs) * .5); }
+  .ncell:active { transform:scale(.92); }
+  .ncell.fill { background:#10b981; box-shadow:0 0 12px rgba(16,185,129,.55); }
+  .ncell.mark { background:#1e293b; color:#94a3b8; }
+
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 25</div>
+      <h1 class="text-xl font-bold">🧩 Nonogram — Draw the Hidden Picture from Number Clues</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">The numbers describe a hidden picture. Fill the grid to reveal it.</h2>
+      <p class="text-slate-500 mb-5">Each number beside a row or above a column is the length of a <strong>run</strong> of filled cells in that line, listed in order, with at least one gap between runs. A row clue of <em>2 1</em> means "a block of two filled cells, then a gap, then one filled cell." <strong>Left-click</strong> a cell to fill it (emerald); <strong>right-click</strong> to mark it as a definite empty (an ×). A clue turns green with a ✓ the moment your line matches it. Solve every row <em>and</em> every column at once and the picture is done. Every "New puzzle" is built from a real hidden bitmap, so the clues always have a solution.</p>
+      <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+        <div>Filled: <span id="fillCount" class="stat text-emerald-600">0</span></div>
+        <div>Lines solved: <span id="lineCount" class="stat text-slate-500">0</span></div>
+        <div>Size: <span id="sizeLbl" class="stat text-slate-500">5×5</span></div>
+      </div>
+      <div id="nono">
+        <div id="corner"></div>
+        <div id="colclues"></div>
+        <div id="rowclues"></div>
+        <div id="grid"></div>
+      </div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn"   class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">✦ New puzzle</button>
+        <button id="resetBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">↻ Reset</button>
+        <button id="checkBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">✓ Check</button>
+      </div>
+      <div class="flex justify-center items-center mt-3 gap-2 flex-wrap text-sm text-slate-600">
+        <span class="font-bold mr-1">Grid</span>
+        <button data-size="5"  class="sizeBtn bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">5 × 5</button>
+        <button data-size="10" class="sizeBtn bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">10 × 10</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">Under the hood the puzzle is a hidden grid of 1s and 0s. The clues are computed by scanning each row and column for runs of consecutive 1s — that single run-length function produces every number you see. Winning is not pixel-matching: the game recomputes the run-lengths of <em>your</em> filled cells and checks that every row clue and every column clue is satisfied, which is the true Nonogram condition. Everything runs offline in vanilla JavaScript — no images, no server.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Nonograms work</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A hidden grid of 1s and 0s, one run-length function that turns any line into its clue, a renderer that draws the grid with clue gutters, click handlers for fill and ×, a win check that matches your filled cells against the clues, and a generator that starts from a real picture so the puzzle is always solvable. About 110 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Two grids and three cell states</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Keep the hidden picture in one grid and what the player has drawn in another. The solution holds 1 (filled) or 0 (empty). The player grid needs a third value because "I know this is empty" is different from "I have not decided": use 0 unknown, 1 filled, 2 marked-empty (×). The clues shown to the player are derived only from the solution.</p>
+        <div class="relative"><pre>const N = 5;
+let solution = [];   // solution[r][c] = 1 filled / 0 empty  (hidden)
+let player   = [];   // player[r][c]   = 0 unknown / 1 filled / 2 mark-×
+
+function blank(){ return Array.from({length:N}, () =&gt; Array(N).fill(0)); }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Turn a line into its run-length clue</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A clue is just the lengths of the consecutive runs of filled cells, in order. Scan the line, count a run, and push its length whenever the run ends. An all-empty line has the clue <code>[0]</code>. Run it over every row to get the row clues and over every column to get the column clues — one function, both directions.</p>
+        <div class="relative"><pre>function lineClue(line){        // line = array of 0/1
+  const runs = []; let run = 0;
+  for (const v of line){
+    if (v === 1) run++;
+    else if (run){ runs.push(run); run = 0; }
+  }
+  if (run) runs.push(run);
+  return runs.length ? runs : [0];   // empty line → [0]
+}
+const rowClues = () =&gt; solution.map(row =&gt; lineClue(row));
+const colClues = () =&gt; Array.from({length:N}, (_,c) =&gt;
+  lineClue(solution.map(row =&gt; row[c])));</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Draw the grid with clue gutters</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Lay it out as four quadrants: an empty corner, column clues across the top, row clues down the left, and the N×N cells. Give the clue gutters and the cell grid the same fixed cell size so their tracks line up perfectly. Each cell's class comes straight from the player state.</p>
+        <div class="relative"><pre>function render(){
+  grid.style.gridTemplateColumns = `repeat(${N}, var(--cs))`;
+  grid.innerHTML = "";
+  for (let r=0;r&lt;N;r++) for (let c=0;c&lt;N;c++){
+    const d = document.createElement("div");
+    d.className = "ncell " + (player[r][c]===1?"fill":player[r][c]===2?"mark":"");
+    d.textContent = player[r][c]===2 ? "×" : "";
+    d.oncontextmenu = e =&gt; { e.preventDefault(); mark(r,c); };
+    d.onclick       = ()=&gt; fill(r,c);
+    grid.appendChild(d);
+  }
+  // colclues / rowclues rendered the same way, one box per line
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Left-click fills, right-click marks ×</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A left-click toggles between filled and unknown; a right-click toggles between × and unknown. Both re-render and re-check after every change. Preventing the browser context menu on right-click is what lets you use it for marking empties.</p>
+        <div class="relative"><pre>function fill(r,c){ player[r][c] = player[r][c]===1 ? 0 : 1; update(); }
+function mark(r,c){ player[r][c] = player[r][c]===2 ? 0 : 2; update(); }
+function update(){ render(); checkWin(); }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Win = your filled cells match every clue</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Do not compare pixels to the hidden grid. Recompute the run-lengths of the player's <em>filled</em> cells (treat × and unknown as empty) and check they equal the clue for every row and every column. That is the real Nonogram win condition, and it correctly accepts any layout that satisfies the clues. The same per-line test drives the green ✓ on each solved clue.</p>
+        <div class="relative"><pre>const asBits = line =&gt; line.map(v =&gt; v===1 ? 1 : 0);
+function lineOK(line, clue){
+  const g = lineClue(asBits(line));
+  return g.length===clue.length &amp;&amp; g.every((v,i)=&gt;v===clue[i]);
+}
+function checkWin(){
+  const rc = rowClues(), cc = colClues();
+  const rowsOK = rc.every((cl,r)=&gt;lineOK(player[r], cl));
+  const colsOK = cc.every((cl,c)=&gt;lineOK(player.map(row=&gt;row[c]), cl));
+  return rowsOK &amp;&amp; colsOK;   // 🎉 picture complete
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Generate from a real picture</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Never invent clues directly — start from a grid. Randomly fill a bitmap (or draw a shape), then compute its clues; because the picture itself satisfies them, the puzzle is solvable by construction. Reject the degenerate all-empty and all-full boards. For guaranteed <em>unique</em> puzzles you would run a solver on the clues and keep only pictures it recovers exactly.</p>
+        <div class="relative"><pre>function generate(density = 0.55){
+  do {
+    solution = Array.from({length:N}, () =&gt;
+      Array.from({length:N}, () =&gt; Math.random()&lt;density ? 1 : 0));
+  } while (!hasSomeFilledAndSomeEmpty(solution));
+  player = blank();
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 25 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Nonogram: a hidden bitmap, a run-length function that turns any line into its clue, a grid drawn with clue gutters, fill/× click handlers, a win check that matches your cells against the clues line by line, and a generator seeded from a real picture. Next: write a line-solver that intersects every legal run placement, propagate rows against columns until the grid settles, add backtracking for the hard puzzles, or shape the hidden bitmap into a recognisable picture. <strong>👉 Tomorrow — Day 26: Match-3 (Bejeweled) — swap gems, clear lines of three, cascade the falls.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== NONOGRAM =====
+const nono     = document.getElementById("nono");
+const gridEl   = document.getElementById("grid");
+const colEl    = document.getElementById("colclues");
+const rowEl    = document.getElementById("rowclues");
+const msg      = document.getElementById("msg");
+let N = 5;
+let solution = [];   // hidden picture: 1 filled / 0 empty
+let player   = [];   // 0 unknown / 1 filled / 2 mark-×
+let rowC = [], colC = [];
+let won = false;
+
+function blank(){ return Array.from({length:N}, () => Array(N).fill(0)); }
+
+// run-length clue of a 0/1 line; empty line -> [0]
+function lineClue(line){
+  const runs = []; let run = 0;
+  for (const v of line){
+    if (v === 1) run++;
+    else if (run){ runs.push(run); run = 0; }
+  }
+  if (run) runs.push(run);
+  return runs.length ? runs : [0];
+}
+const asBits = line => line.map(v => v === 1 ? 1 : 0);   // × and unknown -> empty
+const col    = c => player.map(row => row[c]);
+const solCol = c => solution.map(row => row[c]);
+
+// does the player's line satisfy this clue?
+function lineOK(line, clue){
+  const g = lineClue(asBits(line));
+  return g.length === clue.length && g.every((v,i) => v === clue[i]);
+}
+
+function generate(){
+  const density = 0.55;
+  let filled;
+  do {
+    solution = []; filled = 0;
+    for (let r=0;r<N;r++){
+      const row = [];
+      for (let c=0;c<N;c++){ const b = Math.random()<density?1:0; row.push(b); filled += b; }
+      solution.push(row);
+    }
+  } while (filled === 0 || filled === N*N);     // no trivial boards
+  rowC = solution.map(row => lineClue(row));
+  colC = Array.from({length:N}, (_,c) => lineClue(solCol(c)));
+  player = blank();
+  won = false;
+  msg.textContent = "";
+  msg.className = "mt-4 font-bold text-emerald-600";
+  render();
+}
+
+function fill(r,c){ if (won) return; player[r][c] = player[r][c]===1 ? 0 : 1; update(); }
+function mark(r,c){ if (won) return; player[r][c] = player[r][c]===2 ? 0 : 2; update(); }
+function update(){ render(); checkWin(); }
+
+function linesSolved(){
+  let n = 0;
+  for (let r=0;r<N;r++) if (lineOK(player[r], rowC[r])) n++;
+  for (let c=0;c<N;c++) if (lineOK(col(c), colC[c])) n++;
+  return n;
+}
+function fillCount(){ let n=0; for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (player[r][c]===1) n++; return n; }
+
+function cs(){ return N===5 ? 46 : 30; }
+function fs(){ return N===5 ? 15 : 12; }
+
+function clueBox(kind, nums, done){
+  const box = document.createElement("div");
+  box.className = "clue " + kind + (done ? " done" : "");
+  let html = '<span class="chk">✓</span>';
+  html += nums.map(n => `<span>${n}</span>`).join("");
+  box.innerHTML = html;
+  return box;
+}
+
+function render(){
+  nono.style.setProperty("--cs", cs()+"px");
+  nono.style.setProperty("--fs", fs()+"px");
+
+  // column clues (top)
+  colEl.style.gridTemplateColumns = `repeat(${N}, var(--cs))`;
+  colEl.innerHTML = "";
+  for (let c=0;c<N;c++) colEl.appendChild(clueBox("col", colC[c], lineOK(col(c), colC[c])));
+
+  // row clues (left)
+  rowEl.style.gridTemplateRows = `repeat(${N}, var(--cs))`;
+  rowEl.innerHTML = "";
+  for (let r=0;r<N;r++) rowEl.appendChild(clueBox("row", rowC[r], lineOK(player[r], rowC[r])));
+
+  // cells
+  gridEl.style.gridTemplateColumns = `repeat(${N}, var(--cs))`;
+  gridEl.innerHTML = "";
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    const d = document.createElement("div");
+    const s = player[r][c];
+    d.className = "ncell " + (s===1?"fill":s===2?"mark":"");
+    d.textContent = s===2 ? "×" : "";
+    d.onclick = () => fill(r,c);
+    d.oncontextmenu = e => { e.preventDefault(); mark(r,c); };
+    gridEl.appendChild(d);
+  }
+
+  document.getElementById("fillCount").textContent = fillCount();
+  document.getElementById("lineCount").textContent = linesSolved() + "/" + (2*N);
+  document.getElementById("sizeLbl").textContent   = N + "×" + N;
+}
+
+function checkWin(){
+  const rowsOK = rowC.every((cl,r) => lineOK(player[r], cl));
+  const colsOK = colC.every((cl,c) => lineOK(col(c), cl));
+  if (rowsOK && colsOK){
+    won = true;
+    msg.textContent = "🎉 Picture complete — every clue satisfied!";
+    msg.className = "mt-4 font-bold text-emerald-600";
+    return true;
+  }
+  return false;
+}
+
+function check(){
+  if (checkWin()) return;
+  const n = linesSolved();
+  // find first cell that contradicts the hidden solution as a friendly hint count
+  let wrong = 0;
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++)
+    if (player[r][c]===1 && solution[r][c]===0) wrong++;
+  if (wrong){
+    msg.textContent = `${n}/${2*N} lines solved — ${wrong} filled cell${wrong>1?"s":""} can't be right.`;
+    msg.className = "mt-4 font-bold text-rose-500";
+  } else {
+    msg.textContent = `${n}/${2*N} lines solved — on track, keep going.`;
+    msg.className = "mt-4 font-bold text-slate-600";
+  }
+}
+
+// ---- buttons ----
+document.getElementById("newBtn").onclick   = generate;
+document.getElementById("resetBtn").onclick = () => { player = blank(); won = false; msg.textContent=""; render(); };
+document.getElementById("checkBtn").onclick = check;
+document.querySelectorAll(".sizeBtn").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".sizeBtn").forEach(x => x.className = "sizeBtn bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm");
+  b.className = "sizeBtn bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm";
+  N = +b.dataset.size;
+  generate();
+});
+nono.oncontextmenu = e => e.preventDefault();
+
+generate();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The grid, the picture, and the clues", why:"A Nonogram is a rectangular grid in which every cell is ultimately either filled — part of a hidden picture — or empty. We store that finished picture as a grid of 1s and 0s, exactly like a tiny black-and-white bitmap. The player never sees that grid, though; they see only two sets of number clues, one running along the top for each column and one down the left for each row. The whole game is the tension between the picture you cannot see and the clues that fully describe it, so the first thing to build is the solution grid and the clue arrays derived from it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">hidden picture (1 = filled):<br>1 1 0 1 0<br>0 1 1 0 0<br>0 0 1 0 0<br>1 0 0 0 1<br>0 0 1 0 0<br><br>player sees ONLY the number clues</div>`, code:`const N = 5;
+// hidden picture: 1 = filled, 0 = empty
+let solution = Array.from({length:N}, () =>
+  Array.from({length:N}, () => Math.random()<0.55 ? 1 : 0));
+// the player is shown the clues, never this grid` },
+
+ { title:"2. A clue is just run-lengths", why:"The clue for a single line is nothing more than the lengths of its consecutive runs of filled cells, read in order. The row 1 1 0 1 0 has a run of two and then a run of one, so its clue is [2, 1]; a completely empty line has the clue [0]. The only spacing rule the clue implies is that there is at least one empty cell between neighbouring runs. Computing a clue is a single left-to-right scan that counts a run and records its length whenever it hits an empty cell. The very same function, applied to rows and then to columns, produces every number the player sees.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">1 1 0 1 0  →  [2, 1]<br>0 0 0 0 0  →  [0]<br>1 1 1 1 1  →  [5]<br>1 0 1 0 1  →  [1, 1, 1]<br><br>gaps between runs are always ≥ 1</div>`, code:`function lineClue(line){        // line = array of 0/1
+  const runs = []; let run = 0;
+  for (const v of line){
+    if (v === 1) run++;
+    else if (run){ runs.push(run); run = 0; }
+  }
+  if (run) runs.push(run);
+  return runs.length ? runs : [0];   // empty line → [0]
+}` },
+
+ { title:"3. What a clue constrains before you start", why:"You can extract information from a clue before touching a single cell. The minimum width a clue needs is the sum of its numbers plus one mandatory gap between each pair, so [2, 1] requires at least 2 + 1 + 1 = 4 cells. If that minimum equals the length of the line, the line is completely forced and you can fill it immediately with no thought. The difference between the line's length and that minimum is the slack — how far the runs are free to slide — and it is the single number the overlap trick depends on. A line with small slack is nearly pinned in place from the outset.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">clue [2, 1] in a line of length 5<br>min width = 2 + 1 + (1 gap) = 4<br>slack = 5 − 4 = 1<br><br>slack 0 → the whole line is forced</div>`, code:`function slack(clue, len){
+  const sum = clue.reduce((a,b)=>a+b, 0);
+  const gaps = clue.length - 1;      // one gap between runs
+  return len - (sum + gaps);         // freedom the runs have
+}` },
+
+ { title:"4. Forced cells — the overlap method", why:"The classic opening move is the overlap deduction, and it needs no guessing at all. Picture sliding a run as far left as it can go and then as far right as it can go; any cell covered in both extreme positions must be filled no matter how the run finally sits. A run of length L is forced wherever L exceeds the slack, giving exactly L − slack guaranteed filled cells in the middle of that run's range. On a ten-wide line a lone clue of 8 forces six cells at once, converting an empty line into a solid foothold. Almost every Nonogram solve begins by sweeping the grid for these overlaps.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">clue [8] in a line of length 10, slack = 2<br>leftmost:  ████████··<br>rightmost: ··████████<br>overlap:   ··██████··  ← 6 forced fills</div>`, code:`// cells forced filled by a single run of length L:
+//   let s = slack(clue, len)
+//   a run contributes  (L - s)  filled cells,
+//   centred in its own placement window.
+// Sweep every row and column for these overlaps first.` },
+
+ { title:"5. Marking empties is half the game", why:"Filling cells is only half of the reasoning; marking the cells you know are empty is just as powerful. An × records certainty that a cell belongs to no run, which shrinks the space the remaining runs can occupy and frequently unlocks new forced fills. The moment a run is known to be complete, for instance, you can × the cell immediately after it, because runs must be separated by a gap. Strong solvers flip constantly between filling and ×-ing, since each × tightens the constraints on the line that crosses it. In the data model an × is simply a third cell state sitting alongside filled and unknown.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">three states per cell:<br>0 = unknown<br>1 = filled  (part of a run)<br>2 = × mark (known empty)<br><br>an × on a row constrains its column too</div>`, code:`// player[r][c]: 0 unknown / 1 filled / 2 mark-×
+function fill(r,c){ player[r][c] = player[r][c]===1 ? 0 : 1; }
+function mark(r,c){ player[r][c] = player[r][c]===2 ? 0 : 2; }
+// treat × and unknown as "not filled" when reading a line
+const asBits = line => line.map(v => v === 1 ? 1 : 0);` },
+
+ { title:"6. Solving one line completely", why:"The heart of any real solver is a routine that takes a single line, its clue, and whatever is already known, and returns every cell that is now forced. The clean way to do it is to enumerate all the legal placements of the runs that are consistent with the known filled and × cells in that line. If a given cell is filled in every one of those placements it must be filled; if it is empty in every placement it must become an ×; otherwise it stays unknown. This per-line solver is complete for that line seen in isolation, and it is exactly what powers production Nonogram engines.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">enumerate every legal placement of the runs:<br>&nbsp;&nbsp;██·█····&nbsp;&nbsp;██··█···&nbsp;&nbsp;██···█··<br>cell filled in ALL → force filled<br>cell empty  in ALL → force ×<br>otherwise → still unknown</div>`, code:`// solveLine(known, clue): try each legal run layout,
+// keep only those matching the known filled/× cells,
+// then intersect them:
+//   filled in every layout  → cell must be filled
+//   empty  in every layout  → cell must be ×
+//   mixed                   → leave unknown` },
+
+ { title:"7. Propagate rows against columns", why:"A line solver on its own sees only one direction, so the real trick is to alternate between them. Run the solver across every row, then down every column, then across the rows again, feeding each pass whatever cells the previous pass discovered. Because every cell lives in both a row and a column, a fill deduced from a row clue instantly constrains its column, and a fill from a column clue constrains its row. You keep sweeping until an entire pass changes nothing — the grid has reached a fixed point. For the large majority of published puzzles this alternating propagation solves the whole board without a single guess.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">repeat until nothing changes:<br>&nbsp;&nbsp;solve every ROW  → new fills / ×<br>&nbsp;&nbsp;solve every COL  → new fills / ×<br><br>a row fill constrains its column, and back again</div>`, code:`function propagate(){
+  let changed = true;
+  while (changed){
+    changed = false;
+    for (let r=0;r<N;r++) changed |= solveLine("row", r);
+    for (let c=0;c<N;c++) changed |= solveLine("col", c);
+  }
+}` },
+
+ { title:"8. Unique solutions and when you must guess", why:"A well-formed Nonogram has exactly one grid that satisfies all of its clues, which is what makes the puzzle fair and the revealed picture meaningful. When constraint propagation stalls before the grid is finished, it means the remaining cells still have more than one locally consistent arrangement, and now you must hypothesise a cell, propagate, and backtrack if the guess leads to a contradiction. Some puzzles are logically forced from the first move to the last and never need this; others are deliberately built to demand a guess or two. Uniqueness is never guaranteed by random clues, which is precisely why generating a good puzzle takes real care.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">propagation finishes → unique, no guessing<br>propagation stalls → 2+ arrangements remain<br>&nbsp;&nbsp;guess a cell → propagate → contradiction? undo<br><br>random clues are NOT guaranteed unique</div>`, code:`function solve(){
+  propagate();
+  if (complete()) return true;         // logic alone finished it
+  const [r,c] = firstUnknown();        // otherwise: search
+  for (const v of [1, 2]){             // try filled, then ×
+    const snap = clone(player);
+    player[r][c] = v;
+    if (consistent() && solve()) return true;
+    player = snap;                     // backtrack
+  }
+  return false;
+}` },
+
+ { title:"9. Generating a solvable puzzle", why:"The honest way to make a puzzle is to start from a picture rather than from clues. Draw or randomly generate a filled grid, compute its row and column clues with the run-length scan, and you immediately have a puzzle that is solvable by construction, because the original picture satisfies every clue you just produced. To guarantee it is also uniquely solvable, run your own solver on the clues alone and confirm it recovers exactly one grid; if not, tweak the picture and try again. Hand-designed Nonograms go a step further and shape the finished grid into a recognisable object. Our demo takes the simple route: a random picture, real clues, and a win test measured against those clues.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">draw a picture (grid of 1s and 0s)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓ run-length scan<br>compute row clues + column clues<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓ (optional) solve to verify unique<br>a puzzle that is solvable by construction ✅</div>`, code:`function generate(density = 0.55){
+  do {
+    solution = Array.from({length:N}, () =>
+      Array.from({length:N}, () => Math.random()<density ? 1 : 0));
+  } while (allSame(solution));          // reject all-empty / all-full
+  rowC = solution.map(lineClue);
+  colC = columns(solution).map(lineClue);
+  // to force uniqueness: run solve() on the clues, retry if not unique
+}` },
+
+ { title:"10. It is a constraint-satisfaction problem", why:"Step back and a Nonogram is a textbook constraint-satisfaction problem: the variables are the cells, each variable's domain is {filled, empty}, and every row clue and column clue is a constraint over one line. Line solving is a form of constraint propagation that prunes each variable's domain, and the row-then-column alternation is arc-consistency between the constraints that share a cell. When propagation alone is not enough, a depth-first search with backtracking completes the job, and clever solvers add heuristics like tackling the most-constrained line first. The very same machinery underlies Sudoku, timetable scheduling and map colouring — a Nonogram is just an unusually pretty instance of it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">variables  = the cells<br>domains    = { filled, empty }<br>constraints = each row / column clue<br><br>propagate (prune domains) + search (backtrack)<br>= the same engine as Sudoku &amp; scheduling</div>`, code:`// Nonogram as CSP:
+//   variables  : cells (0/1)
+//   constraints: one per row clue, one per column clue
+//   propagation: solveLine() prunes each line's domain
+//   arc-consistency: rows ↔ columns share cells
+//   search: backtrack when propagation stalls` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
