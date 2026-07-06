@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 26 — Match-3 (Bejeweled-style)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  #board { display:grid; gap:5px; background:#0f172a; padding:12px; border-radius:16px; margin:0 auto;
+           width:max-content; box-shadow:0 18px 40px rgba(0,0,0,.18); --cs:42px; }
+  .gem { width:var(--cs); height:var(--cs); border-radius:10px; display:flex; align-items:center;
+         justify-content:center; font-size:calc(var(--cs) * .62); background:#1e293b; cursor:pointer;
+         user-select:none; -webkit-user-select:none; transition:transform .12s, box-shadow .12s, opacity .18s;
+         position:relative; }
+  .gem:hover { transform:translateY(-1px); }
+  .gem.sel  { box-shadow:0 0 0 3px #10b981, 0 0 16px rgba(16,185,129,.75); transform:scale(1.08); z-index:2; }
+  .gem.clearing { animation: pop .26s ease-out forwards; }
+  @keyframes pop { to { transform:scale(.18); opacity:0; } }
+  .gem.drop { animation: dropin .22s ease-out; }
+  @keyframes dropin { from { transform:translateY(-42px); opacity:.2; } to { transform:none; opacity:1; } }
+
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+
+  @media (max-width:430px){ #board { --cs:34px; } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 26</div>
+      <h1 class="text-xl font-bold">💎 Match-3 — Swap Gems, Clear Lines of Three, Cascade the Falls</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Swap two touching gems to line up three or more of a colour.</h2>
+      <p class="text-slate-500 mb-5">Tap a gem to pick it up, then tap a gem <strong>directly next to it</strong> to swap the pair. The swap is only allowed if it forms a run of <strong>three or more</strong> of the same colour in a row or a column — if it does not, the gems slide back and it costs you nothing. Matched runs pop and vanish; the gems above them <strong>fall down</strong> to fill the gaps, and fresh gems <strong>drop in from the top</strong>. If the new arrangement lines up another match, it clears automatically — a <strong>cascade</strong> — and each link in the chain scores more than the last. When the board has no swap left that makes a match, it reshuffles itself so you are never stuck.</p>
+      <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+        <div>Score: <span id="scoreLbl" class="stat text-emerald-600">0</span></div>
+        <div>Moves: <span id="moveLbl" class="stat text-slate-500">0</span></div>
+        <div>Best: <span id="bestLbl" class="stat text-slate-500">0</span></div>
+      </div>
+      <div id="board"></div>
+      <div id="msg" class="mt-4 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn"     class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">✦ New game</button>
+        <button id="shuffleBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">🔀 Shuffle</button>
+        <button id="hintBtn"    class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">💡 Hint</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">The whole board is an 8×8 grid of small integers, one per gem colour. Every rule you see is one short function over that grid: a scan that walks each row and each column looking for runs of three or more equal values, a column-collapse that drops the survivors and tops up with new gems, and a loop that repeats clear → fall → refill until nothing matches. A swap is legal only when running the match scan on the swapped board finds something. All of it is vanilla JavaScript running offline — no images, no server, no libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Match-3 works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">An 8×8 grid of gem-colour integers, a generator that seeds it with no accidental matches, one scan that flags every run of three or more, a renderer that draws the grid and the selection, a click handler that swaps adjacent gems only when the swap makes a match, a column-collapse that drops survivors and refills from the top, and a cascade loop that chains combos and scores them. About 120 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The grid, the gems, and a clean start</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The board is an N×N array where each cell holds a small integer naming a gem colour. Fill it randomly, but never place a gem that would already complete a run of three with the two cells to its left or the two cells above — that guarantees the opening board has no free matches waiting to clear.</p>
+        <div class="relative"><pre>const N = 8, T = 6;              // 8×8 board, 6 gem colours
+let grid = [];                  // grid[r][c] = 0..T-1
+const rnd = () =&gt; Math.floor(Math.random() * T);
+
+function fillNoMatch(){
+  grid = Array.from({length:N}, () =&gt; Array(N).fill(-1));
+  for (let r=0;r&lt;N;r++) for (let c=0;c&lt;N;c++){
+    let t;
+    do { t = rnd(); }
+    while ((c&gt;=2 &amp;&amp; grid[r][c-1]===t &amp;&amp; grid[r][c-2]===t) ||   // no 3-in-row
+           (r&gt;=2 &amp;&amp; grid[r-1][c]===t &amp;&amp; grid[r-2][c]===t));    // no 3-in-col
+    grid[r][c] = t;
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Find every match in one scan</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A match is a run of three or more equal colours in a row or a column. Walk each row counting the current run length, and whenever the run breaks flag the cells you just passed if it reached three. Do the same down each column. A boolean mark grid collects every matched cell, so overlapping row and column runs are handled for free.</p>
+        <div class="relative"><pre>function findMatches(){
+  const mark = Array.from({length:N}, () =&gt; Array(N).fill(false));
+  const flag = (get, set) =&gt; {           // scan one line direction
+    let run = 1;
+    for (let i=1;i&lt;=N;i++){
+      if (i&lt;N &amp;&amp; get(i)===get(i-1) &amp;&amp; get(i)&gt;=0) run++;
+      else { if (run&gt;=3) for (let k=i-run;k&lt;i;k++) set(k); run = 1; }
+    }
+  };
+  for (let r=0;r&lt;N;r++) flag(i=&gt;grid[r][i], k=&gt;mark[r][k]=true);   // rows
+  for (let c=0;c&lt;N;c++) flag(i=&gt;grid[i][c], k=&gt;mark[k][c]=true);   // cols
+  const out = [];
+  for (let r=0;r&lt;N;r++) for (let c=0;c&lt;N;c++) if (mark[r][c]) out.push({r,c});
+  return out;                            // [] means "no matches"
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Draw the grid and the selection</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Render is a pure function of the grid: lay N columns of fixed-size tiles, drop the gem glyph into each, and give the currently picked-up cell a highlight class. Every cell carries its own click handler so a tap knows exactly which gem it is.</p>
+        <div class="relative"><pre>const GEMS = ["🔴","🟠","🟡","🟢","🔵","🟣"];
+function render(){
+  board.style.gridTemplateColumns = `repeat(${N}, var(--cs))`;
+  board.innerHTML = "";
+  for (let r=0;r&lt;N;r++) for (let c=0;c&lt;N;c++){
+    const d = document.createElement("div");
+    const picked = sel &amp;&amp; sel.r===r &amp;&amp; sel.c===c;
+    d.className = "gem" + (picked ? " sel" : "");
+    d.textContent = GEMS[grid[r][c]];
+    d.onclick = () =&gt; clickCell(r,c);
+    board.appendChild(d);
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Tap, swap, and undo illegal swaps</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The first tap picks a gem up; a second tap on an adjacent gem swaps the two. Swap the values, then ask <code>findMatches</code>: if it finds anything, keep the swap and start resolving; if not, swap the pair straight back — an illegal move that costs nothing. Only legal swaps count as a move.</p>
+        <div class="relative"><pre>let sel = null, busy = false;
+const swapCells = (a,b,c,d) =&gt; { const t=grid[a][b]; grid[a][b]=grid[c][d]; grid[c][d]=t; };
+const adjacent  = (a,b) =&gt; Math.abs(a.r-b.r) + Math.abs(a.c-b.c) === 1;
+
+function clickCell(r,c){
+  if (busy) return;
+  if (!sel){ sel = {r,c}; render(); return; }
+  if (sel.r===r &amp;&amp; sel.c===c){ sel = null; render(); return; }   // tap again = drop
+  if (adjacent(sel, {r,c})){
+    const a = sel; swapCells(a.r,a.c,r,c);
+    if (findMatches().length){                 // legal — it makes a match
+      moves++; sel = null; busy = true; cascade = 0; render();
+      setTimeout(resolve, 180);
+    } else {                                    // illegal — slide back
+      swapCells(a.r,a.c,r,c); sel = null; render();
+    }
+  } else { sel = {r,c}; render(); }             // pick a different gem
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Gravity: collapse and refill each column</h3></div>
+        <p class="text-sm text-slate-600 mb-3">After clearing, work one column at a time. Gather the gems that survived from the bottom up, stack them back at the bottom, then fill whatever is left at the top with brand-new random gems. That single pass is both the fall and the refill.</p>
+        <div class="relative"><pre>function applyGravity(){
+  for (let c=0;c&lt;N;c++){
+    const keep = [];
+    for (let r=N-1;r&gt;=0;r--) if (grid[r][c] !== -1) keep.push(grid[r][c]);
+    let r = N-1;
+    for (const v of keep) grid[r--][c] = v;     // survivors fall to the bottom
+    for (; r&gt;=0; r--) grid[r][c] = rnd();        // new gems drop in on top
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">The cascade loop and scoring</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Resolving is a loop: find matches, clear them, apply gravity, and go again — because the fresh gems may line up new runs. Each pass increases the cascade level, and points scale with it, so a four-deep chain from one swap is worth far more than four separate swaps. When a pass finds nothing, the board is stable.</p>
+        <div class="relative"><pre>let score = 0, moves = 0, cascade = 0;
+function resolve(){
+  const m = findMatches();
+  if (!m.length){                       // stable — hand control back
+    busy = false;
+    if (!hasMove()) shuffle();           // (step 7)
+    return;
+  }
+  cascade++;
+  score += m.length * 10 * cascade;      // deeper chains pay more
+  for (const p of m) grid[p.r][p.c] = -1;   // clear
+  render();
+  setTimeout(() =&gt; { applyGravity(); render(); setTimeout(resolve, 240); }, 240);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Never get stuck: detect dead boards and shuffle</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A board is dead when no single legal swap makes a match. Test it by trying every right-swap and down-swap, checking, then undoing. If none work, keep re-shuffling the existing gems until the board both has a move and has no free matches — so the player always has something to do.</p>
+        <div class="relative"><pre>function hasMove(){
+  for (let r=0;r&lt;N;r++) for (let c=0;c&lt;N;c++){
+    for (const [dr,dc] of [[0,1],[1,0]]){
+      const nr=r+dr, nc=c+dc; if (nr&gt;=N || nc&gt;=N) continue;
+      swapCells(r,c,nr,nc);
+      const ok = findMatches().length &gt; 0;
+      swapCells(r,c,nr,nc);              // always undo the probe
+      if (ok) return true;
+    }
+  }
+  return false;
+}
+function shuffle(){
+  do {
+    const flat = grid.flat();
+    for (let i=flat.length-1;i&gt;0;i--){ const j=Math.random()*(i+1)|0; [flat[i],flat[j]]=[flat[j],flat[i]]; }
+    let k=0; for (let r=0;r&lt;N;r++) for (let c=0;c&lt;N;c++) grid[r][c]=flat[k++];
+  } while (findMatches().length || !hasMove());   // legal AND playable
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 26 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Match-3: an 8×8 grid of gem colours seeded with no free matches, a single scan that flags every run of three or more across rows and columns, a renderer with a pick-up selection, adjacent-swap handling that undoes any move that does not make a match, a column-collapse that drops survivors and refills from the top, a cascade loop that chains combos with a rising score, and a dead-board detector that reshuffles so you are never stuck. Next: add special gems for 4- and 5-runs, animate the falls tile by tile, or set a move limit and a target score. <strong>👉 Tomorrow — Day 27: Tower of Hanoi — move the whole stack, one disk at a time, never a big disk onto a small one.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== MATCH-3 =====
+const board = document.getElementById("board");
+const msg   = document.getElementById("msg");
+const N = 8, T = 6;
+const GEMS = ["🔴","🟠","🟡","🟢","🔵","🟣"];
+const TINT = ["#3b1417","#3a230f","#3a3410","#0f3a24","#0f2540","#2a163a"];
+let grid = [];
+let sel = null, busy = false;
+let score = 0, moves = 0, cascade = 0, best = 0;
+let hint = null;           // {r,c,nr,nc} to flash
+let dropSet = new Set();   // cells that just fell, for the drop animation
+
+const rnd = () => Math.floor(Math.random() * T);
+const swapCells = (a,b,c,d) => { const t=grid[a][b]; grid[a][b]=grid[c][d]; grid[c][d]=t; };
+const adjacent  = (a,b) => Math.abs(a.r-b.r) + Math.abs(a.c-b.c) === 1;
+
+function fillNoMatch(){
+  grid = Array.from({length:N}, () => Array(N).fill(-1));
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    let t;
+    do { t = rnd(); }
+    while ((c>=2 && grid[r][c-1]===t && grid[r][c-2]===t) ||
+           (r>=2 && grid[r-1][c]===t && grid[r-2][c]===t));
+    grid[r][c] = t;
+  }
+}
+
+// every matched cell in one scan of the rows then the columns
+function findMatches(){
+  const mark = Array.from({length:N}, () => Array(N).fill(false));
+  const flag = (get, set) => {
+    let run = 1;
+    for (let i=1;i<=N;i++){
+      if (i<N && get(i)===get(i-1) && get(i)>=0) run++;
+      else { if (run>=3) for (let k=i-run;k<i;k++) set(k); run = 1; }
+    }
+  };
+  for (let r=0;r<N;r++) flag(i=>grid[r][i], k=>mark[r][k]=true);
+  for (let c=0;c<N;c++) flag(i=>grid[i][c], k=>mark[k][c]=true);
+  const out = [];
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (mark[r][c]) out.push({r,c});
+  return out;
+}
+
+function applyGravity(){
+  dropSet = new Set();
+  for (let c=0;c<N;c++){
+    const keep = [];
+    for (let r=N-1;r>=0;r--) if (grid[r][c] !== -1) keep.push(grid[r][c]);
+    let r = N-1;
+    for (const v of keep) grid[r--][c] = v;
+    for (; r>=0; r--){ grid[r][c] = rnd(); dropSet.add(r + "," + c); }
+  }
+}
+
+function hasMove(){
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    for (const [dr,dc] of [[0,1],[1,0]]){
+      const nr=r+dr, nc=c+dc; if (nr>=N || nc>=N) continue;
+      swapCells(r,c,nr,nc);
+      const ok = findMatches().length > 0;
+      swapCells(r,c,nr,nc);
+      if (ok) return true;
+    }
+  }
+  return false;
+}
+
+function findMove(){                 // returns a legal swap for the hint
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    for (const [dr,dc] of [[0,1],[1,0]]){
+      const nr=r+dr, nc=c+dc; if (nr>=N || nc>=N) continue;
+      swapCells(r,c,nr,nc);
+      const ok = findMatches().length > 0;
+      swapCells(r,c,nr,nc);
+      if (ok) return {r,c,nr,nc};
+    }
+  }
+  return null;
+}
+
+function shuffle(){
+  do {
+    const flat = grid.flat();
+    for (let i=flat.length-1;i>0;i--){ const j=Math.random()*(i+1)|0; [flat[i],flat[j]]=[flat[j],flat[i]]; }
+    let k=0; for (let r=0;r<N;r++) for (let c=0;c<N;c++) grid[r][c]=flat[k++];
+  } while (findMatches().length || !hasMove());
+  dropSet = new Set();
+  render();
+}
+
+function render(clearing){
+  board.style.gridTemplateColumns = `repeat(${N}, var(--cs))`;
+  board.innerHTML = "";
+  const cl = clearing || new Set();
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    const d = document.createElement("div");
+    const key = r + "," + c;
+    let klass = "gem";
+    if (sel && sel.r===r && sel.c===c) klass += " sel";
+    if (cl.has(key)) klass += " clearing";
+    else if (dropSet.has(key)) klass += " drop";
+    if (hint && ((hint.r===r&&hint.c===c) || (hint.nr===r&&hint.nc===c))) klass += " sel";
+    d.className = klass;
+    d.style.background = TINT[grid[r][c]] || "#1e293b";
+    d.textContent = GEMS[grid[r][c]] || "";
+    d.onclick = () => clickCell(r,c);
+    board.appendChild(d);
+  }
+  document.getElementById("scoreLbl").textContent = score;
+  document.getElementById("moveLbl").textContent  = moves;
+  document.getElementById("bestLbl").textContent  = best;
+}
+
+function resolve(){
+  const m = findMatches();
+  if (!m.length){
+    busy = false;
+    dropSet = new Set();
+    if (!hasMove()){
+      msg.textContent = "No moves left — reshuffling the board.";
+      msg.className = "mt-4 font-bold text-amber-600";
+      shuffle();
+    }
+    return;
+  }
+  cascade++;
+  const gained = m.length * 10 * cascade;
+  score += gained;
+  best = Math.max(best, score);
+  msg.textContent = cascade > 1
+    ? `Cascade ×${cascade}! Cleared ${m.length} gems  +${gained}`
+    : `Cleared ${m.length} gems  +${gained}`;
+  msg.className = "mt-4 font-bold text-emerald-600";
+  const cl = new Set(m.map(p => p.r + "," + p.c));
+  render(cl);
+  setTimeout(() => {
+    for (const p of m) grid[p.r][p.c] = -1;
+    applyGravity();
+    render();
+    setTimeout(resolve, 240);
+  }, 260);
+}
+
+function clickCell(r,c){
+  if (busy) return;
+  hint = null;
+  if (!sel){ sel = {r,c}; render(); return; }
+  if (sel.r===r && sel.c===c){ sel = null; render(); return; }
+  if (adjacent(sel, {r,c})){
+    const a = sel; swapCells(a.r,a.c,r,c);
+    if (findMatches().length){
+      moves++; sel = null; busy = true; cascade = 0; render();
+      setTimeout(resolve, 180);
+    } else {
+      swapCells(a.r,a.c,r,c);
+      sel = null;
+      msg.textContent = "That swap makes no match — try another.";
+      msg.className = "mt-4 font-bold text-slate-500";
+      render();
+    }
+  } else { sel = {r,c}; render(); }
+}
+
+function newGame(){
+  do { fillNoMatch(); } while (!hasMove());
+  score = 0; moves = 0; cascade = 0; sel = null; busy = false; hint = null;
+  dropSet = new Set();
+  msg.textContent = "Swap two adjacent gems to line up three or more.";
+  msg.className = "mt-4 font-bold text-emerald-600";
+  render();
+}
+
+document.getElementById("newBtn").onclick     = newGame;
+document.getElementById("shuffleBtn").onclick = () => { if (busy) return; sel=null; hint=null; shuffle(); msg.textContent="Board reshuffled."; msg.className="mt-4 font-bold text-slate-600"; };
+document.getElementById("hintBtn").onclick    = () => {
+  if (busy) return;
+  const mv = findMove();
+  if (!mv){ msg.textContent="No move exists — reshuffling."; msg.className="mt-4 font-bold text-amber-600"; shuffle(); return; }
+  hint = mv; render();
+  msg.textContent = "Try swapping the two highlighted gems."; msg.className = "mt-4 font-bold text-emerald-600";
+  setTimeout(() => { hint = null; render(); }, 1400);
+};
+
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is a grid of gem colours", why:"Strip away the sparkle and a Match-3 board is nothing but a rectangular grid where every cell holds one small number naming a gem colour — 0 for red, 1 for orange, and so on. An 8×8 board is a two-dimensional array of 64 such numbers. Everything the game does is a short operation over that array: finding matches, clearing cells, dropping gems, refilling the top. Fixing this mental model first — that a gem is just an integer at grid[row][column] — makes every later rule small and obvious, because the pretty tiles are only how those numbers are drawn.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">grid[r][c] = a colour 0..5<br><br>🔴🟢🔵🟡🟣🟠🔴🟢<br>🟢🔵🟡🔴🟠🟣🟢🔵<br>🔵🟡🔴🟠🟣🔴🔵🟡<br><br>the game only ever reads &amp; writes these numbers</div>`, code:`const N = 8, T = 6;          // 8×8 board, 6 gem colours
+let grid = [];               // grid[r][c] = 0..T-1
+const rnd = () => Math.floor(Math.random() * T);
+// a "gem" is just an integer; the emoji is only how we draw it
+const GEMS = ["🔴","🟠","🟡","🟢","🔵","🟣"];` },
+
+ { title:"2. A move is swapping two adjacent gems", why:"The only action the player ever takes is to swap two gems that share an edge — horizontally or vertically neighbouring, never diagonal, never distant. In code a swap is a three-line exchange of the two array values, and adjacency is the check that the Manhattan distance between the two cells equals exactly one. Because that is the whole interaction, the interface is just: tap once to pick a gem up, tap an adjacent gem to swap. Everything dramatic that follows — clears, falls, chains — is a consequence the game computes, not something the player does directly.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">pick 🔵 then tap its neighbour 🟡<br><br>· 🔵 🟡 ·  →  · 🟡 🔵 ·<br><br>adjacent = |Δrow| + |Δcol| === 1<br>(no diagonals, no long jumps)</div>`, code:`const swapCells = (a,b,c,d) => {
+  const t = grid[a][b]; grid[a][b] = grid[c][d]; grid[c][d] = t;
+};
+const adjacent = (a,b) =>
+  Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;` },
+
+ { title:"3. A swap is legal only if it makes a match", why:"Not every swap is allowed. The rule that defines the whole genre is that a swap may stand only if it creates a run of three or more — otherwise the gems slide straight back and the move is refused. The clean way to enforce this without special-casing is to perform the swap first, then run the ordinary match scan on the resulting board: if it finds anything, the swap was legal and you keep it; if it finds nothing, you swap the two gems back. This one trick means the swap validator and the match detector are the same piece of code.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">swap → scan → decide<br><br>🔵🟡 ⇄ makes 🔵🔵🔵 ? &nbsp;keep it ✅<br>🔵🟡 ⇄ makes nothing ? &nbsp;undo it ↩<br><br>only legal swaps count as a move</div>`, code:`swapCells(a.r,a.c, b.r,b.c);          // try it
+if (findMatches().length){            // did it make a run?
+  moves++; busy = true; resolve();    // yes — keep &amp; resolve
+} else {
+  swapCells(a.r,a.c, b.r,b.c);        // no — slide back
+}` },
+
+ { title:"4. Detecting matches is a run-length scan", why:"A match is any run of three or more identical colours lined up in a row or a column. Finding them all is a single sweep: walk along each line counting how many equal gems you have seen in a row, and the moment the colour changes, if that run reached three or more, flag all the cells it covered. Run the same sweep across every row and then down every column, recording hits in a boolean grid. Using a shared mark grid means an L-shape or a plus, where a horizontal run and a vertical run overlap, is handled automatically — each cell is simply flagged by whichever scan passes through it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">scan a row:  🔴 🔴 🔴 🟡 → run of 3 🔴 ✔<br>scan a col:  same idea, top to bottom<br><br>&nbsp;🟢 🔴 🔵<br>&nbsp;🟡 🔴 🟠 &nbsp;→ 🔴🔴🔴 flagged<br>&nbsp;🔵 🔴 🟣<br><br>a shared mark grid unions rows &amp; columns</div>`, code:`function findMatches(){
+  const mark = Array.from({length:N}, () => Array(N).fill(false));
+  const flag = (get, set) => {
+    let run = 1;
+    for (let i=1;i<=N;i++){
+      if (i<N && get(i)===get(i-1) && get(i)>=0) run++;
+      else { if (run>=3) for (let k=i-run;k<i;k++) set(k); run=1; }
+    }
+  };
+  for (let r=0;r<N;r++) flag(i=>grid[r][i], k=>mark[r][k]=true);
+  for (let c=0;c<N;c++) flag(i=>grid[i][c], k=>mark[k][c]=true);
+  return mark;   // true = this cell is part of a match
+}` },
+
+ { title:"5. Clearing the matched gems", why:"Once the scan hands back every matched cell, clearing them is trivial: mark those positions as empty. A sentinel value such as -1 stands for an empty slot, distinct from any real colour, so the code that comes next can tell a hole apart from a gem. This is also the natural moment to score, because the number of cells you just emptied is exactly the size of the combo. Visually you fade or pop the cleared gems, but underneath it is only writing -1 into a handful of array cells before gravity takes over.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">matched cells → set to -1 (empty)<br><br>🔴🔴🔴🟡      ··· 🟡<br>🟢🔵🟡🟠  →  🟢🔵🟡🟠<br><br>-1 is a hole; every real gem is 0..5</div>`, code:`const m = findMatches();          // list of matched cells
+for (const {r,c} of m) grid[r][c] = -1;   // clear to empty
+// this is also where you add to the score
+score += m.length * 10 * cascade;` },
+
+ { title:"6. Gravity — surviving gems fall down", why:"Clearing leaves holes, and gravity fills them the way it does in the real game: gems above an empty cell fall straight down until they rest on another gem or the floor. The neat way to compute this per column is to read the column from the bottom up, collect every gem that is not empty into a list, then write that list back starting from the bottom row. The gems keep their order and simply settle as low as they can. No cell moves sideways; gravity is a strictly vertical, column-by-column operation.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">holes at the bottom pull everything down<br><br>🔵&nbsp;&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;&nbsp;·<br>🟡&nbsp;&nbsp;→&nbsp;🔵&nbsp;&nbsp;→&nbsp;·<br>·&nbsp;&nbsp;&nbsp;&nbsp;🟡&nbsp;&nbsp;&nbsp;🔵<br>·&nbsp;&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;&nbsp;🟡<br><br>collect survivors, restack from the floor</div>`, code:`function applyGravity(){
+  for (let c=0;c<N;c++){
+    const keep = [];
+    for (let r=N-1;r>=0;r--)
+      if (grid[r][c] !== -1) keep.push(grid[r][c]);
+    let r = N-1;
+    for (const v of keep) grid[r--][c] = v;   // fall to the bottom
+    // (top cells are still empty — the refill fills them next)
+  }
+}` },
+
+ { title:"7. Refill — new gems drop in from the top", why:"After the survivors settle, the empty cells are all at the top of each column, and the refill drops fresh random gems into them. In the same column pass, once you have restacked the survivors, every remaining slot above them gets a newly generated colour. Now the board is full again — and crucially it may contain brand-new alignments that nobody deliberately made, which is exactly what powers the chain reactions in the next step. Falls and refills are usually the same loop: collapse, then top up.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">empty top cells ← new random gems<br><br>·&nbsp;&nbsp;&nbsp;&nbsp;🟣  ← new<br>·&nbsp;&nbsp;→&nbsp;🟠  ← new<br>🔵&nbsp;&nbsp;&nbsp;🔵<br>🟡&nbsp;&nbsp;&nbsp;🟡<br><br>board is full again — maybe with fresh matches</div>`, code:`function applyGravity(){
+  for (let c=0;c<N;c++){
+    const keep = [];
+    for (let r=N-1;r>=0;r--)
+      if (grid[r][c] !== -1) keep.push(grid[r][c]);
+    let r = N-1;
+    for (const v of keep) grid[r--][c] = v;   // survivors fall
+    for (; r>=0; r--) grid[r][c] = rnd();      // NEW gems on top
+  }
+}` },
+
+ { title:"8. Cascades — the loop that chains combos", why:"Because a refill can create matches on its own, resolving a move is a loop, not a single step. Find matches; if there are none the board is settled and control returns to the player. Otherwise clear them, apply gravity and refill, then loop back and scan again. Each turn of the loop is one link in a cascade, and a single well-placed swap can trigger three or four clears in a row as gems keep falling into new lines. Wrapping the loop in short timeouts is what makes the chain visible — clear, pause, drop, pause, scan again — rather than resolving in a single invisible frame.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">repeat until nothing matches:<br>&nbsp;&nbsp;find → clear → gravity → refill<br><br>swap ▸ match ×1 ▸ drop ▸ match ×2 ▸ drop ▸ ✔<br><br>one swap, a whole chain of clears</div>`, code:`function resolve(){
+  const m = findMatches();
+  if (!m.length){ busy = false; return; }   // settled
+  cascade++;                                 // one more link
+  for (const {r,c} of m) grid[r][c] = -1;    // clear
+  applyGravity();                            // fall + refill
+  render();
+  setTimeout(resolve, 240);                  // loop → may chain again
+}` },
+
+ { title:"9. Scoring — reward the chain", why:"Scoring is where the cascade earns its keep. A flat rate per cleared gem is fine, but the genre feels alive because deeper links in a chain are worth more: multiply the base value by the current cascade level, so the second clear pays double, the third triple, and so on. Longer runs — four or five in a line — can pay a bonus on top. The effect is that a lucky chain reaction dwarfs a plain three-match, which is the reward loop that makes players hunt for setups that will topple half the board in one move.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">points = gems × base × cascadeLevel<br><br>link 1: &nbsp;3 gems × 10 × 1 = &nbsp;30<br>link 2: &nbsp;4 gems × 10 × 2 = &nbsp;80<br>link 3: &nbsp;3 gems × 10 × 3 = &nbsp;90<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;one swap → 200</div>`, code:`let score = 0, cascade = 0;
+// inside resolve(), before clearing this pass:
+cascade++;                             // 1 on the first clear, then 2, 3…
+const gained = m.length * 10 * cascade;
+score += gained;                       // deeper links pay far more
+// (add a bonus for runs of 4 or 5 if you like)` },
+
+ { title:"10. Never stuck — dead boards and shuffling", why:"Eventually a board can reach a state where no single legal swap makes any match — a dead board. A fair game detects this and fixes it rather than trapping the player. The test is a brute-force probe: for every cell, try swapping it with its right and lower neighbour, run the match scan, and undo the probe; if any probe finds a match, a move exists. When none do, reshuffle the existing gems and re-test, repeating until the new arrangement both has at least one move and contains no free matches. That guarantee — always a move, never a freebie — is what keeps the board honest.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for every cell: probe-swap → scan → undo<br><br>any probe makes a match?  → a move exists ✅<br>none do?  → dead board → reshuffle &amp; retest<br><br>reshuffle until: has a move AND no free match</div>`, code:`function hasMove(){
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++)
+    for (const [dr,dc] of [[0,1],[1,0]]){
+      const nr=r+dr, nc=c+dc; if (nr>=N||nc>=N) continue;
+      swapCells(r,c,nr,nc);
+      const ok = findMatches().length > 0;
+      swapCells(r,c,nr,nc);            // undo the probe
+      if (ok) return true;
+    }
+  return false;   // dead board → shuffle() and test again
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
