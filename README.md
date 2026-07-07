@@ -33,6 +33,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 24 — Lights Out](https://dev48v.infy.uk/game/day24-lights-out.html) — `day24-lights-out.html`
 - [GameFromZero · Day 25 — Nonogram (Picross)](https://dev48v.infy.uk/game/day25-nonogram.html) — `day25-nonogram.html`
 - [GameFromZero · Day 26 — Match-3](https://dev48v.infy.uk/game/day26-match-3.html) — `day26-match-3.html`
+- [GameFromZero · Day 27 — Tower of Hanoi](https://dev48v.infy.uk/game/day27-tower-of-hanoi.html) — `day27-tower-of-hanoi.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

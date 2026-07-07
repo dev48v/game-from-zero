@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 27 — Tower of Hanoi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  .hanoi { display:flex; justify-content:center; align-items:flex-end; gap:14px; background:#0f172a;
+           padding:18px 14px 0; border-radius:16px; margin:0 auto; max-width:620px;
+           box-shadow:0 18px 40px rgba(0,0,0,.18); }
+  .peg { position:relative; flex:1; height:236px; display:flex; flex-direction:column-reverse;
+         align-items:center; justify-content:flex-start; gap:5px; cursor:pointer; padding-bottom:16px; }
+  .peg .post { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); width:10px;
+               height:206px; background:#334155; border-radius:6px 6px 0 0; z-index:0; }
+  .peg .base { position:absolute; bottom:0; left:5%; right:5%; height:14px; background:#475569;
+               border-radius:7px; z-index:0; }
+  .peg.armed .post { background:#10b981; box-shadow:0 0 14px rgba(16,185,129,.7); }
+  .peg.target .base { background:#0f766e; }
+  .disk { position:relative; z-index:1; height:24px; border-radius:7px; display:flex; align-items:center;
+          justify-content:center; font-size:11px; font-weight:800; color:rgba(255,255,255,.9);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 2px 5px rgba(0,0,0,.35);
+          user-select:none; -webkit-user-select:none; transition:transform .15s, box-shadow .15s; }
+  .disk.lift { transform:translateY(-12px) scale(1.05); box-shadow:0 0 0 3px #10b981, 0 0 18px rgba(16,185,129,.85); }
+  .disk.landed { animation: land .3s ease-out; }
+  @keyframes land { from { transform:translateY(-44px); opacity:.35; } to { transform:none; opacity:1; } }
+  .peg-lbl { position:absolute; bottom:-24px; left:0; right:0; text-align:center; font-size:12px;
+             font-weight:700; color:#64748b; }
+
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+  input[type=range]{ accent-color:#10b981; }
+
+  @media (max-width:480px){ .hanoi { gap:8px; padding:14px 8px 0; } .peg { height:200px; } .peg .post { height:172px; } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 27</div>
+      <h1 class="text-xl font-bold">🗼 Tower of Hanoi — Move the Whole Stack, One Disk at a Time, Never a Big Disk onto a Small One</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Move the whole stack from the left peg to the right peg.</h2>
+      <p class="text-slate-500 mb-5">Click a peg to <strong>pick up its top disk</strong>, then click another peg to <strong>drop it</strong> — or drag a disk straight across. You may only ever move the <strong>topmost</strong> disk of a peg, and you may never place a <strong>larger disk on top of a smaller one</strong>: illegal drops are refused and cost you nothing. The puzzle is solved when every disk sits, largest to smallest, on the <strong>right-hand peg</strong>. The counter tracks your moves; the best you can possibly do with <em>n</em> disks is <strong>2<sup>n</sup>−1</strong> moves, and matching it is a perfect game. Stuck? Hit <strong>Auto-solve</strong> and watch the recursive solution play itself out, disk by disk.</p>
+      <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600">
+        <div>Moves: <span id="moveLbl" class="stat text-emerald-600">0</span></div>
+        <div>Optimal (2ⁿ−1): <span id="optLbl" class="stat text-slate-500">15</span></div>
+        <div>Disks: <span id="diskLbl" class="stat text-slate-500">4</span></div>
+      </div>
+      <div class="flex items-center justify-center gap-3 mb-4 text-sm text-slate-500">
+        <span class="font-semibold">3</span>
+        <input id="diskRange" type="range" min="3" max="8" value="4" step="1" class="w-56" />
+        <span class="font-semibold">8</span>
+      </div>
+      <div id="hanoi" class="hanoi"></div>
+      <div id="msg" class="mt-8 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="solveBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">🤖 Auto-solve</button>
+        <button id="resetBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">↺ Reset</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">The whole game is three arrays of integers — one per peg — where each number is a disk's size and the last item in an array is the disk sitting on top. A move is a single <code>push(pop())</code> from one array to another; it is legal only when the destination is empty or its top number is bigger than the one you are moving. Auto-solve is the classic recursion in four lines: to move <em>n</em> disks, move the top <em>n−1</em> onto the spare peg, move the biggest disk across, then move the <em>n−1</em> back on top — and that is provably the fewest moves possible. All vanilla JavaScript, offline, no images or libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Tower of Hanoi works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Three arrays of disk sizes, a renderer that draws each peg as a pile of bars, a click handler that picks up a top disk and drops it elsewhere, a one-line legality test that refuses a big disk onto a small one, a move counter compared against the optimal 2<sup>n</sup>−1, the four-line recursive solver, and a little player that animates its move list. About 110 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The state: three pegs, each a stack of sizes</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each peg is just an array of disk sizes, ordered bottom-to-top, so the last element is the disk on top. A fresh game stacks disks <code>n</code> down to <code>1</code> on the source peg — biggest on the bottom, smallest on top — and leaves the other two pegs empty.</p>
+        <div class="relative"><pre>const SRC = 0, TGT = 2;            // move the stack from peg 0 to peg 2
+let N = 4;                         // number of disks
+let pegs = [[], [], []];           // pegs[i] = sizes, bottom → top
+let moves = 0;
+
+function init(n){
+  N = n; moves = 0;
+  pegs = [[], [], []];
+  for (let s = n; s &gt;= 1; s--) pegs[SRC].push(s);   // n at the bottom … 1 on top
+}
+const top = p =&gt; pegs[p][pegs[p].length - 1];        // the movable disk</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Draw the pegs and the disks</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Render is a pure function of the three arrays: for each peg, drop one bar per disk with a width that grows with the disk's size, stacked from the bottom up. The peg you have currently picked up from gets its top disk lifted with a highlight. Each peg carries a click handler so a tap knows which peg it is.</p>
+        <div class="relative"><pre>const board = document.getElementById("hanoi");
+function render(){
+  board.innerHTML = "";
+  for (let i = 0; i &lt; 3; i++){
+    const peg = document.createElement("div");
+    peg.className = "peg" + (i === TGT ? " target" : "");
+    peg.onclick = () =&gt; clickPeg(i);
+    peg.insertAdjacentHTML("beforeend", '&lt;div class="post"&gt;&lt;/div&gt;&lt;div class="base"&gt;&lt;/div&gt;');
+    pegs[i].forEach((size, idx) =&gt; {
+      const d = document.createElement("div");
+      const isTop = idx === pegs[i].length - 1;
+      d.className = "disk" + (held === i &amp;&amp; isTop ? " lift" : "");
+      d.style.width  = (40 + (size - 1) * (125 / Math.max(1, N - 1))) + "px";
+      d.style.background = diskColor(size, N);
+      d.textContent = size;
+      peg.appendChild(d);
+    });
+    board.appendChild(peg);
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Pick up a disk, then drop it</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The first click on a non-empty peg picks up its top disk — remember which peg it came from in <code>held</code>. The second click either drops it on another peg (if the move is legal) or, if you click the same peg, puts it back down. Only the topmost disk is ever in play, exactly as the rules demand.</p>
+        <div class="relative"><pre>let held = null;                       // the peg we picked up from, or null
+function clickPeg(i){
+  if (solving) return;
+  if (held === null){                  // nothing in hand yet
+    if (pegs[i].length) { held = i; render(); }      // pick up the top disk
+    return;
+  }
+  if (i === held){ held = null; render(); return; }  // click source again = put back
+  if (canMove(held, i)) { doMove(held, i); held = null; afterMove(); }
+  else msg("Illegal: you can't put a bigger disk on a smaller one.");
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The one rule: never a big disk on a small one</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every legal-move check in the whole game is a single line. A move from one peg to another is allowed when the source has a disk to move and the destination is either empty or has a top disk <em>larger</em> than the one arriving. Performing the move is a <code>push(pop())</code>. This one test is what makes an illegal drop cost nothing — it simply never happens.</p>
+        <div class="relative"><pre>function canMove(from, to){
+  if (from === to || !pegs[from].length) return false;
+  return pegs[to].length === 0 || top(to) &gt; top(from);   // empty, or bigger on top
+}
+function doMove(from, to){
+  pegs[to].push(pegs[from].pop());     // the whole physics of the game
+  moves++;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Count moves, spot the win, compare to optimal</h3></div>
+        <p class="text-sm text-slate-600 mb-3">After each move, redraw and check for the win: the puzzle is solved the moment the target peg holds all <code>N</code> disks. Show the running move count next to the theoretical best, <code>2^N − 1</code> — matching it is a perfect game, and you can never beat it.</p>
+        <div class="relative"><pre>const optimal = () =&gt; Math.pow(2, N) - 1;      // fewest moves possible
+const won     = () =&gt; pegs[TGT].length === N;  // all disks home
+
+function afterMove(){
+  render();
+  document.getElementById("moveLbl").textContent = moves;
+  document.getElementById("optLbl").textContent  = optimal();
+  if (won())
+    msg(moves === optimal() ? `Solved in ${moves} — perfect!` : `Solved in ${moves} moves.`);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">The recursive solver — four lines</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Here is the whole trick. To move <code>n</code> disks from <code>from</code> to <code>to</code> using <code>via</code> as spare: first move the top <code>n−1</code> onto the spare peg, then move the single biggest disk to the target, then move those <code>n−1</code> from the spare onto the target. It calls itself twice on a smaller problem; the base case is doing nothing when <code>n</code> hits zero. Instead of touching the pegs directly, it records each move so the game can replay them.</p>
+        <div class="relative"><pre>function solve(n, from, to, via, out){
+  if (n === 0) return;                 // base case: no disks, no moves
+  solve(n - 1, from, via, to, out);    // 1. top n-1 : from → via
+  out.push([from, to]);                // 2. biggest disk : from → to
+  solve(n - 1, via, to, from, out);    // 3. those n-1 : via → to
+}
+// usage: const list = []; solve(N, 0, 2, 1, list);
+// list.length === 2**N - 1, and every move in it is legal.</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Animate the solution move by move</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Auto-solve resets to a clean start, asks <code>solve</code> for the full list of moves, then plays them on a timer — apply one move, redraw, repeat — so you watch the disks migrate. Faster stacks get a slower tick so a 3-disk solve is easy to follow while an 8-disk solve (255 moves) still finishes in a few seconds. A second click stops it.</p>
+        <div class="relative"><pre>let solving = false, timer = null;
+function autoSolve(){
+  if (solving){ clearInterval(timer); solving = false; return; }
+  init(N); held = null; render();
+  const list = []; solve(N, SRC, TGT, 3 - SRC - TGT, list);
+  const dt = Math.min(600, Math.max(45, Math.floor(9000 / list.length)));
+  let k = 0; solving = true;
+  timer = setInterval(() =&gt; {
+    if (k &gt;= list.length){ clearInterval(timer); solving = false; afterMove(); return; }
+    const [f, t] = list[k++]; doMove(f, t); render();
+  }, dt);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Reset and choose the disk count</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A slider from 3 to 8 sets how many disks you play with; changing it just re-initialises and redraws. Reset does the same for the current count. Because every rule is a tiny operation over three arrays, the whole difficulty curve is one number.</p>
+        <div class="relative"><pre>function reset(){ init(N); held = null; afterMove(); }
+
+document.getElementById("diskRange").oninput = e =&gt; {
+  if (solving) return;
+  init(+e.target.value); held = null; afterMove();
+  document.getElementById("diskLbl").textContent = N;
+};
+document.getElementById("solveBtn").onclick = autoSolve;
+document.getElementById("resetBtn").onclick = reset;
+init(4); afterMove();</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 27 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Tower of Hanoi: three arrays of disk sizes, a renderer that draws each peg as a pile of bars, pick-up / drop clicks that only ever touch the top disk, a one-line legality test that refuses a bigger disk onto a smaller one, a move counter measured against the unbeatable 2<sup>n</sup>−1, the famous four-line recursive solver, and a player that animates its moves. Next: try the iterative version that just cycles the smallest disk every other move, or the binary trick where move <em>k</em>'s disk is decided by the lowest set bit of <em>k</em>. <strong>👉 Tomorrow — Day 28: Flood-It — flood the whole board to a single colour in the fewest moves.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== TOWER OF HANOI =====
+const board  = document.getElementById("hanoi");
+const msgEl  = document.getElementById("msg");
+const SRC = 0, TGT = 2;
+const PEG_NAMES = ["A", "B", "C"];
+let N = 4;
+let pegs = [[], [], []];
+let held = null;          // index of the peg we picked a disk up from
+let moves = 0;
+let solving = false, timer = null, dragFrom = null;
+let justMoved = null;     // peg index whose new top disk should flash
+
+const top     = p => pegs[p][pegs[p].length - 1];
+const optimal = () => Math.pow(2, N) - 1;
+const won     = () => pegs[TGT].length === N;
+
+function msg(text, tone){
+  msgEl.textContent = text;
+  msgEl.className = "mt-8 font-bold " + (tone === "bad" ? "text-slate-500" : tone === "warn" ? "text-amber-600" : "text-emerald-600");
+}
+
+function diskColor(size, n){
+  const t = n > 1 ? (size - 1) / (n - 1) : 0;   // 0 = smallest, 1 = biggest
+  const hue   = 162 - t * 14;                   // emerald → deep teal
+  const light = 60  - t * 26;
+  const sat   = 55  + t * 12;
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
+}
+
+function init(n){
+  N = n; moves = 0; held = null;
+  pegs = [[], [], []];
+  for (let s = n; s >= 1; s--) pegs[SRC].push(s);
+  justMoved = null;
+}
+
+function canMove(from, to){
+  if (from === to || !pegs[from].length) return false;
+  return pegs[to].length === 0 || top(to) > top(from);
+}
+
+function doMove(from, to){
+  pegs[to].push(pegs[from].pop());
+  moves++;
+  justMoved = to;
+}
+
+function render(){
+  board.innerHTML = "";
+  for (let i = 0; i < 3; i++){
+    const peg = document.createElement("div");
+    peg.className = "peg" + (i === TGT ? " target" : "") + (held === i ? " armed" : "");
+    peg.onclick = () => clickPeg(i);
+    peg.ondragover = e => { e.preventDefault(); };
+    peg.ondrop = e => { e.preventDefault(); dropOn(i); };
+    peg.insertAdjacentHTML("beforeend", '<div class="post"></div><div class="base"></div>');
+    pegs[i].forEach((size, idx) => {
+      const isTop = idx === pegs[i].length - 1;
+      const d = document.createElement("div");
+      let cls = "disk";
+      if (held === i && isTop) cls += " lift";
+      if (justMoved === i && isTop) cls += " landed";
+      d.className = cls;
+      d.style.width = (40 + (size - 1) * (125 / Math.max(1, N - 1))) + "px";
+      d.style.background = diskColor(size, N);
+      d.textContent = size;
+      if (isTop && !solving){
+        d.draggable = true;
+        d.ondragstart = e => { dragFrom = i; e.stopPropagation(); };
+      }
+      peg.appendChild(d);
+    });
+    const lbl = document.createElement("div");
+    lbl.className = "peg-lbl";
+    lbl.textContent = PEG_NAMES[i] + (i === TGT ? " ★" : "");
+    peg.appendChild(lbl);
+    board.appendChild(peg);
+  }
+  justMoved = null;
+  document.getElementById("moveLbl").textContent = moves;
+  document.getElementById("optLbl").textContent  = optimal();
+  document.getElementById("diskLbl").textContent = N;
+}
+
+function afterMove(){
+  render();
+  if (won()){
+    msg(moves === optimal()
+      ? `🏆 Solved in ${moves} moves — that's the optimal 2^${N}−1. Perfect game!`
+      : `✅ Solved in ${moves} moves. The optimal is ${optimal()} — try to match it.`);
+  }
+}
+
+function attempt(from, to){
+  if (canMove(from, to)){
+    doMove(from, to); held = null; afterMove();
+    if (!won()) msg(`Moved disk ${top(to)} onto peg ${PEG_NAMES[to]}.`);
+  } else {
+    msg("Illegal move — you can't place a bigger disk on a smaller one.", "warn");
+  }
+}
+
+function clickPeg(i){
+  if (solving) return;
+  if (held === null){
+    if (pegs[i].length){ held = i; render(); msg(`Picked up disk ${top(i)} from peg ${PEG_NAMES[i]} — now click where to drop it.`, "bad"); }
+    else msg("That peg is empty — nothing to pick up.", "bad");
+    return;
+  }
+  if (i === held){ const d = top(i); held = null; render(); msg(`Put disk ${d} back on peg ${PEG_NAMES[i]}.`, "bad"); return; }
+  attempt(held, i);
+}
+
+function dropOn(i){
+  if (solving || dragFrom === null) return;
+  const from = dragFrom; dragFrom = null;
+  if (from === i){ render(); return; }
+  attempt(from, i);
+}
+
+// ---- the real recursive solver: 2^n - 1 provably-legal moves ----
+function solve(n, from, to, via, out){
+  if (n === 0) return;
+  solve(n - 1, from, via, to, out);
+  out.push([from, to]);
+  solve(n - 1, via, to, from, out);
+}
+
+function stopSolve(){
+  clearInterval(timer); timer = null; solving = false;
+  document.getElementById("solveBtn").textContent = "🤖 Auto-solve";
+}
+
+function autoSolve(){
+  if (solving){ stopSolve(); msg("Auto-solve stopped.", "warn"); return; }
+  init(N); render();
+  const list = [];
+  solve(N, SRC, TGT, 3 - SRC - TGT, list);   // via = the third peg
+  const total = list.length;                  // === 2^N - 1
+  const dt = Math.min(600, Math.max(45, Math.floor(9000 / total)));
+  let k = 0; solving = true;
+  document.getElementById("solveBtn").textContent = "⏹ Stop";
+  msg(`Auto-solving ${N} disks in the optimal ${total} moves…`);
+  timer = setInterval(() => {
+    if (k >= total){ stopSolve(); afterMove(); return; }
+    const [f, t] = list[k++];
+    doMove(f, t); render();
+    msgEl.textContent = `Auto-solving… move ${k} of ${total}`;
+  }, dt);
+}
+
+function reset(){
+  if (solving) stopSolve();
+  init(N); render();
+  msg(`New game with ${N} disks — move the whole stack to peg ${PEG_NAMES[TGT]} ★.`);
+}
+
+document.getElementById("diskRange").oninput = e => {
+  if (solving) stopSolve();
+  init(+e.target.value); render();
+  msg(`Now playing with ${N} disks. Optimal solution: ${optimal()} moves.`);
+};
+document.getElementById("solveBtn").onclick = autoSolve;
+document.getElementById("resetBtn").onclick = reset;
+
+init(4); render();
+msg("Click the left peg to pick up its top disk, then click peg C ★ to build the tower there.");
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. Three pegs, each a stack of disk sizes", why:"Strip away the wooden pegs and Tower of Hanoi is three stacks. Each peg is an array of numbers, and every number is a disk's size — 1 is the smallest, N the largest. The last element of an array is the disk currently on top, the only one you are ever allowed to touch. A fresh puzzle piles all N disks on the source peg, largest at the bottom and smallest on top, with the other two pegs empty. Once you see a peg as a stack of integers, every rule in the game becomes a one-line operation on those three arrays.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">peg A: [4,3,2,1]   peg B: []   peg C: []<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↑ bottom … top ↑<br><br>&nbsp;▁▁▁&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|<br>&nbsp;▂▂▂▂&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|<br>▃▃▃▃▃▃&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|<br>a peg is just an array of sizes</div>`, code:`const SRC = 0, TGT = 2;        // move the stack from peg 0 to peg 2
+let N = 4;                     // how many disks
+let pegs = [[], [], []];       // pegs[i] = sizes, bottom → top
+
+function init(n){
+  pegs = [[], [], []];
+  for (let s = n; s >= 1; s--) pegs[SRC].push(s);  // N…1, biggest first
+}
+const top = p => pegs[p][pegs[p].length - 1];       // the movable disk` },
+
+ { title:"2. The rules: one disk, top only, never bigger on smaller", why:"The entire game has exactly three constraints. You move one disk at a time. You may only take the disk that is currently on top of a peg — nothing buried underneath. And you may never place a disk on top of a smaller one. That last rule is the whole puzzle: it is what stops you from simply lifting the stack across, and what forces the clever shuffling. Everything else — the counter, the win, the auto-solver — is built on top of these three sentences, and each of them turns into a single line of code.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">✔ move ONE disk at a time<br>✔ only the TOP disk of a peg<br>✔ never a bigger disk on a smaller one<br><br>2 on 3 ✅ &nbsp;&nbsp;&nbsp; 3 on 2 ❌<br><br>the third rule is the entire difficulty</div>`, code:`// legal:   small onto big, or onto empty
+//   [3] + move 1  →  [3,1]      ✅
+// illegal: big onto small
+//   [1] + move 3  →  refused     ❌
+// you never physically make an illegal move —
+// the code simply doesn't allow it (step 3).` },
+
+ { title:"3. A move is a push(pop()) — and one line decides if it's legal", why:"A move takes the top disk off one peg and drops it on another, which in array terms is literally pegs[to].push(pegs[from].pop()). The only question is whether it's allowed, and that is a single boolean: the source must have a disk, and the destination must be empty or have a top disk larger than the one arriving. Because the legality test runs before the push, an illegal move is never performed — there is nothing to undo. This one function is the referee for both your clicks and the auto-solver.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">canMove(from,to)?<br><br>dest empty&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ ✅<br>top(dest) &gt; top(src) → ✅<br>top(dest) &lt; top(src) → ❌<br><br>then: pegs[to].push(pegs[from].pop())</div>`, code:`function canMove(from, to){
+  if (from === to || !pegs[from].length) return false;
+  return pegs[to].length === 0 || top(to) > top(from);
+}
+function doMove(from, to){
+  pegs[to].push(pegs[from].pop());   // the whole physics of the game
+  moves++;
+}` },
+
+ { title:"4. Picking up and dropping — the player's whole interaction", why:"For a human player the interface is two clicks. The first click on a non-empty peg picks up its top disk; you remember which peg it came from in a variable called held. The second click either drops the disk on another peg — if the move is legal — or, if you click the same peg again, puts it back. Notice the game never lets you hold two disks or grab a buried one: the state is a single 'held peg' index, and everything flows from that. Drag-and-drop is the same idea with the source peg captured on dragstart.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click peg A → pick up its top disk (held = 0)<br>click peg C → drop it there (if legal)<br>click A again → put it back<br><br>held = null | 0 | 1 | 2 &nbsp;&nbsp;(one disk at most)</div>`, code:`let held = null;
+function clickPeg(i){
+  if (held === null){                        // hand is empty
+    if (pegs[i].length){ held = i; render(); } // pick up top disk
+    return;
+  }
+  if (i === held){ held = null; render(); return; } // put it back
+  if (canMove(held, i)){ doMove(held, i); held = null; afterMove(); }
+  else msg("Illegal — bigger disk can't go on a smaller one.");
+}` },
+
+ { title:"5. The recursive insight — move(n) in terms of move(n−1)", why:"Here is the idea the whole puzzle is famous for. Suppose you already knew how to move a stack of n−1 disks anywhere. Then moving n disks from A to C is easy: move the top n−1 disks out of the way onto the spare peg B, move the single biggest disk from A to C, then move those n−1 disks from B on top of it. You never actually solved the n−1 sub-problem by hand — you assumed it and let the function call itself. That leap of faith, trusting a smaller version of the same function, is the essence of recursion.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">move(n, A→C, spare B):<br><br>&nbsp;&nbsp;1. move(n-1, A → B)&nbsp;&nbsp;// clear the top off<br>&nbsp;&nbsp;2. move disk n : A → C&nbsp;// the big one across<br>&nbsp;&nbsp;3. move(n-1, B → C)&nbsp;&nbsp;// pile them back on<br><br>the spare peg swaps role at each level</div>`, code:`function solve(n, from, to, via, out){
+  if (n === 0) return;               // base case (step 6)
+  solve(n - 1, from, via, to, out);  // 1. top n-1 : from → via (spare)
+  out.push([from, to]);              // 2. biggest : from → to
+  solve(n - 1, via, to, from, out);  // 3. n-1 back: via → to
+}` },
+
+ { title:"6. The base case — where the recursion stops", why:"Every recursion needs a floor, or it calls itself forever. For Hanoi the floor is trivial: moving zero disks is nothing at all, so when n reaches 0 the function simply returns without recording a move. (You can equally stop at n === 1 and record the single disk directly — same result, one fewer level of calls.) The base case is what makes the two recursive branches eventually bottom out, and it is the reason the move list is finite. Get it wrong and you get infinite recursion; get it right and everything below unwinds cleanly.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">solve(0, …) → return, do nothing<br><br>solve(1) = one move<br>solve(2) = solve(1) + move + solve(1) = 3<br>solve(3) = solve(2) + move + solve(2) = 7<br><br>the floor makes the tree finite</div>`, code:`function solve(n, from, to, via, out){
+  if (n === 0) return;          // ← the base case: no disks, no moves
+  // (alternatively: if (n === 1){ out.push([from,to]); return; })
+  solve(n - 1, from, via, to, out);
+  out.push([from, to]);
+  solve(n - 1, via, to, from, out);
+}` },
+
+ { title:"7. Why exactly 2ⁿ−1 moves — and never fewer", why:"Count the moves the recursion makes. Solving n disks costs whatever it takes to solve n−1 disks, plus one move for the big disk, plus another n−1 solve: T(n) = 2·T(n−1) + 1, with T(0) = 0. Unrolling that recurrence gives T(n) = 2^n − 1. And it is not just what this method costs — it is the minimum: the biggest disk has to move at least once, and before it can, all n−1 smaller disks must be stacked on the spare peg, which itself takes a full 2^(n−1)−1 moves, and the same again to rebuild afterwards. So 2^n − 1 is a hard floor. That is why 64 golden disks would take 2^64 − 1 moves.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">T(n) = 2·T(n-1) + 1,&nbsp;&nbsp;T(0)=0<br>&nbsp;&nbsp;⇒ T(n) = 2ⁿ − 1<br><br>n=3 → 7&nbsp;&nbsp;&nbsp;n=4 → 15&nbsp;&nbsp;&nbsp;n=8 → 255<br>n=64 → 18,446,744,073,709,551,615<br><br>provably the fewest moves possible</div>`, code:`const optimal = () => Math.pow(2, N) - 1;
+// matches list.length after solve():
+const list = []; solve(N, 0, 2, 1, list);
+console.log(list.length === 2 ** N - 1);   // true — always
+// human doing 1 move/sec on 64 disks ≈ 585 billion years` },
+
+ { title:"8. The recursion tree — how the calls unfold", why:"It helps to picture solve() as a tree. The top call splits into two half-size calls with a single big-disk move sandwiched between them; each of those splits again, and so on until the n=0 leaves. Read the moves left-to-right along the bottom of that tree and you get the exact sequence to play — that is why we push moves into a list rather than acting immediately. The tree has 2^n − 1 internal nodes, one per move, which is another way to see where the move count comes from. Recursion here is really a depth-first walk that emits a move at every node.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;solve(3,A,C)<br>&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;\\<br>solve(2,A,B) A→C solve(2,B,C)<br>&nbsp;/ | \\&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/ | \\<br>read the leaves L→R = the move order<br><br>A→C A→B C→B A→C B→A B→C A→C</div>`, code:`// each internal node emits exactly one move, in order:
+const list = []; solve(3, 0, 2, 1, list);
+// list = [[0,2],[0,1],[2,1],[0,2],[1,0],[1,2],[0,2]]
+//         └── a depth-first, left-to-right walk of the tree
+// 7 moves = 2^3 - 1 internal nodes` },
+
+ { title:"9. Playing the moves back — turning a list into animation", why:"Because solve() returns a plain list of [from, to] pairs, replaying it is trivial and completely decoupled from the maths. Auto-solve resets the board, gets the list, and steps through it on a timer: apply one move, redraw, wait, repeat. Scaling the delay to the number of moves keeps a 3-disk solve leisurely and a 255-move 8-disk solve brisk. Separating 'compute the plan' from 'play the plan' is a pattern worth keeping — the solver stays pure and testable, and the animation is just a consumer of its output.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">1. init() &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// clean board<br>2. solve() → list // compute the plan<br>3. setInterval:&nbsp;&nbsp;&nbsp;// play the plan<br>&nbsp;&nbsp;&nbsp;doMove(list[k++]); render()<br><br>plan and playback are fully separate</div>`, code:`function autoSolve(){
+  init(N); render();
+  const list = []; solve(N, SRC, TGT, 3 - SRC - TGT, list);
+  const dt = Math.min(600, Math.max(45, 9000 / list.length | 0));
+  let k = 0, timer = setInterval(() => {
+    if (k >= list.length){ clearInterval(timer); return; }
+    const [f, t] = list[k++]; doMove(f, t); render();
+  }, dt);
+}` },
+
+ { title:"10. Alternatives — iterative and the binary trick", why:"Recursion is the clearest solution, but not the only one. There is a purely iterative rule: on odd-numbered moves always shift the smallest disk one peg along in a fixed cycle, and on even-numbered moves make the single other legal move that isn't the smallest disk — do that 2^n − 1 times and the tower is solved. Even neater is the binary view: number the moves 1, 2, 3, …; the disk you move on move k is determined by the position of the lowest set bit of k (bit 0 → smallest disk, and so on), and its direction follows a simple parity rule. Same 2^n − 1 moves, no call stack at all — a reminder that one problem often has very different-looking correct solutions.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">binary trick: move k → disk = lowest set bit<br><br>k=1 (001) → disk 1&nbsp;&nbsp;&nbsp;k=2 (010) → disk 2<br>k=3 (011) → disk 1&nbsp;&nbsp;&nbsp;k=4 (100) → disk 3<br>k=5 (101) → disk 1&nbsp;&nbsp;&nbsp;k=6 (110) → disk 2<br><br>iterative: smallest disk every other move</div>`, code:`// binary / bit-trick solver — no recursion, no stack
+for (let k = 1; k <= (2 ** N - 1); k++){
+  const disk = (k & -k);          // lowest set bit → which disk
+  // ...map disk + move parity to a (from,to) pair...
+}
+// iterative: on odd moves cycle the smallest disk;
+// on even moves make the only other legal move.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
