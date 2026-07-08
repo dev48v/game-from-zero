@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 28 — Flood-It</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  .board { display:grid; gap:2px; background:#0f172a; padding:8px; border-radius:16px;
+           margin:0 auto; max-width:520px; box-shadow:0 18px 40px rgba(0,0,0,.18); }
+  .cell { width:100%; aspect-ratio:1; border-radius:3px; transition:background .28s ease; position:relative; }
+  .cell.terr { box-shadow: inset 0 0 0 2px rgba(255,255,255,.55); }
+  .cell.origin::after { content:""; position:absolute; inset:28%; border-radius:50%;
+                        background:rgba(255,255,255,.9); box-shadow:0 0 0 2px rgba(15,23,42,.55); }
+
+  .swatch { width:46px; height:46px; border-radius:12px; border:3px solid transparent; cursor:pointer;
+            box-shadow: inset 0 2px 0 rgba(255,255,255,.28), 0 3px 6px rgba(0,0,0,.28);
+            transition:transform .12s, box-shadow .12s; }
+  .swatch:hover { transform:translateY(-3px); }
+  .swatch:disabled { cursor:not-allowed; opacity:.45; transform:none; }
+  .swatch.hint { border-color:#0f172a; box-shadow:0 0 0 3px #10b981, 0 0 16px rgba(16,185,129,.85); animation: pulseHint 1s ease-in-out 3; }
+  @keyframes pulseHint { 0%,100%{ transform:none; } 50%{ transform:scale(1.12); } }
+
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+  select { border:1px solid #cbd5e1; border-radius:8px; padding:3px 8px; font-weight:600; font-size:13px; }
+
+  @media (max-width:480px){ .board { max-width:96vw; padding:6px; } .swatch { width:40px; height:40px; } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 28</div>
+      <h1 class="text-xl font-bold">🌊 Flood-It — Flood the Whole Board to One Colour in the Fewest Moves</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Turn the whole board into a single colour.</h2>
+      <p class="text-slate-500 mb-5">Your territory starts as the little region in the <strong>top-left corner</strong> (marked with a dot). Every time you pick a colour from the palette below, your <strong>entire territory repaints to that colour</strong> — and any neighbouring cells that already had that colour get swallowed into it. So each move floods outward, absorbing more of the board. Chain the right colours and the whole grid becomes one colour. Do it within the <strong>move limit</strong> and you win. Stuck? Tap <strong>Hint</strong> for the greedy best move, or <strong>Auto-solve</strong> to watch a greedy solver flood the board for you.</p>
+      <div class="flex justify-center gap-6 mb-3 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Moves: <span id="moveLbl" class="stat text-emerald-600">0</span> / <span id="limitLbl" class="stat">28</span></div>
+        <div>Territory: <span id="terrLbl" class="stat text-slate-500">1</span> / <span id="totalLbl" class="stat text-slate-500">196</span></div>
+        <div>Greedy solver: <span id="greedyLbl" class="stat text-slate-500">–</span></div>
+      </div>
+      <div class="flex items-center justify-center gap-4 mb-4 text-sm text-slate-500 flex-wrap">
+        <label class="flex items-center gap-1">Board
+          <select id="sizeSel">
+            <option>8</option><option>10</option><option>12</option><option selected>14</option><option>16</option><option>18</option><option>20</option>
+          </select>
+        </label>
+        <label class="flex items-center gap-1">Colours
+          <select id="colorSel">
+            <option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option>
+          </select>
+        </label>
+        <span class="text-slate-400">seed <span id="seedLbl" class="stat font-mono">–</span></span>
+      </div>
+      <div id="board" class="board"></div>
+      <div id="picker" class="flex justify-center gap-3 mt-5 flex-wrap"></div>
+      <div id="msg" class="mt-5 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="hintBtn"  class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">💡 Hint</button>
+        <button id="solveBtn" class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">🤖 Auto-solve</button>
+        <button id="newBtn"   class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">↺ New game</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">The whole game is one 2-D array of colour numbers. Your territory is the connected clump of same-coloured cells touching the top-left corner — found with a <strong>flood-fill (BFS/DFS from the origin)</strong>. A move recolours exactly that clump to a new colour, after which it fuses with adjacent cells of the new colour, so the next flood reaches further. You win when a single flood-fill covers all <em>size²</em> cells — the board is one region. The <strong>Hint</strong> uses a greedy rule: try each colour and keep the one that grows your territory the most. Greedy is a strong, cheap heuristic — but not always the true optimum (finding the absolute fewest moves is a hard search problem). All vanilla JavaScript, offline, no images or libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Flood-It works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">One 2-D array of colour numbers, a seeded random board, a renderer that paints each cell, a flood-fill that finds the connected region touching the top-left corner, a move that recolours that region, a win test that asks whether one flood covers everything, and a greedy hint that tries every colour and keeps the biggest gain. About 120 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The state: the board is one 2-D array of colour ids</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The entire game is a grid of small integers — each cell holds a colour index into a palette. <code>SIZE</code> is the side length, <code>COLORS</code> how many colours are in play, and a palette maps each id to an actual CSS colour. Your territory always starts at the top-left corner <code>[0][0]</code>.</p>
+        <div class="relative"><pre>const PALETTE = ["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#a855f7","#ec4899","#14b8a6"];
+let SIZE   = 14;     // board is SIZE x SIZE
+let COLORS = 6;      // how many colours (2..8)
+let grid   = [];     // grid[r][c] = colour id 0..COLORS-1
+let moves  = 0;
+const ORIGIN = [0, 0];             // your territory grows from here
+const inB = (r,c) =&gt; r&gt;=0 &amp;&amp; r&lt;SIZE &amp;&amp; c&gt;=0 &amp;&amp; c&lt;SIZE;</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">A random board — with a seed so it's repeatable</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Fill every cell with a random colour id. A tiny seeded generator (mulberry32) means the same seed always produces the same board, so a "New game" is just a new seed, and you can share a hard board by its number.</p>
+        <div class="relative"><pre>function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a&gt;&gt;&gt;15,1|a); t=t+Math.imul(t^t&gt;&gt;&gt;7,61|t)^t;
+  return ((t^t&gt;&gt;&gt;14)&gt;&gt;&gt;0)/4294967296; }; }
+
+function newGame(seed){
+  const rand = mulberry32(seed);
+  grid = []; moves = 0;
+  for (let r=0; r&lt;SIZE; r++){
+    const row = [];
+    for (let c=0; c&lt;SIZE; c++) row.push(Math.floor(rand()*COLORS));
+    grid.push(row);
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Draw the grid and the colour picker</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Render is a pure function of the array: paint one square per cell with its palette colour. Highlight the cells that belong to your current territory (from step 4) so you can see it grow, and mark the origin. Then draw one clickable swatch per colour.</p>
+        <div class="relative"><pre>const boardEl = document.getElementById("board");
+function render(){
+  const terr = new Set(originRegion().map(([r,c]) =&gt; r*SIZE+c));
+  boardEl.style.gridTemplateColumns = `repeat(${SIZE}, 1fr)`;
+  boardEl.innerHTML = "";
+  for (let r=0; r&lt;SIZE; r++) for (let c=0; c&lt;SIZE; c++){
+    const d = document.createElement("div");
+    d.className = "cell" + (terr.has(r*SIZE+c) ? " terr" : "") + (r===0 &amp;&amp; c===0 ? " origin" : "");
+    d.style.background = PALETTE[grid[r][c]];
+    boardEl.appendChild(d);
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Flood-fill: find the region touching the corner</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Your territory is every cell you can reach from <code>[0][0]</code> by stepping between orthogonal neighbours that share the corner's colour — a classic flood-fill / breadth-first search. Push the origin, then repeatedly pop a cell and enqueue its same-coloured, unvisited neighbours. The visited set <em>is</em> the territory.</p>
+        <div class="relative"><pre>const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+function originRegion(){
+  const target = grid[0][0];
+  const seen = Array.from({length:SIZE}, () =&gt; Array(SIZE).fill(false));
+  const stack = [[0,0]]; seen[0][0] = true;
+  const cells = [[0,0]];
+  while (stack.length){
+    const [r,c] = stack.pop();
+    for (const [dr,dc] of DIRS){
+      const nr=r+dr, nc=c+dc;
+      if (inB(nr,nc) &amp;&amp; !seen[nr][nc] &amp;&amp; grid[nr][nc]===target){
+        seen[nr][nc]=true; stack.push([nr,nc]); cells.push([nr,nc]);
+      }
+    }
+  }
+  return cells;   // exactly the connected origin region
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">A move: recolour the region, absorb neighbours</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Picking a colour repaints every cell of your current region to it. Choosing the colour you already have does nothing (it's not a move). After the repaint, cells adjacent to your region that already had the new colour are now the same colour as you — so the <em>next</em> flood-fill reaches them automatically. That's how the territory grows.</p>
+        <div class="relative"><pre>function play(newColor){
+  if (newColor === grid[0][0]) return false;   // no-op, not a move
+  const region = originRegion();
+  for (const [r,c] of region) grid[r][c] = newColor;
+  moves++;
+  return true;      // adjacent same-colour cells fold in on the next flood
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Win / lose: one region, within the limit</h3></div>
+        <p class="text-sm text-slate-600 mb-3">You've won the instant the board is a single colour — equivalently, when one flood-fill from the corner covers all <code>SIZE²</code> cells. The move limit scales with board size and colour count; we give a small buffer over what the greedy solver needs so every board is winnable, but tight enough to be a real challenge.</p>
+        <div class="relative"><pre>const won   = () =&gt; originRegion().length === SIZE*SIZE;   // whole board = 1 region
+let limit = 0;
+function computeLimit(greedyEstimate){
+  // tuned by board size AND colour count, floored to stay beatable
+  limit = Math.max(Math.round(SIZE * COLORS / 3), greedyEstimate + 2);
+}
+function afterMove(){
+  render();
+  if (won())            msg(`Solved in ${moves} moves!`);
+  else if (moves &gt;= limit) msg(`Out of moves — try again.`);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">The greedy hint — grow the territory the most</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A cheap, strong heuristic: for each colour, make a copy of the board, flood with that colour, and measure the resulting territory. Keep the colour that grows it most. It's <em>greedy</em> — it maximises the immediate gain each turn. Run it to completion and you get a good move count to aim below.</p>
+        <div class="relative"><pre>function greedyBest(){
+  const cur = grid[0][0]; let best=-1, bestSize=-1;
+  for (let col=0; col&lt;COLORS; col++){
+    if (col === cur) continue;
+    const copy = grid.map(row =&gt; row.slice());
+    for (const [r,c] of originRegionOf(copy)) copy[r][c] = col;
+    const size = originRegionOf(copy).length;   // territory after flooding
+    if (size &gt; bestSize){ bestSize = size; best = col; }
+  }
+  return best;                       // the colour with the biggest gain
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Wire it up: swatches, selectors, new game</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each swatch calls <code>play</code> then <code>afterMove</code>. The board-size and colour selectors just change <code>SIZE</code>/<code>COLORS</code> and start a fresh game; a new game is a fresh random seed. Because every rule is a small operation on one 2-D array, the whole difficulty curve is two numbers.</p>
+        <div class="relative"><pre>function move(col){ if (over) return; if (play(col)) afterMove(); }
+
+function start(seed){
+  newGame(seed);
+  computeLimit(greedySolveCount());   // simulate greedy once to size the limit
+  render(); renderPicker();
+}
+document.getElementById("newBtn").onclick   = () =&gt; start((Math.random()*1e9)|0);
+document.getElementById("sizeSel").onchange  = e =&gt; { SIZE  =+e.target.value; start(rngSeed()); };
+document.getElementById("colorSel").onchange = e =&gt; { COLORS=+e.target.value; start(rngSeed()); };
+start(12345);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 28 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Flood-It: one 2-D array of colour ids, a seeded random board, a flood-fill (BFS from the corner) that finds your connected territory, a move that recolours that region and absorbs neighbours, a win test that asks whether a single flood covers the board, a move limit tuned to size and colour count, and a greedy hint that maximises each turn's gain. Next: swap the greedy hint for a proper search (BFS/A* over board states, or beam search) to chase the true optimum, since finding the fewest possible moves is a genuinely hard problem. <strong>👉 Tomorrow — Day 29: Maze — carve a perfect maze with randomised DFS, then solve it with BFS.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== FLOOD-IT =====
+const PALETTE = ["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#a855f7","#ec4899","#14b8a6"];
+const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+const boardEl  = document.getElementById("board");
+const pickerEl = document.getElementById("picker");
+const msgEl    = document.getElementById("msg");
+
+let SIZE = 14, COLORS = 6;
+let grid = [], moves = 0, limit = 0, seed = 12345;
+let over = false, greedyEst = 0, solving = false, timer = null;
+
+const inB = (r,c) => r>=0 && r<SIZE && c>=0 && c<SIZE;
+
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+function makeGrid(seedVal){
+  const rand = mulberry32(seedVal), g = [];
+  for (let r=0;r<SIZE;r++){ const row=[]; for (let c=0;c<SIZE;c++) row.push(Math.floor(rand()*COLORS)); g.push(row); }
+  return g;
+}
+
+// flood-fill / BFS from the top-left corner over a given grid
+function regionOf(g){
+  const s=g.length, target=g[0][0];
+  const seen=Array.from({length:s},()=>Array(s).fill(false));
+  const stack=[[0,0]]; seen[0][0]=true; const cells=[[0,0]];
+  while(stack.length){
+    const [r,c]=stack.pop();
+    for(const [dr,dc] of DIRS){
+      const nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<s&&nc>=0&&nc<s&&!seen[nr][nc]&&g[nr][nc]===target){
+        seen[nr][nc]=true; stack.push([nr,nc]); cells.push([nr,nc]);
+      }
+    }
+  }
+  return cells;
+}
+const originRegion = () => regionOf(grid);
+
+function floodGrid(g,newColor){
+  const target=g[0][0];
+  if(target===newColor) return 0;
+  const cells=regionOf(g);
+  for(const [r,c] of cells) g[r][c]=newColor;
+  return cells.length;
+}
+const solvedGrid = g => { const t=g[0][0]; return g.every(row=>row.every(v=>v===t)); };
+
+function greedyBestOf(g){
+  const cur=g[0][0]; let best=-1,bestSize=-1;
+  for(let col=0;col<COLORS;col++){ if(col===cur) continue;
+    const copy=g.map(r=>r.slice()); floodGrid(copy,col);
+    const sz=regionOf(copy).length;
+    if(sz>bestSize){ bestSize=sz; best=col; } }
+  return { color:best, size:bestSize };
+}
+function greedySolveCount(){
+  const g=grid.map(r=>r.slice()); let m=0;
+  while(!solvedGrid(g)){ floodGrid(g,greedyBestOf(g).color); m++; if(m>SIZE*SIZE+5) break; }
+  return m;
+}
+
+function computeLimit(){ limit = Math.max(Math.round(SIZE*COLORS/3), greedyEst + 2); }
+const won = () => originRegion().length === SIZE*SIZE;
+
+function msg(text, tone){
+  msgEl.textContent = text;
+  msgEl.className = "mt-5 font-bold " + (tone==="bad" ? "text-slate-500" : tone==="warn" ? "text-amber-600" : tone==="lose" ? "text-rose-600" : "text-emerald-600");
+}
+
+function render(){
+  const terr = new Set(originRegion().map(([r,c]) => r*SIZE + c));
+  boardEl.style.gridTemplateColumns = `repeat(${SIZE}, 1fr)`;
+  boardEl.innerHTML = "";
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++){
+    const d=document.createElement("div");
+    d.className="cell"+(terr.has(r*SIZE+c)?" terr":"")+(r===0&&c===0?" origin":"");
+    d.style.background=PALETTE[grid[r][c]];
+    boardEl.appendChild(d);
+  }
+  document.getElementById("moveLbl").textContent  = moves;
+  document.getElementById("limitLbl").textContent = limit;
+  document.getElementById("terrLbl").textContent  = terr.size;
+  document.getElementById("totalLbl").textContent = SIZE*SIZE;
+  document.getElementById("greedyLbl").textContent = greedyEst + " moves";
+  document.getElementById("seedLbl").textContent  = seed;
+}
+
+function renderPicker(){
+  pickerEl.innerHTML = "";
+  const cur = grid[0][0];
+  for (let col=0; col<COLORS; col++){
+    const b=document.createElement("button");
+    b.className="swatch"; b.dataset.color=col;
+    b.style.background=PALETTE[col];
+    b.title="Flood with this colour";
+    b.disabled = over || col===cur;
+    b.onclick=()=>move(col);
+    pickerEl.appendChild(b);
+  }
+}
+
+function afterMove(){
+  render(); renderPicker();
+  if (won()){
+    over = true;
+    msg(moves <= greedyEst
+      ? `🏆 Flooded in ${moves} moves — you matched or beat the greedy solver (${greedyEst}). Superb!`
+      : `✅ Flooded in ${moves} moves (limit ${limit}). Greedy did it in ${greedyEst} — try to beat it.`);
+    renderPicker();
+  } else if (moves >= limit){
+    over = true;
+    msg(`💥 Out of moves at ${moves} — the board still has more than one colour. Hit New game.`, "lose");
+    renderPicker();
+  } else {
+    msg(`Territory: ${originRegion().length} / ${SIZE*SIZE} cells. ${limit-moves} moves left.`, "bad");
+  }
+}
+
+function move(col){
+  if (over || solving) return;
+  if (col === grid[0][0]) return;          // no-op, not a move
+  floodGrid(grid, col); moves++;
+  afterMove();
+}
+
+function hint(){
+  if (over || solving) return;
+  const { color } = greedyBestOf(grid);
+  document.querySelectorAll(".swatch").forEach(s => s.classList.remove("hint"));
+  const btn = pickerEl.querySelector(`.swatch[data-color="${color}"]`);
+  if (btn) btn.classList.add("hint");
+  msg(`💡 Greedy pick: flood with the highlighted colour — it grows your territory the most.`);
+}
+
+function autoSolve(){
+  if (solving){ clearInterval(timer); solving=false; document.getElementById("solveBtn").textContent="🤖 Auto-solve"; return; }
+  if (over) return;
+  solving = true;
+  document.getElementById("solveBtn").textContent = "⏹ Stop";
+  timer = setInterval(() => {
+    if (won() || moves >= limit){ clearInterval(timer); solving=false; document.getElementById("solveBtn").textContent="🤖 Auto-solve"; afterMove(); return; }
+    const { color } = greedyBestOf(grid);
+    floodGrid(grid, color); moves++;
+    render(); renderPicker();
+    msg(`🤖 Greedy auto-solve… move ${moves}.`);
+  }, 320);
+}
+
+function rngSeed(){ return (Math.random()*1e9)|0; }
+
+function start(newSeed){
+  if (solving){ clearInterval(timer); solving=false; document.getElementById("solveBtn").textContent="🤖 Auto-solve"; }
+  seed = newSeed; moves = 0; over = false;
+  grid = makeGrid(seed);
+  greedyEst = greedySolveCount();
+  computeLimit();
+  render(); renderPicker();
+  msg(`New ${SIZE}×${SIZE} board, ${COLORS} colours. Flood everything to one colour in ${limit} moves.`);
+}
+
+document.getElementById("hintBtn").onclick  = hint;
+document.getElementById("solveBtn").onclick = autoSolve;
+document.getElementById("newBtn").onclick   = () => start(rngSeed());
+document.getElementById("sizeSel").onchange  = e => { SIZE  = +e.target.value; start(rngSeed()); };
+document.getElementById("colorSel").onchange = e => { COLORS = +e.target.value; start(rngSeed()); };
+
+start(seed);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The game — flood the board from the corner", why:"Flood-It gives you a grid of coloured tiles. You own the connected patch of same-coloured tiles in the top-left corner — your territory. On each turn you choose a colour and your whole territory repaints to it, swallowing any neighbouring tiles that already had that colour. Do this repeatedly and your territory spreads outward like spilled paint. The goal is to make the entire board a single colour, and to do it in as few moves as possible — the game gives you a move limit as the target to beat. Everything that follows is just a precise way to say 'the connected corner patch, and how it grows'.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">start: corner patch is your territory<br><br>● R  G  B  R<br>&nbsp;&nbsp;G  B  R  G<br>&nbsp;&nbsp;B  R  G  B<br><br>pick a colour → territory repaints + grows<br>goal: whole board one colour, fewest moves</div>`, code:`// the board is a grid of colour ids; you own the corner patch
+// each move: recolour your patch -> it absorbs matching neighbours
+// win: the whole grid is a single colour
+let SIZE = 14, COLORS = 6;
+let grid = [];          // grid[r][c] = colour id
+const ORIGIN = [0, 0];  // your territory grows from the top-left corner` },
+
+ { title:"2. The grid as a graph (a 2-D array)", why:"Store the board as a 2-D array of small integers — each number is an index into a palette of colours. That array is really a graph in disguise: every cell is a node, and edges connect orthogonal neighbours (up, down, left, right) that share the same colour. Almost every board puzzle in this series — Minesweeper, Match-3, Sokoban — reduces to 'a grid is a graph', and Flood-It is the purest example. Once you see the board this way, 'my territory' becomes a precise graph term: the connected component that contains the corner node.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">grid[r][c] = colour id (0..COLORS-1)<br><br>each cell ── neighbour (up/down/left/right)<br><br>same colour + adjacent = connected<br>→ the board is a graph of coloured nodes</div>`, code:`const PALETTE = ["#ef4444","#f97316","#eab308",
+                 "#22c55e","#3b82f6","#a855f7"];
+const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];   // 4-neighbourhood
+const inB = (r,c) => r>=0 && r<SIZE && c>=0 && c<SIZE;
+// grid[r][c] is a node; DIRS give its edges to neighbours` },
+
+ { title:"3. Territory = the connected same-colour component", why:"Your territory is not 'all cells of the corner's colour' — it is only the ones you can actually reach from the corner by walking through same-coloured neighbours. Two red blobs on opposite sides of the board are different components; only the one touching the corner is yours. This distinction is the whole game: a colour helps you only if it's adjacent to your current territory. Formally, the territory is the connected component of the graph (from step 2) that contains cell [0][0].", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">● R  R | G   ← your corner patch = the R's here<br>&nbsp;&nbsp;R  G | R   ← this lone R is NOT yours<br>&nbsp;&nbsp;G  G | R&nbsp;&nbsp;&nbsp;&nbsp;(not connected to the corner)<br><br>territory = component containing [0][0]<br>colour only helps if it touches your patch</div>`, code:`// "my colour is red" is NOT the same as "my territory".
+// Only cells reachable from [0][0] through same-coloured
+// neighbours belong to you. A disconnected red blob is a
+// SEPARATE component and must be reached before it counts.` },
+
+ { title:"4. Flood-fill / BFS from the origin", why:"To find the territory, run a flood-fill — the same breadth-first (or depth-first) search used by a paint-bucket tool. Start a queue with the corner cell, mark it visited, then repeatedly take a cell and add its unvisited neighbours that share the corner's colour. When the queue empties, every visited cell is your territory. It's O(number of cells): each cell is enqueued at most once. This one routine powers everything — rendering the highlight, applying a move, testing the win, and evaluating hints.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">queue = [ corner ];  seen = { corner }<br>while queue:<br>&nbsp;&nbsp;cell = queue.pop()<br>&nbsp;&nbsp;for each neighbour of cell:<br>&nbsp;&nbsp;&nbsp;&nbsp;if same colour &amp; unseen → add to queue<br><br>visited set = the territory &nbsp;(O(cells))</div>`, code:`function originRegion(){
+  const target = grid[0][0];
+  const seen = Array.from({length:SIZE}, () => Array(SIZE).fill(false));
+  const stack = [[0,0]]; seen[0][0] = true;
+  const cells = [[0,0]];
+  while (stack.length){
+    const [r,c] = stack.pop();
+    for (const [dr,dc] of DIRS){
+      const nr=r+dr, nc=c+dc;
+      if (inB(nr,nc) && !seen[nr][nc] && grid[nr][nc]===target){
+        seen[nr][nc]=true; stack.push([nr,nc]); cells.push([nr,nc]);
+      }
+    }
+  }
+  return cells;   // exactly the connected origin region
+}` },
+
+ { title:"5. What a move does — recolour, then absorb", why:"A move is deceptively simple: find your region with the flood-fill, then paint every one of those cells the new colour. That's it. The absorption people find magical happens for free: after you repaint, tiles that were adjacent to your region and already had the new colour are now the same colour as you, so the very next flood-fill walks straight into them. The board didn't 'merge' anything — your connected component simply got bigger because the colours now match at the boundary. Re-picking your current colour changes nothing, so it isn't counted as a move.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">before:  ●R R  G G      pick G →<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;R G  G B<br><br>repaint region R→G:  ●G G  G G<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;G G  G B<br><br>next flood now reaches the old G's for free</div>`, code:`function play(newColor){
+  if (newColor === grid[0][0]) return false;  // no-op, not a move
+  const region = originRegion();
+  for (const [r,c] of region) grid[r][c] = newColor;
+  moves++;
+  return true;   // neighbours of the new colour fold in on the next flood
+}` },
+
+ { title:"6. Win detection = the whole board is one region", why:"You've won when the board is a single colour. You could scan every cell and check they're all equal — but there's a neater test that reuses machinery you already have: run the flood-fill from the corner and ask whether it reached all SIZE×SIZE cells. If one region covers the whole board, the board is one colour, by definition. This is a good habit — expressing the goal in terms of the same abstraction (connected components) you built the mechanics on, rather than inventing a separate check.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">won?  →  originRegion().length === SIZE*SIZE<br><br>one flood covers everything<br>⇔ the board is a single component<br>⇔ the board is one colour ✅</div>`, code:`const won = () => originRegion().length === SIZE*SIZE;
+
+function afterMove(){
+  render();
+  if (won())               msg("Flooded in " + moves + " moves!");
+  else if (moves >= limit) msg("Out of moves — try again.");
+}` },
+
+ { title:"7. The greedy heuristic — maximise the gain each turn", why:"How should you choose a colour? The obvious, cheap strategy is greedy: try each colour, simulate the flood on a copy of the board, and keep whichever one grows your territory the most right now. It's fast (a handful of flood-fills per turn) and surprisingly strong — it almost always finishes close to the limit. The Hint button and the Auto-solve both run exactly this rule. Greedy is a great baseline whenever a problem lets you measure 'how good is each immediate option'.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each colour c (≠ current):<br>&nbsp;&nbsp;copy board, flood with c<br>&nbsp;&nbsp;measure new territory size<br>pick c with the biggest size<br><br>maximise immediate gain = greedy</div>`, code:`function greedyBest(){
+  const cur = grid[0][0]; let best=-1, bestSize=-1;
+  for (let col=0; col<COLORS; col++){
+    if (col === cur) continue;
+    const copy = grid.map(row => row.slice());
+    floodGrid(copy, col);                 // flood the copy
+    const size = regionOf(copy).length;   // resulting territory
+    if (size > bestSize){ bestSize = size; best = col; }
+  }
+  return best;   // colour with the largest immediate gain
+}` },
+
+ { title:"8. Why greedy is good but not always optimal", why:"Greedy maximises this turn's gain, but the fewest-moves solution sometimes needs a move that grabs little now to set up a huge grab next turn — a sacrifice greedy never makes. So greedy is a strong upper bound, not the guaranteed minimum. Finding the true optimum is a genuinely hard search problem (Flood-It is NP-hard in general), so real solvers use lookahead: search several moves ahead, or a beam/A* search over board states with a heuristic like 'colours still remaining on the board'. We give the player a limit a couple of moves above greedy, so the board is always winnable, and beating greedy is the real bragging-rights challenge.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">greedy: best move NOW &nbsp;(local optimum)<br>optimal: fewest moves overall &nbsp;(global)<br><br>sometimes a small grab now → huge grab next<br>greedy won't sacrifice; optimal will<br><br>true optimum = hard search (NP-hard)</div>`, code:`// greedy = one flood-fill per colour, per turn — cheap & strong.
+// optimal = search over sequences of moves:
+//   • depth-limited lookahead (try N moves ahead)
+//   • A* / beam search over board states,
+//     heuristic = number of colours still left on the board
+// finding the absolute fewest moves is NP-hard in general.` },
+
+ { title:"9. Move-limit tuning by board size and colours", why:"The move limit is what turns 'colour the board' into a puzzle. Too high and it's trivial; too low and it's impossible. A limit scales with both dimensions: bigger boards need more moves, and more colours make each move less likely to match, so both push the limit up. A common rule of thumb is roughly proportional to size × colours. We compute the greedy solver's move count for this exact board and set the limit a small margin above it — that guarantees the board is always beatable (greedy itself fits), while staying tight enough to sting.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">bigger board&nbsp;&nbsp;→ more moves needed<br>more colours&nbsp;→ fewer matches → more moves<br><br>limit ≈ round(SIZE × COLORS / 3)<br>floored to (greedy solve count + 2)<br>&nbsp;&nbsp;⇒ always winnable, still a challenge</div>`, code:`function greedySolveCount(){          // simulate greedy to completion
+  const g = grid.map(r => r.slice()); let m = 0;
+  while (!solvedGrid(g)){ floodGrid(g, greedyBestOf(g).color); m++; }
+  return m;
+}
+function computeLimit(){
+  limit = Math.max(Math.round(SIZE*COLORS/3), greedySolveCount() + 2);
+}` },
+
+ { title:"10. Complexity — cheap per move, hard to optimise", why:"Each flood-fill is O(SIZE²): every cell is visited at most once. A greedy turn runs one flood per colour, so O(COLORS × SIZE²) — trivial for any playable board. The whole greedy game is that times the number of moves, still tiny. What's expensive is optimality: the number of possible move sequences explodes, and deciding the minimum is NP-hard, which is why we settle for greedy plus a generous limit rather than a perfect solver. The lesson generalises — the mechanics of a grid game are usually linear in the cells; it's the search for the best play that gets hard.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one flood-fill&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;O(SIZE²)<br>one greedy turn&nbsp;&nbsp;O(COLORS · SIZE²)<br>greedy full game&nbsp;O(moves · COLORS · SIZE²)<br><br>optimal play&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;NP-hard (search explodes)</div>`, code:`// flood-fill visits each cell once            → O(SIZE^2)
+// greedy tries every colour each turn          → O(COLORS * SIZE^2)
+// full greedy solve                            → * moves  (still fast)
+// finding the FEWEST possible moves            → NP-hard
+// mechanics are linear in cells; optimality is the hard part.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let cur = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ cur=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,cur-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,cur+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(cur>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(cur+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
