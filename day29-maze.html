@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 29 — Maze</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  .maze-wrap { background:#0f172a; padding:10px; border-radius:16px; margin:0 auto; display:inline-block;
+               box-shadow:0 18px 40px rgba(0,0,0,.18); line-height:0; }
+  canvas#maze { display:block; border-radius:8px; max-width:100%; height:auto; touch-action:none; }
+
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+  select { border:1px solid #cbd5e1; border-radius:8px; padding:3px 8px; font-weight:600; font-size:13px; }
+  .chk { display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:13px; color:#475569; cursor:pointer; }
+  .chk input { width:16px; height:16px; accent-color:#10b981; }
+
+  @media (max-width:480px){ .maze-wrap { padding:6px; } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 29</div>
+      <h1 class="text-xl font-bold">🌀 Maze — Carve a Perfect Maze with DFS, Then Solve It with BFS</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Carve a maze, then watch it get solved.</h2>
+      <p class="text-slate-500 mb-5">Every cell starts boxed in by four walls. <strong>Generate</strong> runs a <strong>randomised depth-first search</strong> (the recursive-backtracker): it wanders from the top-left corner, knocking down a wall into a random unvisited neighbour, diving as deep as it can, and backtracking when it hits a dead end — carving a <strong>perfect maze</strong> where every cell is reachable by exactly one route. <strong>Solve</strong> then runs a <strong>breadth-first search</strong> from the entrance (top-left) to the exit (bottom-right): it explores outward in rings, and the first time it touches the exit it has found the <strong>shortest path</strong>, which lights up in emerald. Or grab the white dot and <strong>walk it yourself with the arrow keys</strong>.</p>
+      <div class="flex justify-center gap-5 mb-3 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Grid: <span id="gridLbl" class="stat text-emerald-600">20×20</span></div>
+        <div>Passages: <span id="passLbl" class="stat text-slate-500">–</span></div>
+        <div>Path: <span id="pathLbl" class="stat text-slate-500">–</span></div>
+        <div>Explored: <span id="expLbl" class="stat text-slate-500">–</span></div>
+      </div>
+      <div class="flex items-center justify-center gap-4 mb-4 text-sm text-slate-500 flex-wrap">
+        <label class="flex items-center gap-1">Grid
+          <select id="sizeSel">
+            <option>10</option><option>15</option><option selected>20</option><option>25</option><option>30</option>
+          </select>
+        </label>
+        <label class="flex items-center gap-1">Speed
+          <select id="speedSel">
+            <option value="45">Slow</option><option value="16" selected>Medium</option><option value="5">Fast</option><option value="0">Instant</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="expChk" checked> show explored</label>
+        <span class="text-slate-400">seed <span id="seedLbl" class="stat font-mono">–</span></span>
+      </div>
+      <div class="maze-wrap"><canvas id="maze" width="540" height="540"></canvas></div>
+      <div id="msg" class="mt-5 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="solveBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">🧭 Solve (BFS)</button>
+        <button id="genBtn"   class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">🌀 Regenerate</button>
+        <button id="newBtn"   class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">↺ New seed</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">The maze is one 2-D array where each cell stores a <strong>bitmask of the walls still standing</strong> (four bits: north, east, south, west). Carving is a real stack-based DFS: push the start, keep diving into a random unvisited neighbour and clearing the shared wall bit on <em>both</em> cells, and pop to backtrack when boxed in. It removes exactly <strong>cells − 1</strong> walls, which makes the maze a <strong>spanning tree</strong> — no loops, no islands, one unique path between any two cells. Solving is a real BFS: a FIFO queue, a visited grid, and a <strong>parent map</strong> so that once the exit is dequeued we walk the parents back to reconstruct the route. Because every corridor step costs the same, BFS is already optimal — no need for Dijkstra or A*. All vanilla JavaScript on a canvas, offline, no images or libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the maze works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">One 2-D array of wall bitmasks, a set of four directions, a stack-based depth-first carve that knocks down walls into a spanning tree, a canvas renderer that draws the walls still standing, a breadth-first search with a parent map that finds the shortest route to the exit, a reconstruction that walks the parents back, arrow-key walking, and a seeded generator so a maze is repeatable. About 120 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The state: each cell is a bitmask of the walls still up</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole maze is a grid of small integers. Each cell uses four bits — one per wall (north, east, south, west). <code>15</code> is binary <code>1111</code>: all four walls present, a solid uncarved cell. Carving a passage just clears a bit. Start every cell at 15.</p>
+        <div class="relative"><pre>let N = 20;                       // maze is N x N cells
+const N_=1, E_=2, S_=4, W_=8;     // one bit per wall
+let cells = [];                   // cells[r][c] = bitmask of walls still up
+// 15 = 1111 = all four walls present (a solid, uncarved cell)
+function reset(){
+  cells = Array.from({length:N}, () =&gt; Array(N).fill(15));
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Four directions — and the wall two cells share</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Moving between two adjacent cells crosses one wall that <em>both</em> cells own — my north wall is my neighbour's south wall. So each direction carries the bit to clear on this cell (<code>bit</code>) and the matching bit on the neighbour (<code>opp</code>). Clearing both keeps the two cells' views of the wall in sync.</p>
+        <div class="relative"><pre>// dr,dc = step to the neighbour; bit = wall on THIS cell,
+// opp = the matching wall on the NEIGHBOUR (they share it)
+const DIRS = [
+  {dr:-1, dc:0, bit:N_, opp:S_},   // north
+  {dr:0,  dc:1, bit:E_, opp:W_},   // east
+  {dr:1,  dc:0, bit:S_, opp:N_},   // south
+  {dr:0, dc:-1, bit:W_, opp:E_},   // west
+];
+const inB = (r,c) =&gt; r&gt;=0 &amp;&amp; r&lt;N &amp;&amp; c&gt;=0 &amp;&amp; c&lt;N;</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Carve: randomised DFS (recursive backtracker)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Push the start cell, then repeat: look at the top of the stack, pick a <em>random unvisited</em> neighbour, knock down the shared wall on both sides, mark it visited, and push it — diving deeper. When a cell has no unvisited neighbours it's a dead end, so pop and backtrack. It ends after removing exactly <code>N·N−1</code> walls: a spanning tree, i.e. a perfect maze.</p>
+        <div class="relative"><pre>function carve(rand){
+  reset();
+  const seen = Array.from({length:N}, () =&gt; Array(N).fill(false));
+  const stack = [[0,0]];  seen[0][0] = true;
+  while (stack.length){
+    const [r,c] = stack[stack.length-1];        // peek the top
+    const opts = DIRS.filter(d =&gt; {
+      const nr=r+d.dr, nc=c+d.dc;
+      return inB(nr,nc) &amp;&amp; !seen[nr][nc];        // unvisited neighbours
+    });
+    if (!opts.length){ stack.pop(); continue; }  // dead end -&gt; backtrack
+    const d = opts[(rand()*opts.length)|0];      // pick one at random
+    const nr=r+d.dr, nc=c+d.dc;
+    cells[r][c]   &amp;= ~d.bit;                      // knock down the shared wall
+    cells[nr][nc] &amp;= ~d.opp;                      // ...on both sides
+    seen[nr][nc] = true;
+    stack.push([nr,nc]);                          // dive deeper
+  }
+  // exactly N*N-1 walls removed =&gt; spanning tree =&gt; a perfect maze
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Draw the walls that are still standing</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Rendering is a pure function of the array: for each cell, draw only the wall segments whose bit is still set. One cell is <code>S</code> pixels square; its top-left is <code>(c·S, r·S)</code>. Test each bit and stroke that edge. That's the entire maze — no sprites, just lines.</p>
+        <div class="relative"><pre>const ctx = canvas.getContext("2d");
+const S = 24;                          // pixel size of one cell
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 2;
+  for (let r=0;r&lt;N;r++) for (let c=0;c&lt;N;c++){
+    const x=c*S, y=r*S, w=cells[r][c];
+    ctx.beginPath();
+    if (w &amp; N_){ ctx.moveTo(x,   y  ); ctx.lineTo(x+S, y  ); } // top
+    if (w &amp; E_){ ctx.moveTo(x+S, y  ); ctx.lineTo(x+S, y+S); } // right
+    if (w &amp; S_){ ctx.moveTo(x,   y+S); ctx.lineTo(x+S, y+S); } // bottom
+    if (w &amp; W_){ ctx.moveTo(x,   y  ); ctx.lineTo(x,   y+S); } // left
+    ctx.stroke();
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Solve: breadth-first search with a parent map</h3></div>
+        <p class="text-sm text-slate-600 mb-3">BFS uses a FIFO queue, so it explores in expanding rings — all cells one step away, then two, and so on. You can move to a neighbour only if the wall between you is already gone (its bit is clear). Record where each cell was reached from in a <code>parent</code> grid. Because every step costs the same, the first time BFS reaches the exit it has done so along a shortest path.</p>
+        <div class="relative"><pre>function solve(){
+  const start=[0,0], goal=[N-1,N-1];
+  const seen   = Array.from({length:N}, () =&gt; Array(N).fill(false));
+  const parent = Array.from({length:N}, () =&gt; Array(N).fill(null));
+  const queue = [start];  seen[0][0] = true;
+  while (queue.length){
+    const [r,c] = queue.shift();               // FIFO -&gt; explore in rings
+    if (r===goal[0] &amp;&amp; c===goal[1]) break;      // reached the exit
+    for (const d of DIRS){
+      if (cells[r][c] &amp; d.bit) continue;         // wall in the way -&gt; blocked
+      const nr=r+d.dr, nc=c+d.dc;
+      if (!seen[nr][nc]){
+        seen[nr][nc] = true;
+        parent[nr][nc] = [r,c];                  // remember how we got here
+        queue.push([nr,nc]);
+      }
+    }
+  }
+  return parent;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Reconstruct the shortest path from the parents</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The parent map is a chain of "who reached me". Start at the exit and hop parent-to-parent until you fall off the start (whose parent is <code>null</code>), then reverse. In a perfect maze this path is the <em>only</em> one, so it is automatically shortest — but the same BFS reconstruction still gives the shortest route the instant a maze has loops.</p>
+        <div class="relative"><pre>function shortestPath(parent){
+  const path = [];
+  let cur = [N-1, N-1];                          // start at the exit
+  while (cur){ path.push(cur); cur = parent[cur[0]][cur[1]]; }
+  return path.reverse();                          // entrance -&gt; exit order
+}
+// perfect maze =&gt; unique path =&gt; this IS the shortest path.
+// braided maze (with loops) =&gt; BFS still returns the shortest.</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Walk it yourself with the arrow keys</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Give the player a position and move it on each arrow key — but only if the wall in that direction is already down (same bit test the solver uses). It's the same graph, walked by hand instead of by BFS. Reach the bottom-right and you've escaped.</p>
+        <div class="relative"><pre>let player = [0,0];
+addEventListener("keydown", e =&gt; {
+  const map = { ArrowUp:[-1,0], ArrowRight:[0,1], ArrowDown:[1,0], ArrowLeft:[0,-1] };
+  const mv = map[e.key];  if (!mv) return;
+  e.preventDefault();
+  const [dr,dc] = mv, [r,c] = player;
+  const bit = dr===-1?N_ : dr===1?S_ : dc===1?E_ : W_;
+  if (cells[r][c] &amp; bit) return;                 // wall -&gt; can't move
+  player = [r+dr, c+dc];  draw();
+  if (player[0]===N-1 &amp;&amp; player[1]===N-1) alert("You reached the exit!");
+});</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Wire it up: seed, size, regenerate, solve</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A tiny seeded generator (mulberry32) makes every maze repeatable: the same seed rebuilds the same maze, so "Regenerate" is just a new number. The grid selector changes <code>N</code> and rebuilds; Solve runs BFS and animates the path. Every rule is a small operation on one 2-D array.</p>
+        <div class="relative"><pre>function generate(seed){
+  carve(mulberry32(seed));   // seeded -&gt; same number rebuilds same maze
+  player = [0,0];
+  draw();
+}
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a&gt;&gt;&gt;15,1|a); t=t+Math.imul(t^t&gt;&gt;&gt;7,61|t)^t;
+  return ((t^t&gt;&gt;&gt;14)&gt;&gt;&gt;0)/4294967296; }; }
+
+sizeSel.onchange = e =&gt; { N = +e.target.value; generate((Math.random()*1e9)|0); };
+solveBtn.onclick = () =&gt; { const p = solve(); animatePath(shortestPath(p)); };
+newBtn.onclick   = () =&gt; generate((Math.random()*1e9)|0);
+generate(12345);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 29 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built a maze end to end: each cell a bitmask of standing walls, a stack-based randomised DFS that carves a spanning tree (a perfect maze with one unique path between any two cells), a canvas renderer that draws only the walls left standing, a breadth-first search with a parent map that finds the shortest route because every step costs the same, a reconstruction that walks the parents back from the exit, and arrow-key walking on the very same graph. Next: try a different carver (Prim, Kruskal with union-find, or Wilson's loop-erased walk) for a different texture, braid in a few loops and swap BFS for A* to see a heuristic prune the search. <strong>👉 Tomorrow — Day 30: Reversi — flip your opponent's discs by bracketing them, with a greedy/​minimax AI.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== MAZE =====
+const N_=1, E_=2, S_=4, W_=8;
+const DIRS = [
+  {dr:-1, dc:0, bit:N_, opp:S_},   // north
+  {dr:0,  dc:1, bit:E_, opp:W_},   // east
+  {dr:1,  dc:0, bit:S_, opp:N_},   // south
+  {dr:0, dc:-1, bit:W_, opp:E_},   // west
+];
+
+const canvas = document.getElementById("maze");
+const ctx    = canvas.getContext("2d");
+const msgEl  = document.getElementById("msg");
+
+let N = 20;
+let cells = [];            // final carved maze (bitmasks)
+let animCells = [];        // maze as revealed during the carve animation
+let carveSteps = [];       // [r,c,nr,nc] wall-removals in carve order
+let carveIdx = 0, carveHead = null;
+let path = [], order = [], pathIdx = 0, solveIdx = 0;
+let exploredShown = new Set();
+let player = [0,0];
+let seed = 12345, speed = 16, showExplored = true;
+let phase = "idle", timer = null;
+let CELL = 26, PAD = 6;
+
+const inB = (r,c) => r>=0 && r<N && c>=0 && c<N;
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+function computeCell(){
+  const target = Math.min(540, (window.innerWidth||560) - 40);
+  CELL = Math.max(10, Math.floor((target - PAD*2) / N));
+}
+
+// --- real recursive-backtracker carve; records the order for animation ---
+function carve(seedVal){
+  const rand = mulberry32(seedVal);
+  cells = Array.from({length:N}, () => Array(N).fill(15));
+  const seen = Array.from({length:N}, () => Array(N).fill(false));
+  const stack = [[0,0]]; seen[0][0] = true;
+  const steps = [];
+  while (stack.length){
+    const [r,c] = stack[stack.length-1];
+    const opts = DIRS.filter(d => { const nr=r+d.dr, nc=c+d.dc; return inB(nr,nc) && !seen[nr][nc]; });
+    if (!opts.length){ stack.pop(); continue; }
+    const d = opts[(rand()*opts.length)|0];
+    const nr=r+d.dr, nc=c+d.dc;
+    cells[r][c]   &= ~d.bit;
+    cells[nr][nc] &= ~d.opp;
+    seen[nr][nc] = true;
+    stack.push([nr,nc]);
+    steps.push([r,c,nr,nc]);
+  }
+  return steps;
+}
+
+function bitFor(dr,dc){ return dr===-1?N_ : dr===1?S_ : dc===1?E_ : W_; }
+function oppFor(dr,dc){ return dr===-1?S_ : dr===1?N_ : dc===1?W_ : E_; }
+function removeWall(g,r,c,nr,nc){
+  const dr=nr-r, dc=nc-c;
+  g[r][c]   &= ~bitFor(dr,dc);
+  g[nr][nc] &= ~oppFor(dr,dc);
+}
+
+// --- real BFS: queue + visited + parent map -> shortest path ---
+function solve(){
+  const goal=[N-1,N-1];
+  const seen   = Array.from({length:N}, () => Array(N).fill(false));
+  const parent = Array.from({length:N}, () => Array(N).fill(null));
+  const queue = [[0,0]]; seen[0][0]=true;
+  const expl = []; let found=false;
+  while (queue.length){
+    const [r,c] = queue.shift();
+    expl.push([r,c]);
+    if (r===goal[0] && c===goal[1]){ found=true; break; }
+    for (const d of DIRS){
+      if (cells[r][c] & d.bit) continue;
+      const nr=r+d.dr, nc=c+d.dc;
+      if (!inB(nr,nc) || seen[nr][nc]) continue;
+      seen[nr][nc]=true; parent[nr][nc]=[r,c]; queue.push([nr,nc]);
+    }
+  }
+  const p=[];
+  if (found){ let cur=goal; while(cur){ p.push(cur); cur=parent[cur[0]][cur[1]]; } p.reverse(); }
+  return { path:p, order:expl };
+}
+
+// --- rendering ---
+function fillCell(r,c,inset){
+  const i = inset||0;
+  ctx.fillRect(PAD + c*CELL + i, PAD + r*CELL + i, CELL - 2*i, CELL - 2*i);
+}
+function draw(){
+  const px = N*CELL;
+  canvas.width = px + PAD*2; canvas.height = px + PAD*2;
+  ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  if (showExplored && exploredShown.size){
+    ctx.fillStyle = "rgba(56,189,248,.20)";
+    exploredShown.forEach(id => fillCell(Math.floor(id/N), id%N, 1));
+  }
+  ctx.fillStyle = "rgba(16,185,129,.32)"; fillCell(0,0,1);           // entrance
+  ctx.fillStyle = "rgba(245,158,11,.55)"; fillCell(N-1,N-1,1);       // exit
+  ctx.fillStyle = "rgba(16,185,129,.9)";
+  for (let i=0;i<pathIdx;i++){ const [r,c]=path[i]; fillCell(r,c,Math.max(2,CELL*0.22)); }
+  if (phase==="carving" && carveHead){ ctx.fillStyle="rgba(16,185,129,.85)"; fillCell(carveHead[0],carveHead[1],1); }
+
+  if (player){
+    const [pr,pc]=player;
+    ctx.fillStyle = "#f8fafc";
+    ctx.beginPath();
+    ctx.arc(PAD + pc*CELL + CELL/2, PAD + pr*CELL + CELL/2, Math.max(3, CELL*0.28), 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = Math.max(1.5, CELL*0.08);
+  ctx.lineCap = "round";
+  const g = animCells;
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    const x = PAD + c*CELL, y = PAD + r*CELL, w = g[r][c];
+    ctx.beginPath();
+    if (w & N_){ ctx.moveTo(x,      y     ); ctx.lineTo(x+CELL, y     ); }
+    if (w & E_){ ctx.moveTo(x+CELL, y     ); ctx.lineTo(x+CELL, y+CELL); }
+    if (w & S_){ ctx.moveTo(x,      y+CELL); ctx.lineTo(x+CELL, y+CELL); }
+    if (w & W_){ ctx.moveTo(x,      y     ); ctx.lineTo(x,      y+CELL); }
+    ctx.stroke();
+  }
+}
+
+function msg(text, tone){
+  msgEl.textContent = text;
+  msgEl.className = "mt-5 font-bold " + (tone==="warn" ? "text-amber-600" : tone==="lose" ? "text-rose-600" : "text-emerald-600");
+}
+function setStats(){
+  document.getElementById("gridLbl").textContent = N + "×" + N;
+  document.getElementById("passLbl").textContent = carveSteps.length ? carveSteps.length : "–";
+  document.getElementById("pathLbl").textContent = path.length ? (path.length + " cells") : "–";
+  document.getElementById("expLbl").textContent  = exploredShown.size ? exploredShown.size + " cells" : "–";
+  document.getElementById("seedLbl").textContent = seed;
+}
+
+function stopTimers(){ if (timer){ clearInterval(timer); timer=null; } }
+function batchSize(){ return Math.max(1, Math.floor(N/8)); }
+
+function generate(newSeed){
+  stopTimers();
+  seed = newSeed>>>0;
+  computeCell();
+  carveSteps = carve(seed);
+  animCells = Array.from({length:N}, () => Array(N).fill(15));
+  carveIdx = 0; carveHead = [0,0];
+  path = []; order = []; pathIdx = 0; solveIdx = 0; exploredShown = new Set();
+  player = [0,0]; phase = "carving";
+  setStats();
+  if (speed === 0){
+    animCells = cells.map(r => r.slice()); carveIdx = carveSteps.length; carveHead = null;
+    phase = "ready"; draw();
+    msg(`Perfect maze carved: ${carveSteps.length} passages, one unique route between any two cells. Solve it, or walk it with the arrow keys.`);
+    return;
+  }
+  draw();
+  msg("Carving with randomised DFS…");
+  timer = setInterval(carveTick, speed);
+}
+function carveTick(){
+  if (carveIdx >= carveSteps.length){
+    stopTimers(); phase="ready"; carveHead=null; draw();
+    msg(`Perfect maze carved: ${carveSteps.length} passages, one unique route between any two cells. Solve it, or walk it with the arrow keys.`);
+    return;
+  }
+  const b = batchSize();
+  for (let k=0;k<b && carveIdx<carveSteps.length;k++){
+    const [r,c,nr,nc] = carveSteps[carveIdx++];
+    removeWall(animCells, r,c,nr,nc);
+    carveHead = [nr,nc];
+  }
+  draw();
+}
+
+function startSolve(){
+  if (phase !== "ready" && phase !== "solved") return;
+  stopTimers();
+  const res = solve(); path = res.path; order = res.order;
+  exploredShown = new Set(); solveIdx = 0; pathIdx = 0; phase = "solving";
+  setStats();
+  if (!path.length){ msg("No path found — that should never happen in a perfect maze.", "lose"); return; }
+  if (speed === 0){
+    exploredShown = new Set(order.map(([r,c]) => r*N+c));
+    solveIdx = order.length; pathIdx = path.length; phase = "solved"; draw(); setStats(); finishMsg();
+    return;
+  }
+  msg("BFS exploring outward in rings from the entrance…");
+  timer = setInterval(solveTick, speed);
+}
+function solveTick(){
+  const b = batchSize();
+  if (solveIdx < order.length){
+    for (let k=0;k<b && solveIdx<order.length;k++){ const [r,c]=order[solveIdx++]; exploredShown.add(r*N+c); }
+    setStats(); draw(); return;
+  }
+  if (pathIdx < path.length){
+    for (let k=0;k<b && pathIdx<path.length;k++) pathIdx++;
+    draw(); return;
+  }
+  stopTimers(); phase="solved"; draw(); finishMsg();
+}
+function finishMsg(){
+  msg(`Solved. BFS explored ${order.length} cells and returned the shortest path: ${path.length} cells (${path.length-1} steps) entrance → exit.`);
+}
+
+function tryMove(dr,dc){
+  if (phase !== "ready" && phase !== "solved") return false;
+  const [r,c] = player;
+  if (animCells[r][c] & bitFor(dr,dc)) return false;   // wall in the way
+  const nr=r+dr, nc=c+dc;
+  if (!inB(nr,nc)) return false;
+  player = [nr,nc]; draw();
+  if (nr===N-1 && nc===N-1) msg("🏁 You walked it! Reached the exit by hand. Hit Solve to watch BFS find the shortest route.");
+  return true;
+}
+
+document.addEventListener("keydown", e => {
+  const map = { ArrowUp:[-1,0], ArrowRight:[0,1], ArrowDown:[1,0], ArrowLeft:[0,-1],
+                w:[-1,0], d:[0,1], s:[1,0], a:[0,-1], W:[-1,0], D:[0,1], S:[1,0], A:[0,-1] };
+  const mv = map[e.key]; if (!mv) return;
+  if (tryMove(mv[0], mv[1])) e.preventDefault();
+});
+
+document.getElementById("solveBtn").onclick = startSolve;
+document.getElementById("genBtn").onclick   = () => generate((Math.random()*1e9)|0);
+document.getElementById("newBtn").onclick   = () => generate((Math.random()*1e9)|0);
+document.getElementById("sizeSel").onchange  = e => { N = +e.target.value; generate((Math.random()*1e9)|0); };
+document.getElementById("speedSel").onchange = e => { speed = +e.target.value; };
+document.getElementById("expChk").onchange   = e => { showExplored = e.target.checked; draw(); };
+
+generate(seed);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. A maze is a grid graph", why:"Strip away the drawing and a maze is a graph: every cell is a node, and there is a potential edge between each pair of orthogonally adjacent cells (up, down, left, right). Before you carve anything, imagine the full grid graph where every cell is joined to all its neighbours. Building a maze is the act of deciding which of those potential edges become real passages and which stay blocked by a wall. Once you see the maze as nodes and edges, both jobs — making it and solving it — become standard graph algorithms you already know.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every cell = a node<br>adjacent cells = a potential edge<br><br>·─·─·─·<br>│&nbsp;&nbsp;│&nbsp;&nbsp;│&nbsp;&nbsp;│&nbsp;&nbsp; ← full grid graph<br>·─·─·─·<br><br>a maze = which edges are open passages?</div>`, code:`// forget pixels — a maze is a graph.
+// node   = one cell (r, c)
+// edge   = two adjacent cells with NO wall between them
+let N = 20;              // N x N grid of cells
+// carving decides which potential edges become real passages` },
+
+ { title:"2. Walls vs passages — four bits per cell", why:"Between any two adjacent cells there is either a wall (no edge) or a passage (an edge). We store that per cell as a 4-bit mask: north, east, south, west. A cell starting at 15 (binary 1111) has all four walls up and is joined to nobody. Carving a passage clears one bit — and because the wall between two cells belongs to both, you must clear the matching bit on the neighbour too, or the two cells will disagree about whether they're connected. Walls up = edge absent; walls down = edge present.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">cell = N E S W  (4 bits)<br>15 = 1111 → all walls up (solid)<br><br>my NORTH wall == neighbour's SOUTH wall<br>carve = clear the bit on BOTH cells<br><br>walls up = no edge · walls down = passage</div>`, code:`const N_=1, E_=2, S_=4, W_=8;      // one bit per wall
+let cells = Array.from({length:N}, () => Array(N).fill(15));
+// 15 = all four walls present.
+// to open a passage north:  cells[r][c] &= ~N_;
+//                           cells[r-1][c] &= ~S_;   // shared wall!` },
+
+ { title:"3. A \"perfect maze\" is a spanning tree", why:"A perfect maze is one where every cell is reachable and there is exactly one path between any two cells — no loops, no closed-off islands, no open rooms. In graph terms that is precisely a spanning tree of the grid graph: it touches every node and has no cycles. A spanning tree over C cells always has exactly C−1 edges, so a perfect maze always has exactly cells−1 passages. That single fact is how you verify a carve is correct: count the passages, check it's connected, and you know there are no loops.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">perfect maze = spanning tree of the grid<br><br>• reaches every cell (connected)<br>• no loops (no cycles)<br>• unique path between any two cells<br><br>edges = cells − 1  ⇔  it's a tree</div>`, code:`// perfect maze  ⇔  spanning tree of the grid graph
+//   connected   : every cell reachable
+//   acyclic     : no loops
+//   unique path : exactly one route between any two cells
+// a tree over C nodes has exactly C-1 edges
+//   => a perfect maze has exactly (N*N - 1) passages.` },
+
+ { title:"4. Carving with randomised DFS (recursive backtracker)", why:"The recursive-backtracker is depth-first search with the neighbour order shuffled. Keep an explicit stack. Peek the cell on top; if it has any unvisited neighbours, pick one at random, knock down the wall between them, mark it visited, and push it — you've dived one step deeper. If it has none, it's a dead end: pop it and continue from the cell beneath (that's the backtrack). Because you never revisit a cell, you add exactly one edge per newly visited cell, which is why you end with cells−1 passages and a spanning tree.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">stack = [start]; visited = {start}<br>loop:<br>&nbsp;&nbsp;cur = top of stack<br>&nbsp;&nbsp;unvisited neighbours?<br>&nbsp;&nbsp;&nbsp;&nbsp;yes → carve wall, push random one<br>&nbsp;&nbsp;&nbsp;&nbsp;no&nbsp; → pop (backtrack)<br><br>one new edge per new cell → tree</div>`, code:`function carve(rand){
+  const seen = Array.from({length:N}, () => Array(N).fill(false));
+  const stack = [[0,0]]; seen[0][0] = true;
+  while (stack.length){
+    const [r,c] = stack[stack.length-1];       // peek
+    const opts = DIRS.filter(d => {
+      const nr=r+d.dr, nc=c+d.dc;
+      return inB(nr,nc) && !seen[nr][nc]; });   // unvisited neighbours
+    if (!opts.length){ stack.pop(); continue; } // dead end -> backtrack
+    const d = opts[(rand()*opts.length)|0];     // random neighbour
+    const nr=r+d.dr, nc=c+d.dc;
+    cells[r][c] &= ~d.bit; cells[nr][nc] &= ~d.opp;  // carve both sides
+    seen[nr][nc] = true; stack.push([nr,nc]);
+  }
+}` },
+
+ { title:"5. Why DFS gives long, winding corridors", why:"Because DFS commits to a direction and keeps going until it physically can't, the recursive-backtracker produces mazes with a high \"river\" factor: long, snaking corridors and comparatively few branches. Each cell has at most a couple of openings, dead ends are long, and the solution tends to wind across most of the grid. That texture is a direct fingerprint of the algorithm — Prim's or Kruskal's carve the same kind of spanning tree but look busier and more branchy, because they grow from many fronts at once instead of one deep, greedy dive.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">DFS dives deep before it backtracks<br><br>┌─────┐&nbsp;&nbsp;long snaking corridors<br>│&nbsp;┌─┐&nbsp;│&nbsp;&nbsp;few junctions<br>│&nbsp;│&nbsp;└─┘&nbsp;&nbsp;long dead ends<br>└─┘&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;high \"river\" factor<br><br>Prim / Kruskal → same tree, busier look</div>`, code:`// recursive-backtracker = go DEEP, then backtrack
+//   -> long winding corridors, few branches, long dead ends
+//   -> "river" factor is high
+// same spanning tree, different TEXTURE than:
+//   Prim's  (grow from a random frontier)  -> bushier
+//   Kruskal (random edges + union-find)    -> more uniform` },
+
+ { title:"6. Solving with breadth-first search", why:"To find a way out we search the graph we carved. BFS uses a FIFO queue, so it expands in rings: first every cell one step from the entrance, then every cell two steps away, and so on. The key property: the first time BFS dequeues a cell, it has reached it by the fewest possible steps. So the moment the exit comes off the queue, we have a shortest route. You may move from a cell to a neighbour only when the wall between them is already gone — the same bit test, now used to walk the graph instead of build it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">queue = [entrance] &nbsp;(FIFO)<br>pop cell → push its open neighbours<br><br>ring 0: entrance<br>ring 1: ●&nbsp;●&nbsp;●<br>ring 2: ●&nbsp;●&nbsp;●&nbsp;●&nbsp;●<br><br>first time exit pops → shortest path</div>`, code:`function solve(){
+  const seen = Array.from({length:N}, () => Array(N).fill(false));
+  const parent = Array.from({length:N}, () => Array(N).fill(null));
+  const queue = [[0,0]]; seen[0][0] = true;
+  while (queue.length){
+    const [r,c] = queue.shift();               // FIFO -> rings
+    if (r===N-1 && c===N-1) break;             // exit reached (shortest)
+    for (const d of DIRS){
+      if (cells[r][c] & d.bit) continue;        // wall -> blocked
+      const nr=r+d.dr, nc=c+d.dc;
+      if (!seen[nr][nc]){ seen[nr][nc]=true; parent[nr][nc]=[r,c]; queue.push([nr,nc]); }
+    }
+  }
+  return parent;
+}` },
+
+ { title:"7. Why BFS, not Dijkstra or A*", why:"Every corridor step in a maze costs exactly the same — one move. On such an unweighted graph, BFS already returns a shortest path, and it's simpler and faster than the alternatives. Dijkstra's algorithm generalises BFS to edges with different weights (it needs a priority queue), and A* speeds Dijkstra up with a heuristic like the straight-line distance to the exit so it explores fewer cells. They pay off when steps have costs (mud, hills) or the grid is huge, but for an evenly-weighted maze they'd give the same path as BFS for more work. Use the simplest tool the graph allows.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">all steps cost 1 → unweighted graph<br><br>BFS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;optimal, no priority queue<br>Dijkstra&nbsp;for weighted edges (+heap)<br>A*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Dijkstra + heuristic → fewer cells<br><br>equal weights ⇒ BFS is the right pick</div>`, code:`// unweighted graph (every step costs 1):
+//   BFS      -> shortest path, no priority queue needed
+// weighted edges (some steps cost more):
+//   Dijkstra -> BFS + a min-heap by distance
+// huge grid, want to expand fewer cells:
+//   A*       -> Dijkstra + heuristic (e.g. Manhattan to exit)
+// for an even-cost maze, BFS is simplest AND optimal.` },
+
+ { title:"8. Frontier, visited, and the parent map", why:"Three structures make BFS work. The queue is the frontier — cells discovered but not yet expanded. The visited grid stops you from processing a cell twice (and, in a maze with loops, from going in circles). The parent map is the payoff: for every cell you record which cell you reached it from. When the exit finally comes off the queue, you don't have the path yet — you have a tree of parents. Walk from the exit parent-to-parent back to the start, reverse it, and that chain is the shortest route.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">frontier (queue): to expand next<br>visited: never process twice<br>parent[cell]: who reached me<br><br>reconstruct: exit → parent → … → start<br>reverse ⇒ entrance-to-exit path</div>`, code:`function shortestPath(parent){
+  const path = [];
+  let cur = [N-1, N-1];                     // start at the exit
+  while (cur){ path.push(cur); cur = parent[cur[0]][cur[1]]; }
+  return path.reverse();                     // entrance -> exit
+}
+// visited: don't expand a cell twice (kills loops)
+// frontier = the queue itself
+// parent map = how you turn a search into an actual route` },
+
+ { title:"9. Other carving algorithms", why:"Randomised DFS is one way to draw a spanning tree; there are many, each with its own look. Randomised Prim's grows the tree from a random frontier of walls, giving a bushier maze with lots of short branches. Randomised Kruskal's shuffles all the walls and removes one whenever it joins two not-yet-connected regions, using a union-find structure to test that — very uniform. Wilson's algorithm does loop-erased random walks and is unbiased: every possible maze is equally likely. Eller's builds row by row in O(1) memory. Same spanning-tree guarantee, different texture and trade-offs.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">all produce a spanning tree, different feel:<br><br>DFS backtracker → long winding corridors<br>Prim (frontier)&nbsp;&nbsp;→ bushy, short branches<br>Kruskal (union-find) → uniform<br>Wilson (loop-erased) → unbiased, uniform<br>Eller (row by row) → O(1) memory</div>`, code:`// every carver below yields a PERFECT maze (a spanning tree):
+//   DFS backtracker : stack, dive deep      -> long corridors
+//   Prim's          : random frontier walls -> bushy
+//   Kruskal's       : shuffle walls + union-find on regions
+//   Wilson's        : loop-erased random walk -> unbiased
+//   Eller's         : one row at a time, O(1) extra memory` },
+
+ { title:"10. Complexity — linear in the cells", why:"Both halves are cheap. The carve visits each of the C = N·N cells once and does constant work per cell, so it's O(C). BFS enqueues each cell at most once and looks at its (≤4) edges, so it's O(C + E); in a grid the number of edges is proportional to C, making BFS O(C) too. Memory is O(C) for the grid, the visited array, and the parent map. In short, generating and solving a maze both scale linearly with the number of cells — a 100×100 maze is 10,000 cells, still instant. The hard part of grid games is rarely the mechanics; it's search or optimisation, and here even the search is linear.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">C = N·N cells,&nbsp;&nbsp;E ≈ 2C edges<br><br>carve (DFS)&nbsp;&nbsp;O(C)<br>solve (BFS)&nbsp;&nbsp;O(C + E) = O(C)<br>memory&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;O(C)<br><br>both scale linearly with the cells</div>`, code:`// C = N*N cells, E ~ 2C potential edges
+// carve (recursive backtracker) : each cell once  -> O(C)
+// solve (BFS)                   : each cell + edge -> O(C + E) = O(C)
+// memory: grid + visited + parent + queue          -> O(C)
+// mechanics of a grid game are linear; it's search/opt that gets hard.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,curStep-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(curStep+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>

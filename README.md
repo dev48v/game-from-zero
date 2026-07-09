@@ -35,6 +35,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 26 — Match-3](https://dev48v.infy.uk/game/day26-match-3.html) — `day26-match-3.html`
 - [GameFromZero · Day 27 — Tower of Hanoi](https://dev48v.infy.uk/game/day27-tower-of-hanoi.html) — `day27-tower-of-hanoi.html`
 - [GameFromZero · Day 28 — Flood-It](https://dev48v.infy.uk/game/day28-flood-it.html) — `day28-flood-it.html`
+- [GameFromZero · Day 29 — Maze (generate + solve)](https://dev48v.infy.uk/game/day29-maze.html) — `day29-maze.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
