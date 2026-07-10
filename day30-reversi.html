@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 30 — Reversi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  .board-wrap { background:#0f172a; padding:10px; border-radius:16px; margin:0 auto; display:inline-block;
+                box-shadow:0 18px 40px rgba(0,0,0,.18); line-height:0; }
+  canvas#board { display:block; border-radius:8px; max-width:100%; height:auto; touch-action:manipulation; cursor:pointer; }
+
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+  select { border:1px solid #cbd5e1; border-radius:8px; padding:3px 8px; font-weight:600; font-size:13px; }
+  .chk { display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:13px; color:#475569; cursor:pointer; }
+  .chk input { width:16px; height:16px; accent-color:#10b981; }
+  .disc-dot { display:inline-block; width:12px; height:12px; border-radius:50%; vertical-align:middle; }
+
+  @media (max-width:480px){ .board-wrap { padding:6px; } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 30</div>
+      <h1 class="text-xl font-bold">⚫ Reversi — Bracket Your Opponent's Discs Between Yours, Then Flip the Whole Line</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Play Reversi against the AI.</h2>
+      <p class="text-slate-500 mb-5">You are <strong>dark</strong>, the AI is <strong>light</strong>, and dark always moves first. A move is legal only if it <strong>brackets</strong> at least one straight line of your opponent's discs between the disc you place and another of your own discs — horizontally, vertically, or diagonally. Placing a disc <strong>flips every bracketed disc in every one of the eight directions at once</strong>, so a single move can capture in several lines. The emerald dots mark your legal squares; if you have none you must <strong>pass</strong>. When neither side can move the game ends and <strong>whoever owns more discs wins</strong>. Switch the AI between <strong>Greedy</strong> (grab the most flips right now) and <strong>Minimax</strong> (look several moves ahead with a positional weight map and alpha-beta pruning) and watch how differently they play — especially around the corners.</p>
+      <div class="flex justify-center gap-5 mb-3 text-sm font-bold text-slate-600 flex-wrap">
+        <div><span class="disc-dot" style="background:#0f172a;border:1px solid #334155;"></span> You: <span id="youLbl" class="stat text-emerald-600">2</span></div>
+        <div><span class="disc-dot" style="background:#f1f5f9;border:1px solid #cbd5e1;"></span> AI: <span id="aiLbl" class="stat text-slate-500">2</span></div>
+        <div>Empty: <span id="emptyLbl" class="stat text-slate-500">60</span></div>
+        <div>Turn: <span id="turnLbl" class="stat text-emerald-600">You</span></div>
+      </div>
+      <div class="flex items-center justify-center gap-4 mb-4 text-sm text-slate-500 flex-wrap">
+        <label class="flex items-center gap-1">AI
+          <select id="aiSel">
+            <option value="minimax" selected>Minimax</option>
+            <option value="greedy">Greedy (max flips)</option>
+          </select>
+        </label>
+        <label class="flex items-center gap-1">Depth
+          <select id="depthSel">
+            <option value="1">1</option><option value="2">2</option>
+            <option value="3" selected>3</option><option value="4">4</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="hintChk" checked> show legal moves</label>
+      </div>
+      <div class="board-wrap"><canvas id="board" width="464" height="464"></canvas></div>
+      <div id="msg" class="mt-5 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↺ New game</button>
+        <button id="passBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">⏭ Pass</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">Everything here is real Reversi. The board is one 8×8 array of <code>0</code> (empty), <code>1</code> (you) and <code>2</code> (AI). Legality and captures come from the same routine: from the empty square you scan outward along all eight directions; a direction "brackets" if it crosses one or more opponent discs and then lands on one of your own, and the move is legal if any direction brackets. Placing the disc flips <em>every</em> bracketed disc collected across all directions. The Greedy AI simply plays the move that flips the most discs this turn — which is famously weak. The Minimax AI searches the game tree a few plies deep, scoring leaf positions with a weight matrix that prizes corners (which can never be flipped) and punishes the squares next to them, and uses alpha-beta pruning to skip branches that cannot change the decision. All vanilla JavaScript on a canvas, offline, no images or libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Reversi works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">One 8×8 array of small integers, a set of eight direction vectors, a bracket scan that decides legality and gathers the discs to flip, a move that flips every bracketed disc in every direction, a canvas renderer, a greedy AI, and a real minimax with a positional weight matrix and alpha-beta pruning that handles passing and the endgame. About 130 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The state: an 8×8 board and the opening four discs</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole game is one 8×8 grid of integers: <code>0</code> empty, <code>1</code> you (dark), <code>2</code> the AI (light). Reversi always starts with four discs in the middle placed diagonally, and dark moves first. That's the entire initial state.</p>
+        <div class="relative"><pre>const EMPTY=0, HUMAN=1, AI=2;
+function newBoard(){
+  const b = Array.from({length:8}, () =&gt; Array(8).fill(EMPTY));
+  b[3][3]=AI;    b[3][4]=HUMAN;      // the standard Othello
+  b[4][3]=HUMAN; b[4][4]=AI;         // opening: a diagonal cross
+  return b;                          // HUMAN (dark) moves first
+}
+const inB = (r,c) =&gt; r&gt;=0 &amp;&amp; r&lt;8 &amp;&amp; c&gt;=0 &amp;&amp; c&lt;8;</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Eight directions — every straight line from a square</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A bracket can run along any of the eight compass lines: the four orthogonals and the four diagonals. Store them as <code>(dr,dc)</code> steps. Every rule in the game — is this move legal, what does it flip — is a scan along these eight rays.</p>
+        <div class="relative"><pre>// N, NE, E, SE, S, SW, W, NW  — all eight straight lines
+const DIRS = [
+  [-1,-1],[-1,0],[-1,1],
+  [ 0,-1],       [ 0,1],
+  [ 1,-1],[ 1,0],[ 1,1],
+];
+const opponent = p =&gt; p===HUMAN ? AI : HUMAN;</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The bracket scan in one direction</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Start on the neighbour in a direction. If it is empty or your own disc, this ray brackets nothing. Otherwise walk over the run of opponent discs; if the run is non-empty and ends on one of <em>your</em> discs, every opponent disc in between is captured. Return that list (empty means "no bracket this way").</p>
+        <div class="relative"><pre>function bracketDir(b, r, c, dr, dc, player){
+  const opp = opponent(player);
+  const line = [];
+  let nr = r+dr, nc = c+dc;
+  while (inB(nr,nc) &amp;&amp; b[nr][nc]===opp){   // run of opponent discs
+    line.push([nr,nc]); nr += dr; nc += dc;
+  }
+  // must be a non-empty run CLOSED by our own disc
+  if (line.length &amp;&amp; inB(nr,nc) &amp;&amp; b[nr][nc]===player) return line;
+  return [];                                // otherwise: no bracket
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Legality + flips: scan all eight directions</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A square is only playable if it's empty. Collect the brackets from all eight rays into one list — the discs this move would flip. The move is legal precisely when that list is non-empty. Loop the board once with this and you have every legal move for a player.</p>
+        <div class="relative"><pre>function flipsFor(b, r, c, player){
+  if (b[r][c] !== EMPTY) return [];         // must play on an empty square
+  let flips = [];
+  for (const [dr,dc] of DIRS)               // gather from ALL eight lines
+    flips = flips.concat(bracketDir(b, r, c, dr, dc, player));
+  return flips;                             // legal  ⇔  flips.length &gt; 0
+}
+function legalMoves(b, player){
+  const moves = [];
+  for (let r=0;r&lt;8;r++) for (let c=0;c&lt;8;c++){
+    const f = flipsFor(b, r, c, player);
+    if (f.length) moves.push({r, c, flips:f});
+  }
+  return moves;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Apply a move: place, then flip every bracketed disc</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Applying a move drops your disc on the square and recolours <em>all</em> the bracketed discs the scan found — not just one line, every direction at once. Work on a copy so the AI can explore hypothetical moves without disturbing the real board.</p>
+        <div class="relative"><pre>function applyMove(b, mv, player){
+  const nb = b.map(row =&gt; row.slice());     // copy — safe for AI search
+  nb[mv.r][mv.c] = player;                   // place the new disc
+  for (const [r,c] of mv.flips) nb[r][c] = player;  // flip ALL captured
+  return nb;
+}
+function counts(b){
+  let you=0, ai=0;
+  for (let r=0;r&lt;8;r++) for (let c=0;c&lt;8;c++){
+    if (b[r][c]===HUMAN) you++; else if (b[r][c]===AI) ai++;
+  }
+  return { you, ai };
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Draw the board and the legal-move hints</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Rendering is a pure function of the array: green felt, grid lines, then a filled circle for each disc — dark for you, light for the AI. When it's your turn, drop a small emerald dot on every legal square so the rules are visible, not memorised.</p>
+        <div class="relative"><pre>const ctx = canvas.getContext("2d"); const S = 56;   // pixels per square
+function draw(b, turn){
+  ctx.fillStyle="#065f46"; ctx.fillRect(0,0,8*S,8*S);        // felt
+  ctx.strokeStyle="#047857";
+  for (let i=0;i&lt;=8;i++){ line(i*S,0,i*S,8*S); line(0,i*S,8*S,i*S); }
+  for (let r=0;r&lt;8;r++) for (let c=0;c&lt;8;c++){
+    if (b[r][c]===EMPTY) continue;
+    ctx.fillStyle = b[r][c]===HUMAN ? "#0f172a" : "#f1f5f9";
+    disc(c*S+S/2, r*S+S/2, S*0.4);
+  }
+  if (turn===HUMAN) for (const m of legalMoves(b,HUMAN)){    // hints
+    ctx.fillStyle="rgba(16,185,129,.55)"; disc(m.c*S+S/2, m.r*S+S/2, 7);
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">The greedy AI and the positional weight matrix</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Greedy just plays the move with the most flips — easy and easy to beat, because grabbing discs early gives your opponent access to the corners. The fix is a <strong>weight matrix</strong>: corners are worth a fortune (they can never be flipped), the X- and C-squares beside them are poison, and edges beat the middle. <code>evaluate</code> scores a whole board from the AI's point of view.</p>
+        <div class="relative"><pre>const W = [
+  [120,-20, 20,  5,  5, 20,-20,120],
+  [-20,-40, -5, -5, -5, -5,-40,-20],
+  [ 20, -5, 15,  3,  3, 15, -5, 20],
+  [  5, -5,  3,  3,  3,  3, -5,  5],
+  [  5, -5,  3,  3,  3,  3, -5,  5],
+  [ 20, -5, 15,  3,  3, 15, -5, 20],
+  [-20,-40, -5, -5, -5, -5,-40,-20],
+  [120,-20, 20,  5,  5, 20,-20,120],
+];
+function greedyMove(b){                       // weak baseline
+  const ms = legalMoves(b, AI);
+  return ms.reduce((a,m) =&gt; m.flips.length &gt; a.flips.length ? m : a);
+}
+function evaluate(b){                          // from AI's point of view
+  let pos = 0;
+  for (let r=0;r&lt;8;r++) for (let c=0;c&lt;8;c++){
+    if (b[r][c]===AI)    pos += W[r][c];
+    else if (b[r][c]===HUMAN) pos -= W[r][c];
+  }
+  const my = legalMoves(b,AI).length, op = legalMoves(b,HUMAN).length;
+  const mob = (my+op) ? 8*(my-op)/(my+op) : 0;  // mobility heuristic
+  return pos + mob;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Minimax with alpha-beta pruning (handles passes)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Minimax looks ahead: the AI picks the move that maximises the score assuming you then reply to minimise it, and so on down to <code>depth</code> plies. Alpha-beta carries the best-so-far bounds and prunes branches that cannot beat them. If a side has no move it must <em>pass</em> (same depth spent, other side to move); if neither can move it's the endgame, scored by the real disc difference.</p>
+        <div class="relative"><pre>function minimax(b, depth, alpha, beta, toMove){
+  const moves = legalMoves(b, toMove);
+  if (moves.length === 0){                         // no move -&gt; must pass
+    if (legalMoves(b, opponent(toMove)).length === 0){  // both stuck: end
+      const c = counts(b); const d = c.ai - c.you;
+      return d &gt; 0 ? 100000 + d : d &lt; 0 ? -100000 + d : 0;
+    }
+    return minimax(b, depth, alpha, beta, opponent(toMove));   // pass
+  }
+  if (depth === 0) return evaluate(b);
+  if (toMove === AI){                              // maximising player
+    let best = -Infinity;
+    for (const m of moves){
+      best = Math.max(best, minimax(applyMove(b,m,AI), depth-1, alpha, beta, HUMAN));
+      alpha = Math.max(alpha, best);
+      if (beta &lt;= alpha) break;                    // prune
+    }
+    return best;
+  } else {                                         // minimising player
+    let best = Infinity;
+    for (const m of moves){
+      best = Math.min(best, minimax(applyMove(b,m,HUMAN), depth-1, alpha, beta, AI));
+      beta = Math.min(beta, best);
+      if (beta &lt;= alpha) break;                    // prune
+    }
+    return best;
+  }
+}
+function bestMove(b, depth){
+  let best=null, bestV=-Infinity;
+  for (const m of legalMoves(b, AI)){
+    const v = minimax(applyMove(b,m,AI), depth-1, -Infinity, Infinity, HUMAN);
+    if (v &gt; bestV){ bestV = v; best = m; }
+  }
+  return best;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Wire it up: click, respond, pass, game over</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A click maps to a square; if it's one of your legal moves, apply it and hand over to the AI. After every move, advance the turn: if the side to move has no legal move it passes; if neither side does, the game is over and the higher disc count wins.</p>
+        <div class="relative"><pre>canvas.onclick = e =&gt; {
+  if (turn !== HUMAN) return;
+  const rect = canvas.getBoundingClientRect();
+  const c = Math.floor((e.clientX-rect.left)/rect.width*8);
+  const r = Math.floor((e.clientY-rect.top )/rect.height*8);
+  const mv = legalMoves(board,HUMAN).find(m =&gt; m.r===r &amp;&amp; m.c===c);
+  if (!mv) return;                                   // illegal square
+  board = applyMove(board, mv, HUMAN); turn = AI; advance();
+};
+function advance(){
+  draw(board, turn);
+  if (!legalMoves(board,HUMAN).length &amp;&amp; !legalMoves(board,AI).length)
+    return endGame();                                // nobody can move
+  if (!legalMoves(board,turn).length){ turn = opponent(turn); return advance(); }
+  if (turn === AI) setTimeout(() =&gt; {
+    const mv = mode==="greedy" ? greedyMove(board) : bestMove(board, depth);
+    board = applyMove(board, mv, AI); turn = HUMAN; advance();
+  }, 300);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 30 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Reversi end to end: an 8×8 array, a bracket scan along eight directions that decides legality and gathers captures, a move that flips every bracketed disc in every line at once, pass detection and an endgame decided by disc count, a canvas renderer with live legal-move hints, a weak greedy AI, and a real minimax with a corner-loving positional weight matrix, a mobility term, and alpha-beta pruning. Next: add an opening book and move-ordering so alpha-beta prunes harder, switch the evaluation to pure disc-count in the last dozen empties (a solved endgame), or try iterative deepening with a transposition table. <strong>👉 Tomorrow — Day 31: Checkers — jump to capture, king your men on the back rank, and a minimax AI.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== REVERSI ENGINE (real rules) =====
+const EMPTY=0, HUMAN=1, AI=2;
+const DIRS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+const inB = (r,c) => r>=0 && r<8 && c>=0 && c<8;
+const opponent = p => p===HUMAN ? AI : HUMAN;
+
+const WEIGHTS = [
+  [120,-20, 20,  5,  5, 20,-20,120],
+  [-20,-40, -5, -5, -5, -5,-40,-20],
+  [ 20, -5, 15,  3,  3, 15, -5, 20],
+  [  5, -5,  3,  3,  3,  3, -5,  5],
+  [  5, -5,  3,  3,  3,  3, -5,  5],
+  [ 20, -5, 15,  3,  3, 15, -5, 20],
+  [-20,-40, -5, -5, -5, -5,-40,-20],
+  [120,-20, 20,  5,  5, 20,-20,120],
+];
+
+function newBoard(){
+  const b = Array.from({length:8}, () => Array(8).fill(EMPTY));
+  b[3][3]=AI; b[3][4]=HUMAN; b[4][3]=HUMAN; b[4][4]=AI;
+  return b;
+}
+function bracketDir(b, r, c, dr, dc, player){
+  const opp = opponent(player);
+  const line = [];
+  let nr=r+dr, nc=c+dc;
+  while (inB(nr,nc) && b[nr][nc]===opp){ line.push([nr,nc]); nr+=dr; nc+=dc; }
+  if (line.length && inB(nr,nc) && b[nr][nc]===player) return line;
+  return [];
+}
+function flipsFor(b, r, c, player){
+  if (b[r][c] !== EMPTY) return [];
+  let flips = [];
+  for (const [dr,dc] of DIRS) flips = flips.concat(bracketDir(b, r, c, dr, dc, player));
+  return flips;
+}
+function legalMoves(b, player){
+  const moves = [];
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const f = flipsFor(b, r, c, player);
+    if (f.length) moves.push({ r, c, flips:f });
+  }
+  return moves;
+}
+function applyMove(b, mv, player){
+  const nb = b.map(row => row.slice());
+  nb[mv.r][mv.c] = player;
+  for (const [r,c] of mv.flips) nb[r][c] = player;
+  return nb;
+}
+function counts(b){
+  let you=0, ai=0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    if (b[r][c]===HUMAN) you++; else if (b[r][c]===AI) ai++;
+  }
+  return { you, ai, empty: 64-you-ai };
+}
+function evaluate(b){
+  let pos = 0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    if (b[r][c]===AI) pos += WEIGHTS[r][c];
+    else if (b[r][c]===HUMAN) pos -= WEIGHTS[r][c];
+  }
+  const my = legalMoves(b,AI).length, op = legalMoves(b,HUMAN).length;
+  const mob = (my+op) ? 8*(my-op)/(my+op) : 0;
+  return pos + mob;
+}
+function greedyMove(b){
+  const ms = legalMoves(b, AI);
+  return ms.reduce((a,m) => m.flips.length > a.flips.length ? m : a);
+}
+function minimax(b, depth, alpha, beta, toMove){
+  const moves = legalMoves(b, toMove);
+  if (moves.length === 0){
+    if (legalMoves(b, opponent(toMove)).length === 0){
+      const c = counts(b); const d = c.ai - c.you;
+      return d > 0 ? 100000 + d : d < 0 ? -100000 + d : 0;
+    }
+    return minimax(b, depth, alpha, beta, opponent(toMove));
+  }
+  if (depth === 0) return evaluate(b);
+  if (toMove === AI){
+    let best = -Infinity;
+    for (const m of moves){
+      best = Math.max(best, minimax(applyMove(b,m,AI), depth-1, alpha, beta, HUMAN));
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const m of moves){
+      best = Math.min(best, minimax(applyMove(b,m,HUMAN), depth-1, alpha, beta, AI));
+      beta = Math.min(beta, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+function bestMove(b, depth){
+  let best=null, bestV=-Infinity;
+  for (const m of legalMoves(b, AI)){
+    const v = minimax(applyMove(b,m,AI), depth-1, -Infinity, Infinity, HUMAN);
+    if (v > bestV){ bestV = v; best = m; }
+  }
+  return best || legalMoves(b, AI)[0] || null;
+}
+
+// ===== UI / GAME LOOP =====
+const canvas = document.getElementById("board");
+const ctx    = canvas.getContext("2d");
+const msgEl  = document.getElementById("msg");
+
+let board = newBoard();
+let turn = HUMAN;
+let busy = false, over = false;
+let lastMove = null;
+let mode = "minimax", depth = 3, showHints = true;
+let S = 56, PAD = 8;
+
+function computeCell(){
+  const target = Math.min(448, (window.innerWidth||480) - 40);
+  S = Math.max(30, Math.floor(target / 8));
+}
+function disc(cx, cy, rad){ ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI*2); ctx.fill(); }
+
+function draw(){
+  const px = 8*S;
+  canvas.width = px + PAD*2; canvas.height = px + PAD*2;
+  ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#065f46"; ctx.fillRect(PAD,PAD,px,px);
+  // grid
+  ctx.strokeStyle = "#047857"; ctx.lineWidth = 1;
+  for (let i=0;i<=8;i++){
+    ctx.beginPath(); ctx.moveTo(PAD+i*S+0.5, PAD);       ctx.lineTo(PAD+i*S+0.5, PAD+px);   ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PAD, PAD+i*S+0.5);       ctx.lineTo(PAD+px, PAD+i*S+0.5);   ctx.stroke();
+  }
+  // reference dots (classic Othello star points)
+  ctx.fillStyle = "#022c22";
+  [[2,2],[2,6],[6,2],[6,6]].forEach(([r,c]) => disc(PAD+c*S, PAD+r*S, 3));
+  // last-move highlight
+  if (lastMove){
+    ctx.fillStyle = "rgba(16,185,129,.28)";
+    ctx.fillRect(PAD+lastMove[1]*S, PAD+lastMove[0]*S, S, S);
+  }
+  // discs
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    if (board[r][c]===EMPTY) continue;
+    const cx = PAD+c*S+S/2, cy = PAD+r*S+S/2;
+    ctx.fillStyle = "rgba(0,0,0,.25)"; disc(cx, cy+1.5, S*0.40);
+    ctx.fillStyle = board[r][c]===HUMAN ? "#0f172a" : "#f1f5f9"; disc(cx, cy, S*0.40);
+    ctx.strokeStyle = board[r][c]===HUMAN ? "#334155" : "#cbd5e1"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, S*0.40, 0, Math.PI*2); ctx.stroke();
+  }
+  // legal-move hints
+  if (showHints && turn===HUMAN && !over && !busy){
+    ctx.fillStyle = "rgba(16,185,129,.55)";
+    for (const m of legalMoves(board, HUMAN)) disc(PAD+m.c*S+S/2, PAD+m.r*S+S/2, Math.max(5, S*0.13));
+  }
+}
+
+function updateScore(){
+  const c = counts(board);
+  document.getElementById("youLbl").textContent = c.you;
+  document.getElementById("aiLbl").textContent = c.ai;
+  document.getElementById("emptyLbl").textContent = c.empty;
+  document.getElementById("turnLbl").textContent = over ? "—" : (turn===HUMAN ? "You" : "AI");
+}
+function msg(text, tone){
+  msgEl.textContent = text;
+  msgEl.className = "mt-5 font-bold " + (tone==="warn" ? "text-amber-600" : tone==="lose" ? "text-rose-600" : "text-emerald-600");
+}
+
+function endGame(){
+  over = true; busy = false;
+  const c = counts(board);
+  const verdict = c.you > c.ai ? "You win! 🎉" : c.ai > c.you ? "AI wins." : "It's a tie.";
+  draw(); updateScore();
+  msg(`Game over — You ${c.you}, AI ${c.ai}. ${verdict}`, c.you >= c.ai ? "" : "lose");
+}
+
+function advance(){
+  draw(); updateScore();
+  if (over) return;
+  const youCan = legalMoves(board, HUMAN).length;
+  const aiCan  = legalMoves(board, AI).length;
+  if (!youCan && !aiCan) return endGame();
+  if (!legalMoves(board, turn).length){
+    msg((turn===HUMAN ? "You have" : "The AI has") + " no legal move — turn passes.", "warn");
+    turn = opponent(turn);
+    setTimeout(advance, 800);
+    return;
+  }
+  if (turn === AI){
+    busy = true;
+    msg((mode==="greedy" ? "Greedy" : "Minimax (depth "+depth+")") + " AI is thinking…");
+    draw();
+    setTimeout(() => {
+      const mv = mode==="greedy" ? greedyMove(board) : bestMove(board, depth);
+      if (mv){ board = applyMove(board, mv, AI); lastMove = [mv.r, mv.c]; }
+      busy = false; turn = HUMAN;
+      advance();
+    }, 300);
+  } else {
+    msg("Your move — the emerald dots mark every legal square.");
+  }
+}
+
+canvas.onclick = e => {
+  if (over || busy || turn !== HUMAN) return;
+  const rect = canvas.getBoundingClientRect();
+  const px = 8*S;
+  const c = Math.floor(((e.clientX-rect.left)/rect.width  * canvas.width  - PAD) / S);
+  const r = Math.floor(((e.clientY-rect.top )/rect.height * canvas.height - PAD) / S);
+  if (!inB(r,c)) return;
+  const mv = legalMoves(board, HUMAN).find(m => m.r===r && m.c===c);
+  if (!mv){ msg("That square doesn't bracket any of the AI's discs — pick an emerald dot.", "warn"); return; }
+  board = applyMove(board, mv, HUMAN); lastMove = [r,c]; turn = AI;
+  advance();
+};
+
+function newGame(){
+  computeCell();
+  board = newBoard(); turn = HUMAN; busy = false; over = false; lastMove = null;
+  draw(); updateScore();
+  msg("Your move — the emerald dots mark every legal square.");
+}
+
+document.getElementById("newBtn").onclick = newGame;
+document.getElementById("passBtn").onclick = () => {
+  if (over || busy || turn !== HUMAN) return;
+  if (legalMoves(board, HUMAN).length){ msg("You still have a legal move — you can only pass when you have none.", "warn"); return; }
+  turn = AI; advance();
+};
+document.getElementById("aiSel").onchange   = e => { mode = e.target.value; };
+document.getElementById("depthSel").onchange = e => { depth = +e.target.value; };
+document.getElementById("hintChk").onchange  = e => { showHints = e.target.checked; draw(); };
+window.addEventListener("resize", () => { computeCell(); draw(); });
+
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. Reversi is a bracket-and-flip game", why:"Reversi (sold as Othello) is played by two sides — dark and light — on an 8×8 board that starts with four discs in the middle placed in a diagonal cross. Dark always moves first. On your turn you drop one disc on an empty square, and you must do it so that it traps at least one straight line of the opponent's discs between the disc you just placed and another disc of your own already on the board. Every trapped disc immediately flips to your colour. You cannot pass if a legal move exists. When neither side can move, the game ends and whoever has more discs wins. That single trapping rule is the whole game.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">start (dark = you, light = AI)<br><br>· · · · · · · ·<br>· · · ○ ● · · ·<br>· · · ● ○ · · ·<br>· · · · · · · ·<br><br>dark moves first · trap a line · flip it<br>most discs when nobody can move wins</div>`, code:`// 0 = empty, 1 = you (dark), 2 = AI (light)
+const EMPTY=0, HUMAN=1, AI=2;
+function newBoard(){
+  const b = Array.from({length:8}, () => Array(8).fill(EMPTY));
+  b[3][3]=AI; b[3][4]=HUMAN;         // the four opening discs,
+  b[4][3]=HUMAN; b[4][4]=AI;         // a diagonal cross in the centre
+  return b;                          // dark (HUMAN) moves first
+}` },
+
+ { title:"2. The board and the eight directions", why:"Peel away the graphics and the board is just an 8×8 array of 0/1/2. Every question the rules ask — is this move legal, which discs flip — is answered by looking along the eight straight lines from a square: up, down, left, right and the four diagonals. Storing those as eight (row-step, col-step) vectors lets one loop handle all of them, so there is never a special case for 'horizontal' versus 'diagonal'. A bounds check keeps the scans on the board.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">eight rays from one square<br><br>↖ ↑ ↗<br>← ● →<br>↙ ↓ ↘<br><br>(dr,dc) ∈ {-1,0,1}² minus (0,0)<br>same scan works for every direction</div>`, code:`const DIRS = [
+  [-1,-1],[-1,0],[-1,1],
+  [ 0,-1],       [ 0,1],
+  [ 1,-1],[ 1,0],[ 1,1],
+];
+const inB = (r,c) => r>=0 && r<8 && c>=0 && c<8;
+const opponent = p => p===HUMAN ? AI : HUMAN;` },
+
+ { title:"3. Legal move = a bracket in some direction", why:"A move is legal only on an empty square, and only if it brackets. To test one direction, step to the neighbour: if it is empty or your own colour, this ray captures nothing. Otherwise walk over the unbroken run of opponent discs; the run counts only if it finally lands on one of your own discs. That closing disc is what 'brackets' the run — the opponent discs are now trapped between two of yours. An empty run, or a run that runs off the board or hits an empty square, brackets nothing.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">play ● here, scan east →<br><br>[●] ○ ○ ○ ●<br>&nbsp;you&nbsp; opp opp opp you<br><br>run of opponent discs, CLOSED by your disc<br>⇒ those three ○ are bracketed<br>(no closing ● ⇒ nothing captured)</div>`, code:`function bracketDir(b, r, c, dr, dc, player){
+  const opp = opponent(player);
+  const line = [];
+  let nr = r+dr, nc = c+dc;
+  while (inB(nr,nc) && b[nr][nc]===opp){   // run of opponent discs
+    line.push([nr,nc]); nr += dr; nc += dc;
+  }
+  // captures only if the run is non-empty AND closed by our disc
+  if (line.length && inB(nr,nc) && b[nr][nc]===player) return line;
+  return [];
+}` },
+
+ { title:"4. A move flips ALL bracketed discs, in every direction", why:"The single most-missed rule: one placement can bracket in several directions at once, and it flips the trapped discs in every one of them — not just the longest line, not just the first you find. So legality and captures are the same computation: scan all eight rays from the square and concatenate every bracketed run into one list. If the list is empty the move is illegal; otherwise that list is exactly the set of discs that flip. Sweep the board with this and you have every legal move for a side.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one ● can trap in many lines at once<br><br>· ○ ·<br>○ ● ○ &nbsp; → placing the centre ●<br>· ○ · &nbsp;&nbsp;&nbsp; flips N, E, S, W together<br><br>flips = concat of all eight rays<br>legal ⇔ that combined list is non-empty</div>`, code:`function flipsFor(b, r, c, player){
+  if (b[r][c] !== EMPTY) return [];            // must be an empty square
+  let flips = [];
+  for (const [dr,dc] of DIRS)                  // gather from ALL 8 rays
+    flips = flips.concat(bracketDir(b, r, c, dr, dc, player));
+  return flips;                                // legal ⇔ flips.length > 0
+}
+function legalMoves(b, player){
+  const moves = [];
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const f = flipsFor(b, r, c, player);
+    if (f.length) moves.push({ r, c, flips:f });
+  }
+  return moves;
+}` },
+
+ { title:"5. Passing, and how the game ends", why:"Unlike chess you cannot choose to pass: if you have any legal move you must play it. But if you have none while your opponent does, your turn is skipped — you pass involuntarily and they move again. The game is over only when neither side has a legal move, which usually means the board is full but can happen earlier if both sides are stuck. Then you simply count discs: more discs wins, equal is a draw. Empty squares at the end are not scored.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">turn logic each ply:<br><br>side has a move? → must play it<br>side has none, other does? → pass<br>NEITHER has a move? → GAME OVER<br><br>winner = more discs (empties don't count)</div>`, code:`function counts(b){
+  let you=0, ai=0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    if (b[r][c]===HUMAN) you++; else if (b[r][c]===AI) ai++;
+  }
+  return { you, ai };
+}
+// no move for side-to-move but opponent can move -> pass (skip turn)
+// no move for EITHER side                        -> game over, count discs` },
+
+ { title:"6. Why corners are gold and their neighbours are traps", why:"A disc on a corner can never be flipped — there is no square beyond it to close a bracket, so once a corner is yours it is yours forever, and it anchors whole edges. That makes corners the single most valuable squares. The catch is the squares touching a corner: the diagonal 'X-square' and the adjacent 'C-squares' are dangerous, because playing there often hands the opponent the corner. Good play therefore fights for corners and avoids giving them away — a truth that a disc-counting strategy is blind to.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">C X · · · · X C<br>X · · · · · · X<br>· · · · · · · ·<br><br>◆ corner = permanent, anchors an edge<br>✗ X-square (diagonal) = usually gives it away<br>✗ C-square (edge-adjacent) = risky too</div>`, code:`// corner (0,0): nothing beyond it can ever bracket it back
+//   -> a corner disc is PERMANENT, and stabilises its edges
+// the squares next to a corner are the danger zone:
+//   X-square (1,1) diagonal  -> often surrenders the corner
+//   C-squares (0,1),(1,0)    -> risky, edge-adjacent
+// this is why raw disc count is a bad guide to who is winning.` },
+
+ { title:"7. Greedy (max flips) is a weak AI", why:"The obvious strategy — always take the move that flips the most discs — plays badly. Early in the game the disc count barely matters and swings wildly; grabbing a big flip usually pushes your discs to the frontier where the opponent can re-flip them, and it frequently opens the squares next to a corner, letting the opponent seize a corner you can never take back. Strong players often deliberately hold the fewest discs in the midgame to keep their opponent short of moves. Greedy is a good baseline to beat, not a good player.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">greedy: pick the move with the most flips<br><br>+8 flips now …<br>… but it exposes a corner square<br>→ opponent takes the corner<br>→ you slowly lose the edge and the game<br><br>disc count early ≠ who is winning</div>`, code:`function greedyMove(b){                 // maximise immediate captures
+  const ms = legalMoves(b, AI);
+  return ms.reduce((a,m) => m.flips.length > a.flips.length ? m : a);
+}
+// simple and fast, but strategically naive:
+//   grabbing discs early exposes frontier discs and corners.
+// we need to VALUE positions, not just count flips ->` },
+
+ { title:"8. Scoring a position with a weight matrix", why:"To judge a position we give every square a strategic value and sum them: corners score a huge +120, the X-squares beside them a painful -40, C-squares -20, edges a modest positive, and the bland centre a little. The board's value to the AI is the sum of weights on its discs minus the sum on yours. This one table encodes 'grab corners, avoid the squares next to them, prefer edges' without any special-case rules — and it is the leaf score the search will try to maximise.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">120 -20&nbsp; 20&nbsp;&nbsp; 5&nbsp;&nbsp; 5&nbsp; 20 -20 120<br>-20 -40&nbsp; -5&nbsp; -5&nbsp; -5&nbsp; -5 -40 -20<br>&nbsp;20&nbsp; -5&nbsp; 15&nbsp;&nbsp; 3&nbsp;&nbsp; 3&nbsp; 15&nbsp; -5&nbsp; 20<br>&nbsp;&nbsp;…&nbsp; (symmetric) …<br><br>score(AI) = Σ weight(AI) − Σ weight(you)</div>`, code:`const W = [
+  [120,-20, 20,  5,  5, 20,-20,120],
+  [-20,-40, -5, -5, -5, -5,-40,-20],
+  [ 20, -5, 15,  3,  3, 15, -5, 20],
+  [  5, -5,  3,  3,  3,  3, -5,  5],
+  [  5, -5,  3,  3,  3,  3, -5,  5],
+  [ 20, -5, 15,  3,  3, 15, -5, 20],
+  [-20,-40, -5, -5, -5, -5,-40,-20],
+  [120,-20, 20,  5,  5, 20,-20,120],
+];
+function evaluate(b){
+  let s = 0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    if (b[r][c]===AI) s += W[r][c]; else if (b[r][c]===HUMAN) s -= W[r][c];
+  }
+  return s;   // positive = good for the AI
+}` },
+
+ { title:"9. Looking ahead with minimax + alpha-beta", why:"A one-move score is short-sighted, so the AI searches the game tree. Minimax assumes both sides play their best: the AI picks the move that maximises the evaluation, expecting you to reply with the move that minimises it, alternating down to a fixed depth. Alpha-beta pruning makes this cheap — it tracks the best score each side is already guaranteed (alpha for the maximiser, beta for the minimiser) and abandons a branch the moment it proves it cannot affect the choice, often cutting the work by a huge factor without changing the answer. Passes recurse with the same depth on the other side; a position where neither can move is scored by the real disc difference so the AI fights to actually win the endgame.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">&nbsp;&nbsp;&nbsp;&nbsp;AI (max)<br>&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;\\<br>&nbsp;you(min)&nbsp;you(min)<br>&nbsp;/ \\&nbsp;&nbsp;&nbsp;&nbsp;/ \\<br>eval eval eval eval<br><br>max of (min of …) · prune when β ≤ α</div>`, code:`function minimax(b, depth, alpha, beta, toMove){
+  const moves = legalMoves(b, toMove);
+  if (!moves.length){                              // no move -> pass
+    if (!legalMoves(b, opponent(toMove)).length){  // both stuck: endgame
+      const c = counts(b), d = c.ai - c.you;
+      return d>0 ? 1e5+d : d<0 ? -1e5+d : 0;
+    }
+    return minimax(b, depth, alpha, beta, opponent(toMove));
+  }
+  if (depth === 0) return evaluate(b);
+  let best = toMove===AI ? -Infinity : Infinity;
+  for (const m of moves){
+    const v = minimax(applyMove(b,m,toMove), depth-1, alpha, beta, opponent(toMove));
+    if (toMove===AI){ best=Math.max(best,v); alpha=Math.max(alpha,best); }
+    else            { best=Math.min(best,v); beta =Math.min(beta ,best); }
+    if (beta <= alpha) break;                      // alpha-beta prune
+  }
+  return best;
+}` },
+
+ { title:"10. Depth, mobility, and the endgame", why:"Search depth trades strength for time: each extra ply multiplies the number of positions by the branching factor (early on, dozens of moves), which is exactly why alpha-beta and move-ordering matter. A pure weight matrix also misses a key idea — mobility: having many moves while your opponent has few is a real advantage, so strong evaluations add a term rewarding the difference in legal-move counts. Finally, once only a handful of empty squares remain the position is small enough to search to the very end and score by disc count directly — a 'solved' endgame — because now the only thing that matters is who owns more discs when the board fills.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">deeper search = stronger, but ~b× cost per ply<br><br>eval = positional weights<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ mobility (my moves − yours)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ disc count when near the end<br><br>few empties left → search to the finish</div>`, code:`function evaluate(b){
+  let pos = 0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    if (b[r][c]===AI) pos += W[r][c]; else if (b[r][c]===HUMAN) pos -= W[r][c];
+  }
+  const my = legalMoves(b,AI).length, op = legalMoves(b,HUMAN).length;
+  const mob = (my+op) ? 8*(my-op)/(my+op) : 0;   // mobility term
+  return pos + mob;
+}
+// depth: each extra ply ~x branching factor -> alpha-beta is essential
+// endgame: with few empties, search to the end and score by disc count.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,curStep-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(curStep+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
