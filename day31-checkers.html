@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 31 — Checkers</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  .board-wrap { background:#0f172a; padding:10px; border-radius:16px; margin:0 auto; display:inline-block;
+                box-shadow:0 18px 40px rgba(0,0,0,.18); line-height:0; }
+  canvas#board { display:block; border-radius:8px; max-width:100%; height:auto; touch-action:manipulation; cursor:pointer; }
+
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+  select { border:1px solid #cbd5e1; border-radius:8px; padding:3px 8px; font-weight:600; font-size:13px; }
+  .chk { display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:13px; color:#475569; cursor:pointer; }
+  .chk input { width:16px; height:16px; accent-color:#10b981; }
+  .disc-dot { display:inline-block; width:12px; height:12px; border-radius:50%; vertical-align:middle; }
+
+  @media (max-width:480px){ .board-wrap { padding:6px; } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 31</div>
+      <h1 class="text-xl font-bold">🔴 Checkers — Jump to Capture, Chain Your Multi-Jumps, and King Your Men on the Back Rank</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Play Checkers against the AI.</h2>
+      <p class="text-slate-500 mb-5">You are <strong>red</strong>, the AI is <strong>black</strong>, and every piece lives on the <strong>dark squares only</strong>. A plain man moves one square <strong>diagonally forward</strong> to an empty dark square — your men move up, the AI's move down. You <strong>capture by jumping</strong>: hop diagonally over a touching enemy piece into the empty square just beyond, and that piece is removed. Captures are <strong>mandatory</strong> — if any jump is available you must take one — and after a jump, if the same piece can jump again it <strong>must keep going</strong>, so a single turn can sweep several pieces off the board. Reach the far back rank and your man is <strong>crowned a king</strong>, free to move and jump in <em>both</em> diagonal directions. You win when the AI has <strong>no pieces left, or no legal move</strong>. The emerald outlines mark the pieces you may move; click one, then click a green square. The AI plays a real <strong>minimax</strong> search with alpha-beta pruning — pick how many moves ahead it looks.</p>
+      <div class="flex justify-center gap-5 mb-3 text-sm font-bold text-slate-600 flex-wrap">
+        <div><span class="disc-dot" style="background:#e11d48;border:1px solid #9f1239;"></span> You: <span id="youLbl" class="stat text-emerald-600">12</span></div>
+        <div><span class="disc-dot" style="background:#1e293b;border:1px solid #020617;"></span> AI: <span id="aiLbl" class="stat text-slate-500">12</span></div>
+        <div>👑 Kings: <span id="kingLbl" class="stat text-slate-500">You 0 · AI 0</span></div>
+        <div>Turn: <span id="turnLbl" class="stat text-emerald-600">You</span></div>
+      </div>
+      <div class="flex items-center justify-center gap-4 mb-4 text-sm text-slate-500 flex-wrap">
+        <label class="flex items-center gap-1">AI depth
+          <select id="depthSel">
+            <option value="4">4</option>
+            <option value="5" selected>5</option>
+            <option value="6">6</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="hintChk" checked> highlight movable pieces</label>
+      </div>
+      <div class="board-wrap"><canvas id="board" width="464" height="464"></canvas></div>
+      <div id="msg" class="mt-5 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↺ New game</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">Everything here is real Checkers (English draughts). The board is one 8×8 array of small integers — <code>0</code> empty, and separate codes for your men and kings and the AI's men and kings — with pieces only ever on the dark squares. One move generator produces every legal move: it first hunts for <em>jumps</em> by recursing over the multi-jump tree (hop an enemy, land beyond, then try to jump again from there), and only if no jump exists anywhere does it fall back to plain diagonal slides — that is the mandatory-capture rule in code. Landing on the back rank crowns the piece, which flips its allowed directions. The AI runs the same minimax you would write by hand: it plays each of its moves, imagines your best reply, and so on down to the chosen depth, scoring leaf positions by material (kings count far more than men) plus a little positional sense — hold the centre, push men forward, guard the back row — and alpha-beta pruning throws away branches that cannot change the decision. All vanilla JavaScript on a canvas, offline, no images or libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Checkers works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">One 8×8 array of small integers on the dark squares, a handful of direction helpers, a recursive jump enumerator that walks the whole multi-jump tree, a move generator that makes captures mandatory, a move applier that crowns kings on the back rank, a canvas renderer, and a real minimax with a material-plus-position evaluation and alpha-beta pruning. About 130 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The state: 12 men each, on the dark squares</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole game is one 8×8 grid of integers: <code>0</code> empty, then a code each for your man/king and the AI's man/king. Pieces only ever sit on the dark squares — where <code>(row+col)</code> is odd — so three rows of them at each end give twelve pieces a side. You move first.</p>
+        <div class="relative"><pre>const EMPTY=0, HM=1, HK=2, AM=3, AK=4;      // empty, human man/king, AI man/king
+const HUMAN=1, AI=2;
+const inB    = (r,c) =&gt; r&gt;=0 &amp;&amp; r&lt;8 &amp;&amp; c&gt;=0 &amp;&amp; c&lt;8;
+const isDark = (r,c) =&gt; ((r+c) &amp; 1) === 1;   // pieces live on dark squares only
+function newBoard(){
+  const b = Array.from({length:8}, () =&gt; Array(8).fill(EMPTY));
+  for (let r=0;r&lt;3;r++) for (let c=0;c&lt;8;c++) if (isDark(r,c)) b[r][c]=AM; // AI: top 3 rows
+  for (let r=5;r&lt;8;r++) for (let c=0;c&lt;8;c++) if (isDark(r,c)) b[r][c]=HM; // you: bottom 3
+  return b;                                  // 12 men each — you move first
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Men move one way, kings move both</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A few tiny helpers decode a square. The key one is <code>stepDirs</code>: a king slides along all four diagonals, but a plain man only goes <em>forward</em> — your men up the board, the AI's men down. Every rule below is just a loop over these direction steps.</p>
+        <div class="relative"><pre>const owner  = p =&gt; p===HM||p===HK ? HUMAN : p===AM||p===AK ? AI : 0;
+const isKing = p =&gt; p===HK || p===AK;
+const king   = p =&gt; p===HM ? HK : p===AM ? AK : p;   // crown a man
+const opp    = pl =&gt; pl===HUMAN ? AI : HUMAN;
+
+// men move one way; kings move both. Your men go UP (row-1), AI men go DOWN.
+function stepDirs(p){
+  if (isKing(p)) return [[-1,-1],[-1,1],[1,-1],[1,1]];
+  return owner(p)===HUMAN ? [[-1,-1],[-1,1]] : [[1,-1],[1,1]];
+}
+const reachesBack = (r,pl) =&gt; pl===HUMAN ? r===0 : r===7;  // far side = promotion</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Plain slides: one step to an empty square</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The non-capturing move is the simplest: for each allowed direction, look at the adjacent dark square; if it is empty, that is a legal slide. We describe every move the same way — a <code>from</code>, a <code>to</code>, and a (here empty) list of captured squares — so the rest of the engine never cares which kind it is.</p>
+        <div class="relative"><pre>// a plain slide: one diagonal step to an adjacent EMPTY square
+function simpleMoves(b, r, c){
+  const p = b[r][c], out = [];
+  for (const [dr,dc] of stepDirs(p)){
+    const nr = r+dr, nc = c+dc;
+    if (inB(nr,nc) &amp;&amp; b[nr][nc]===EMPTY)
+      out.push({ from:[r,c], to:[nr,nc], captures:[], steps:[[nr,nc]] });
+  }
+  return out;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Jumps, and the multi-jump recursion</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A capture hops an <em>adjacent enemy</em> into the empty square two diagonals away. The twist is chaining: after landing, the same piece must try to jump again. So we simulate the hop on a copied board and recurse from the landing square, threading the list of captured squares so we never jump the same piece twice. Crowning ends the turn, so we stop recursing there.</p>
+        <div class="relative"><pre>// every jump chain from (r,c): hop an adjacent enemy into the empty square
+// beyond, then recurse — the same piece keeps jumping while it can.
+function jumpsFrom(b, r, c, p, captured){
+  const res = [];
+  for (const [dr,dc] of stepDirs(p)){
+    const mr=r+dr, mc=c+dc, lr=r+2*dr, lc=c+2*dc;      // mid = jumped, land = target
+    if (!inB(lr,lc) || b[lr][lc]!==EMPTY) continue;     // must land on empty
+    const mid = b[mr][mc];
+    if (mid===EMPTY || owner(mid)===owner(p)) continue; // must hop an ENEMY
+    if (captured.some(q =&gt; q[0]===mr &amp;&amp; q[1]===mc)) continue; // never twice
+    const nb = b.map(row =&gt; row.slice());               // simulate the hop
+    nb[r][c]=EMPTY; nb[mr][mc]=EMPTY;
+    let np=p, crowned=false;
+    if (!isKing(p) &amp;&amp; reachesBack(lr, owner(p))){ np=king(p); crowned=true; }
+    nb[lr][lc]=np;
+    const cap  = captured.concat([[mr,mc]]);
+    const cont = crowned ? [] : jumpsFrom(nb, lr, lc, np, cap); // crowning ends turn
+    if (!cont.length) res.push({ to:[lr,lc], captures:cap, steps:[[lr,lc]] });
+    else for (const k of cont)
+      res.push({ to:k.to, captures:k.captures, steps:[[lr,lc]].concat(k.steps) });
+  }
+  return res;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Move generation — capture is mandatory</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Here is the rule that shapes the whole game: if <em>any</em> jump exists for the side to move, only jumps are legal — slides are forbidden. So gather every jump first; if the list is non-empty, return it. Only when nobody can jump do we fall back to the plain slides. This one <code>if</code> is the mandatory-capture rule.</p>
+        <div class="relative"><pre>// MANDATORY capture: if ANY jump exists for the side, only jumps are legal.
+function genMoves(b, pl){
+  const jumps = [];
+  for (let r=0;r&lt;8;r++) for (let c=0;c&lt;8;c++)
+    if (owner(b[r][c])===pl)
+      for (const j of jumpsFrom(b, r, c, b[r][c], []))
+        jumps.push({ from:[r,c], to:j.to, captures:j.captures, steps:j.steps });
+  if (jumps.length) return jumps;              // forced to capture
+  const slides = [];
+  for (let r=0;r&lt;8;r++) for (let c=0;c&lt;8;c++)
+    if (owner(b[r][c])===pl) slides.push(...simpleMoves(b, r, c));
+  return slides;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Apply a move: remove captures, crown kings</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Applying a move lifts the piece off its start square, erases every captured square the jump chain collected, and drops the piece on its final square — promoting it to a king if that square is the back rank. Work on a copy so the AI can explore hypothetical moves without disturbing the real board.</p>
+        <div class="relative"><pre>function applyMove(b, mv, pl){
+  const nb = b.map(row =&gt; row.slice());          // copy — safe for AI search
+  let p = nb[mv.from[0]][mv.from[1]];
+  nb[mv.from[0]][mv.from[1]] = EMPTY;             // lift the piece
+  for (const [cr,cc] of mv.captures) nb[cr][cc] = EMPTY;  // remove every jumped man
+  const [fr,fc] = mv.to;
+  if (!isKing(p) &amp;&amp; reachesBack(fr, pl)) p = king(p);     // crown on the back rank
+  nb[fr][fc] = p;
+  return nb;
+}
+function counts(b){
+  let you=0, ai=0;
+  for (let r=0;r&lt;8;r++) for (let c=0;c&lt;8;c++){
+    const o = owner(b[r][c]); if (o===HUMAN) you++; else if (o===AI) ai++;
+  }
+  return { you, ai };
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Scoring a position: material + a little geometry</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To judge a leaf position we sum piece values from the AI's point of view: a man is 100, a king is worth about 1.75 men. Then a dash of positional sense — a bonus for controlling the centre files, for men that have advanced toward promotion, and for men still guarding their own back row (which blocks the opponent from crowning).</p>
+        <div class="relative"><pre>const MAN = 100, KING = 175;                     // a king is worth ~1.75 men
+function evaluate(b){                            // + = good for the AI
+  let s = 0;
+  for (let r=0;r&lt;8;r++) for (let c=0;c&lt;8;c++){
+    const p = b[r][c]; if (!p) continue;
+    const mine = owner(p)===AI;
+    let v = isKing(p) ? KING : MAN;
+    if (c&gt;=2 &amp;&amp; c&lt;=5) v += 4;                      // centre files are stronger
+    if (!isKing(p)){
+      v += (owner(p)===AI ? r : 7-r) * 3;          // reward men that advance
+      if ((owner(p)===AI &amp;&amp; r===0) ||
+          (owner(p)===HUMAN &amp;&amp; r===7)) v += 6;      // guard your back row
+    }
+    s += mine ? v : -v;
+  }
+  return s;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Minimax with alpha-beta pruning</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Minimax looks ahead: the AI picks the move that maximises the score, assuming you reply to minimise it, alternating down to <code>depth</code> plies. A position with <em>no legal move</em> is terminal — that side has lost — scored a huge value nudged by depth so the AI prefers to win sooner and lose later. Alpha-beta carries the best-so-far bounds and prunes branches that cannot change the choice.</p>
+        <div class="relative"><pre>function minimax(b, depth, alpha, beta, toMove){
+  const moves = genMoves(b, toMove);
+  if (!moves.length)                              // no move = that side LOSES
+    return toMove===AI ? -1e6 - depth : 1e6 + depth;  // prefer quicker wins
+  if (depth === 0) return evaluate(b);
+  if (toMove === AI){                             // maximising player
+    let best = -Infinity;
+    for (const m of moves){
+      best = Math.max(best, minimax(applyMove(b,m,AI), depth-1, alpha, beta, HUMAN));
+      alpha = Math.max(alpha, best);
+      if (beta &lt;= alpha) break;                    // prune
+    }
+    return best;
+  } else {                                        // minimising player
+    let best = Infinity;
+    for (const m of moves){
+      best = Math.min(best, minimax(applyMove(b,m,HUMAN), depth-1, alpha, beta, AI));
+      beta = Math.min(beta, best);
+      if (beta &lt;= alpha) break;                    // prune
+    }
+    return best;
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Pick the move, then wire up the loop</h3></div>
+        <p class="text-sm text-slate-600 mb-3"><code>bestMove</code> tries each AI move and keeps the one with the highest minimax value — always a legal move, since it only ever iterates real moves. The loop is then simple: a side with no move has lost; otherwise the human clicks a piece and a destination, and the AI answers by searching. Rendering is a pure function of the array.</p>
+        <div class="relative"><pre>function bestMove(b, depth){
+  let best=null, bestV=-Infinity;
+  for (const m of genMoves(b, AI)){
+    const v = minimax(applyMove(b,m,AI), depth-1, -Infinity, Infinity, HUMAN);
+    if (v &gt; bestV){ bestV = v; best = m; }
+  }
+  return best;                                    // always a legal AI move
+}
+canvas.onclick = e =&gt; {
+  if (turn !== HUMAN) return;
+  const { r, c } = cellFromEvent(e);
+  // clicking a green destination of the selected piece plays that move…
+  const mv = myMoves.find(m =&gt; sel &amp;&amp; m.from[0]===sel[0] &amp;&amp; m.from[1]===sel[1]
+                            &amp;&amp; m.to[0]===r &amp;&amp; m.to[1]===c);
+  if (mv){ board = applyMove(board, mv, HUMAN); turn = AI; sel = null; advance(); return; }
+  // …otherwise clicking one of your movable pieces selects it
+  if (myMoves.some(m =&gt; m.from[0]===r &amp;&amp; m.from[1]===c)){ sel = [r,c]; draw(); }
+};
+function advance(){
+  draw();
+  if (turn===HUMAN &amp;&amp; !genMoves(board,HUMAN).length) return endGame(AI);
+  if (turn===AI){
+    if (!genMoves(board,AI).length) return endGame(HUMAN);
+    setTimeout(() =&gt; { board = applyMove(board, bestMove(board,depth), AI);
+                       turn = HUMAN; advance(); }, 300);
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 31 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Checkers end to end: an 8×8 array on the dark squares, direction helpers that split men from kings, a recursive jump enumerator that walks the whole multi-jump tree, a move generator that makes captures mandatory, a move applier that crowns kings on the back rank, a canvas renderer with movable-piece highlights, and a real minimax with a material-plus-position evaluation and alpha-beta pruning. Next: add move-ordering (try captures first) so alpha-beta prunes harder, a transposition table with iterative deepening, or an endgame database for king-versus-king finishes. <strong>👉 Tomorrow — Day 32: Battleship — hidden fleets, a shot grid, and a hunt-and-target AI.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== CHECKERS ENGINE (real rules) =====
+const EMPTY=0, HM=1, HK=2, AM=3, AK=4;
+const HUMAN=1, AI=2;
+const inB    = (r,c) => r>=0 && r<8 && c>=0 && c<8;
+const isDark = (r,c) => ((r+c) & 1) === 1;
+const owner  = p => p===HM||p===HK ? HUMAN : p===AM||p===AK ? AI : 0;
+const isKing = p => p===HK || p===AK;
+const king   = p => p===HM ? HK : p===AM ? AK : p;
+const opp    = pl => pl===HUMAN ? AI : HUMAN;
+const reachesBack = (r,pl) => pl===HUMAN ? r===0 : r===7;
+
+function stepDirs(p){
+  if (isKing(p)) return [[-1,-1],[-1,1],[1,-1],[1,1]];
+  return owner(p)===HUMAN ? [[-1,-1],[-1,1]] : [[1,-1],[1,1]];
+}
+function newBoard(){
+  const b = Array.from({length:8}, () => Array(8).fill(EMPTY));
+  for (let r=0;r<3;r++) for (let c=0;c<8;c++) if (isDark(r,c)) b[r][c]=AM;
+  for (let r=5;r<8;r++) for (let c=0;c<8;c++) if (isDark(r,c)) b[r][c]=HM;
+  return b;
+}
+function simpleMoves(b, r, c){
+  const p = b[r][c], out = [];
+  for (const [dr,dc] of stepDirs(p)){
+    const nr = r+dr, nc = c+dc;
+    if (inB(nr,nc) && b[nr][nc]===EMPTY)
+      out.push({ from:[r,c], to:[nr,nc], captures:[], steps:[[nr,nc]] });
+  }
+  return out;
+}
+function jumpsFrom(b, r, c, p, captured){
+  const res = [];
+  for (const [dr,dc] of stepDirs(p)){
+    const mr=r+dr, mc=c+dc, lr=r+2*dr, lc=c+2*dc;
+    if (!inB(lr,lc) || b[lr][lc]!==EMPTY) continue;
+    const mid = b[mr][mc];
+    if (mid===EMPTY || owner(mid)===owner(p)) continue;
+    if (captured.some(q => q[0]===mr && q[1]===mc)) continue;
+    const nb = b.map(row => row.slice());
+    nb[r][c]=EMPTY; nb[mr][mc]=EMPTY;
+    let np=p, crowned=false;
+    if (!isKing(p) && reachesBack(lr, owner(p))){ np=king(p); crowned=true; }
+    nb[lr][lc]=np;
+    const cap  = captured.concat([[mr,mc]]);
+    const cont = crowned ? [] : jumpsFrom(nb, lr, lc, np, cap);
+    if (!cont.length) res.push({ to:[lr,lc], captures:cap, steps:[[lr,lc]] });
+    else for (const k of cont)
+      res.push({ to:k.to, captures:k.captures, steps:[[lr,lc]].concat(k.steps) });
+  }
+  return res;
+}
+function genMoves(b, pl){
+  const jumps = [];
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++)
+    if (owner(b[r][c])===pl)
+      for (const j of jumpsFrom(b, r, c, b[r][c], []))
+        jumps.push({ from:[r,c], to:j.to, captures:j.captures, steps:j.steps });
+  if (jumps.length) return jumps;
+  const slides = [];
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++)
+    if (owner(b[r][c])===pl) for (const s of simpleMoves(b, r, c)) slides.push(s);
+  return slides;
+}
+function applyMove(b, mv, pl){
+  const nb = b.map(row => row.slice());
+  let p = nb[mv.from[0]][mv.from[1]];
+  nb[mv.from[0]][mv.from[1]] = EMPTY;
+  for (const [cr,cc] of mv.captures) nb[cr][cc] = EMPTY;
+  const [fr,fc] = mv.to;
+  if (!isKing(p) && reachesBack(fr, pl)) p = king(p);
+  nb[fr][fc] = p;
+  return nb;
+}
+function counts(b){
+  let hm=0,hk=0,am=0,ak=0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const p=b[r][c];
+    if (p===HM) hm++; else if (p===HK) hk++; else if (p===AM) am++; else if (p===AK) ak++;
+  }
+  return { human:hm+hk, ai:am+ak, hm, hk, am, ak };
+}
+const MAN = 100, KING = 175;
+function evaluate(b){
+  let s = 0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const p = b[r][c]; if (!p) continue;
+    const mine = owner(p)===AI;
+    let v = isKing(p) ? KING : MAN;
+    if (c>=2 && c<=5) v += 4;
+    if (!isKing(p)){
+      v += (owner(p)===AI ? r : 7-r) * 3;
+      if ((owner(p)===AI && r===0) || (owner(p)===HUMAN && r===7)) v += 6;
+    }
+    s += mine ? v : -v;
+  }
+  return s;
+}
+function minimax(b, depth, alpha, beta, toMove){
+  const moves = genMoves(b, toMove);
+  if (!moves.length) return toMove===AI ? -1e6 - depth : 1e6 + depth;
+  if (depth === 0) return evaluate(b);
+  if (toMove === AI){
+    let best = -Infinity;
+    for (const m of moves){
+      best = Math.max(best, minimax(applyMove(b,m,AI), depth-1, alpha, beta, HUMAN));
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const m of moves){
+      best = Math.min(best, minimax(applyMove(b,m,HUMAN), depth-1, alpha, beta, AI));
+      beta = Math.min(beta, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+function bestMove(b, depth){
+  const moves = genMoves(b, AI);
+  let best=null, bestV=-Infinity;
+  for (const m of moves){
+    const v = minimax(applyMove(b,m,AI), depth-1, -Infinity, Infinity, HUMAN);
+    if (v > bestV){ bestV = v; best = m; }
+  }
+  return best || moves[0] || null;
+}
+
+// ===== UI / GAME LOOP =====
+const canvas = document.getElementById("board");
+const ctx    = canvas.getContext("2d");
+const msgEl  = document.getElementById("msg");
+
+let board = newBoard();
+let turn = HUMAN;
+let busy = false, over = false;
+let sel = null, lastMove = null, myMoves = [];
+let depth = 5, showHints = true;
+let S = 56, PAD = 8;
+
+function computeCell(){
+  const target = Math.min(448, (window.innerWidth||480) - 40);
+  S = Math.max(30, Math.floor(target / 8));
+}
+function disc(cx, cy, rad){ ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI*2); ctx.fill(); }
+function cellFromEvent(e){
+  const rect = canvas.getBoundingClientRect();
+  const c = Math.floor(((e.clientX-rect.left)/rect.width  * canvas.width  - PAD) / S);
+  const r = Math.floor(((e.clientY-rect.top )/rect.height * canvas.height - PAD) / S);
+  return { r, c };
+}
+function drawPiece(r, c, p){
+  const cx = PAD+c*S+S/2, cy = PAD+r*S+S/2, rad = S*0.36;
+  ctx.fillStyle = "rgba(0,0,0,.30)"; disc(cx, cy+2, rad);
+  const human = owner(p)===HUMAN;
+  ctx.fillStyle = human ? "#e11d48" : "#1e293b"; disc(cx, cy, rad);
+  ctx.strokeStyle = human ? "#9f1239" : "#020617"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = human ? "rgba(255,255,255,.35)" : "rgba(255,255,255,.16)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, rad*0.62, 0, Math.PI*2); ctx.stroke();
+  if (isKing(p)){
+    ctx.fillStyle = "#fbbf24";
+    ctx.font = "bold " + Math.round(S*0.34) + "px -apple-system, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("K", cx, cy+1);
+  }
+}
+function draw(){
+  const px = 8*S;
+  canvas.width = px + PAD*2; canvas.height = px + PAD*2;
+  ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    ctx.fillStyle = isDark(r,c) ? "#065f46" : "#ecfdf5";
+    ctx.fillRect(PAD+c*S, PAD+r*S, S, S);
+  }
+  if (lastMove){
+    ctx.fillStyle = "rgba(251,191,36,.35)";
+    for (const [r,c] of lastMove) ctx.fillRect(PAD+c*S, PAD+r*S, S, S);
+  }
+  const active = turn===HUMAN && !over && !busy;
+  if (active && showHints){
+    ctx.strokeStyle = "rgba(16,185,129,.95)"; ctx.lineWidth = 3;
+    const seen = new Set();
+    for (const m of myMoves){
+      const k = m.from[0]*8+m.from[1]; if (seen.has(k)) continue; seen.add(k);
+      ctx.strokeRect(PAD+m.from[1]*S+2, PAD+m.from[0]*S+2, S-4, S-4);
+    }
+  }
+  if (active && sel){
+    ctx.fillStyle = "rgba(16,185,129,.30)";
+    ctx.fillRect(PAD+sel[1]*S, PAD+sel[0]*S, S, S);
+    ctx.fillStyle = "rgba(16,185,129,.6)";
+    for (const m of myMoves) if (m.from[0]===sel[0] && m.from[1]===sel[1])
+      disc(PAD+m.to[1]*S+S/2, PAD+m.to[0]*S+S/2, Math.max(6, S*0.16));
+  }
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const p = board[r][c]; if (p) drawPiece(r, c, p);
+  }
+}
+function updateScore(){
+  const c = counts(board);
+  document.getElementById("youLbl").textContent = c.human;
+  document.getElementById("aiLbl").textContent = c.ai;
+  document.getElementById("kingLbl").textContent = "You " + c.hk + " · AI " + c.ak;
+  document.getElementById("turnLbl").textContent = over ? "—" : (turn===HUMAN ? "You" : "AI");
+}
+function msg(text, tone){
+  msgEl.textContent = text;
+  msgEl.className = "mt-5 font-bold " + (tone==="warn" ? "text-amber-600" : tone==="lose" ? "text-rose-600" : "text-emerald-600");
+}
+function endGame(winner){
+  over = true; busy = false; sel = null;
+  draw(); updateScore();
+  if (winner===HUMAN) msg("You win! 🎉 The AI has no move left.");
+  else msg("AI wins — you have no legal move.", "lose");
+}
+function advance(){
+  draw(); updateScore();
+  if (over) return;
+  if (turn===HUMAN){
+    myMoves = genMoves(board, HUMAN);
+    if (!myMoves.length) return endGame(AI);
+    const forced = myMoves.some(m => m.captures.length);
+    msg(forced ? "Capture available — you must take a jump." : "Your move — click a highlighted piece, then a green square.");
+    draw();
+  } else {
+    myMoves = [];
+    const aiMoves = genMoves(board, AI);
+    if (!aiMoves.length) return endGame(HUMAN);
+    busy = true; msg("AI is thinking (minimax depth " + depth + ")…"); draw();
+    setTimeout(() => {
+      const mv = bestMove(board, depth) || aiMoves[0];
+      board = applyMove(board, mv, AI); lastMove = [mv.from, mv.to];
+      busy = false; turn = HUMAN; sel = null;
+      advance();
+    }, 300);
+  }
+}
+canvas.onclick = e => {
+  if (over || busy || turn !== HUMAN) return;
+  const { r, c } = cellFromEvent(e);
+  if (!inB(r,c)) return;
+  if (sel){
+    const opts = myMoves.filter(m => m.from[0]===sel[0] && m.from[1]===sel[1] && m.to[0]===r && m.to[1]===c);
+    if (opts.length){
+      const mv = opts.reduce((a,b) => b.captures.length > a.captures.length ? b : a);
+      board = applyMove(board, mv, HUMAN); lastMove = [mv.from, mv.to];
+      sel = null; turn = AI; advance(); return;
+    }
+  }
+  if (myMoves.some(m => m.from[0]===r && m.from[1]===c)){
+    sel = [r,c];
+    const forced = myMoves.some(m => m.captures.length);
+    msg(forced ? "Must jump — green squares are your captures." : "Green squares are where this piece can go.");
+    draw(); return;
+  }
+  if (owner(board[r][c])===HUMAN){
+    const forced = myMoves.some(m => m.captures.length);
+    msg(forced ? "A capture is forced — pick an outlined piece." : "That piece has no legal move.", "warn");
+  }
+  sel = null; draw();
+};
+function newGame(){
+  computeCell();
+  board = newBoard(); turn = HUMAN; busy = false; over = false; sel = null; lastMove = null;
+  myMoves = genMoves(board, HUMAN);
+  draw(); updateScore();
+  msg("Your move — click a highlighted piece, then a green square.");
+}
+document.getElementById("newBtn").onclick = newGame;
+document.getElementById("depthSel").onchange = e => { depth = +e.target.value; };
+document.getElementById("hintChk").onchange  = e => { showHints = e.target.checked; draw(); };
+window.addEventListener("resize", () => { computeCell(); draw(); });
+
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. Checkers on the dark squares", why:"Checkers (English draughts) is played by two sides on an 8×8 board, but only the dark squares are ever used — that halves the board to 32 playable cells and means every move is diagonal. Each side starts with twelve men filling the dark squares of its three home rows. You are red at the bottom, the AI is black at the top, and you move first. Because the pieces only ever touch dark squares, the whole game can be stored as one 8×8 array where the light squares stay empty forever.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">start — pieces on dark squares only<br><br>· ● · ● · ● · ●<br>● · ● · ● · ● ·<br>· ● · ● · ● · ●<br>· · · · · · · ·<br>· · · · · · · ·<br>○ · ○ · ○ · ○ ·<br>· ○ · ○ · ○ · ○<br>○ · ○ · ○ · ○ ·<br><br>○ = you (red) · ● = AI (black) · 12 each</div>`, code:`const EMPTY=0, HM=1, HK=2, AM=3, AK=4;   // human man/king, AI man/king
+const HUMAN=1, AI=2;
+const isDark = (r,c) => ((r+c) & 1) === 1;  // pieces live on dark squares
+function newBoard(){
+  const b = Array.from({length:8}, () => Array(8).fill(EMPTY));
+  for (let r=0;r<3;r++) for (let c=0;c<8;c++) if (isDark(r,c)) b[r][c]=AM;
+  for (let r=5;r<8;r++) for (let c=0;c<8;c++) if (isDark(r,c)) b[r][c]=HM;
+  return b;                                 // 12 men each, you move first
+}` },
+
+ { title:"2. Men move one way, kings move both", why:"A plain man is a one-way piece: it may only slide diagonally forward — your men up the board, the AI's men down — one square at a time onto an empty dark square. A king, earned later, is far stronger: it slides and captures along all four diagonals. Encoding this as a small function that returns the allowed direction steps for a piece means every other rule — legal slides, legal jumps — is just a loop over those steps, with no special cases for colour or rank.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">man (one way)&nbsp;&nbsp;&nbsp;&nbsp;king (both ways)<br><br>↖ &nbsp; ↗&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↖ &nbsp; ↗<br>&nbsp; ○ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ♔<br>&nbsp;(forward)&nbsp;&nbsp;&nbsp;&nbsp; ↙ &nbsp; ↘<br><br>your men go UP · AI men go DOWN</div>`, code:`const owner  = p => p===HM||p===HK ? HUMAN : p===AM||p===AK ? AI : 0;
+const isKing = p => p===HK || p===AK;
+const king   = p => p===HM ? HK : p===AM ? AK : p;   // crown a man
+
+function stepDirs(p){
+  if (isKing(p)) return [[-1,-1],[-1,1],[1,-1],[1,1]];  // all four
+  return owner(p)===HUMAN ? [[-1,-1],[-1,1]]            // you: forward = up
+                          : [[1,-1],[1,1]];             // AI:  forward = down
+}` },
+
+ { title:"3. Capturing is a jump", why:"You never capture by moving onto an enemy — you jump over it. If a touching enemy piece sits on one of your diagonals and the square immediately beyond it is empty, you may hop over it, landing two squares away, and that enemy is removed. A man can only jump in its forward directions; a king in any of the four. Notice a jump needs three squares in a line: your piece, the enemy, and an empty landing square past it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">jump: hop the enemy, land beyond<br><br>before &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; after<br>○ · · &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; · · ○<br>· ● · &nbsp;&nbsp;→&nbsp; · · ·&nbsp;&nbsp;(● removed)<br>· · _ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; · · ·<br><br>needs: your piece · enemy · EMPTY landing</div>`, code:`// does the piece at (r,c) have a jump in direction (dr,dc)?
+function canJump(b, r, c, dr, dc){
+  const p = b[r][c];
+  const mr=r+dr, mc=c+dc, lr=r+2*dr, lc=c+2*dc;   // mid = jumped, land = target
+  if (!inB(lr,lc) || b[lr][lc]!==EMPTY) return false;  // must land on empty
+  const mid = b[mr][mc];
+  return mid!==EMPTY && owner(mid)!==owner(p);    // must hop an ENEMY
+}` },
+
+ { title:"4. Captures are mandatory", why:"This is the rule that gives checkers its bite: if you can capture, you must. A quiet slide is simply illegal whenever any jump is on the board for your side. In code this is one decision — generate every jump first, and if that list is non-empty, return only jumps; otherwise return the plain slides. This matters enormously for the AI: forced captures collapse the branching factor, because on many turns there is only one legal piece to move (or even one legal move), so the search tree is far narrower than the board size suggests.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">if ANY jump exists → only jumps are legal<br><br>jumps = every capture on the board<br>&nbsp;&nbsp;jumps.length &gt; 0 ? &nbsp;play a jump<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: &nbsp;play a slide<br><br>forcing captures prunes the game tree hard</div>`, code:`function genMoves(b, pl){
+  const jumps = [];
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++)
+    if (owner(b[r][c])===pl)
+      for (const j of jumpsFrom(b, r, c, b[r][c], []))
+        jumps.push({ from:[r,c], to:j.to, captures:j.captures });
+  if (jumps.length) return jumps;          // MANDATORY: jumps override slides
+  const slides = [];
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++)
+    if (owner(b[r][c])===pl) slides.push(...simpleMoves(b, r, c));
+  return slides;
+}` },
+
+ { title:"5. Multi-jumps: keep jumping", why:"A capture is not one hop — if the piece that just landed can immediately jump again, it must, and it keeps going until it cannot. A single turn can therefore remove two, three, or more enemy pieces in a zig-zag. The clean way to enumerate this is recursion: simulate the hop on a copied board, then call the same jump-finder from the new square, threading the list of already-captured squares so a piece is never jumped twice. Each complete chain becomes one move whose captures list holds everything it swept up.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one turn, three pieces gone<br><br>○ · · · ·<br>· ● · ● · &nbsp; hop ● , land, hop ● again…<br>· · _ · · &nbsp; recurse until no jump remains<br><br>chain = jump → recurse → jump → recurse</div>`, code:`function jumpsFrom(b, r, c, p, captured){
+  const res = [];
+  for (const [dr,dc] of stepDirs(p)){
+    const mr=r+dr, mc=c+dc, lr=r+2*dr, lc=c+2*dc;
+    if (!inB(lr,lc) || b[lr][lc]!==EMPTY) continue;
+    const mid = b[mr][mc];
+    if (mid===EMPTY || owner(mid)===owner(p)) continue;
+    if (captured.some(q => q[0]===mr && q[1]===mc)) continue; // never twice
+    const nb = b.map(row => row.slice());       // simulate the hop
+    nb[r][c]=EMPTY; nb[mr][mc]=EMPTY; nb[lr][lc]=p;
+    const cap  = captured.concat([[mr,mc]]);
+    const cont = jumpsFrom(nb, lr, lc, p, cap); // RECURSE: jump again?
+    if (!cont.length) res.push({ to:[lr,lc], captures:cap });
+    else for (const k of cont) res.push({ to:k.to, captures:k.captures });
+  }
+  return res;
+}` },
+
+ { title:"6. Kinging on the back rank", why:"When a man reaches the far edge — your men to row 0, the AI's to row 7 — it is crowned a king on the spot, and a king may thereafter move and capture in both diagonal directions. That flip of allowed directions is the single most important upgrade in the game, which is why the evaluation values a king far above a man. One detail decided here: if a man reaches the back rank in the middle of a jump chain, English rules end the turn — it does not keep jumping as a fresh king until next move.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">reach the far row → get crowned<br><br>row 0 &nbsp; ○ → ♔ &nbsp;(your promotion row)<br>&nbsp;&nbsp;⋮<br>row 7 &nbsp; ● → ♚ &nbsp;(AI promotion row)<br><br>king = moves & captures BOTH ways</div>`, code:`const reachesBack = (r,pl) => pl===HUMAN ? r===0 : r===7;
+
+function applyMove(b, mv, pl){
+  const nb = b.map(row => row.slice());
+  let p = nb[mv.from[0]][mv.from[1]];
+  nb[mv.from[0]][mv.from[1]] = EMPTY;              // lift the piece
+  for (const [cr,cc] of mv.captures) nb[cr][cc] = EMPTY;  // remove jumped men
+  const [fr,fc] = mv.to;
+  if (!isKing(p) && reachesBack(fr, pl)) p = king(p);     // CROWN on back rank
+  nb[fr][fc] = p;
+  return nb;
+}` },
+
+ { title:"7. Winning: no pieces or no move", why:"There are no draws to count up here — a side loses the instant it cannot move. That happens if it has no pieces left (they were all captured) or if every remaining piece is blocked. Conveniently, both cases are the same test: generate that side's legal moves, and if the list is empty, the other side has won. This gives the search a crisp terminal condition — a leaf with no moves is a guaranteed loss for the side to move.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">side to move has NO legal move → it loses<br><br>no pieces left … or every piece blocked<br>&nbsp;&nbsp;genMoves(b, side).length === 0<br>&nbsp;&nbsp;&nbsp;&nbsp;→ the OTHER side wins<br><br>(no move to make = game over)</div>`, code:`function winner(b, toMove){
+  if (genMoves(b, toMove).length === 0)   // side to move is stuck
+    return opp(toMove);                    // …so the opponent wins
+  return 0;                                // game continues
+}
+// used at the search leaves: no move = terminal loss for that side.` },
+
+ { title:"8. Minimax with alpha-beta", why:"The AI chooses its move by looking ahead. Minimax assumes both sides play their best: the AI (the maximiser) plays the move giving the highest score, expecting you (the minimiser) to reply with the move giving the lowest, alternating down to a fixed depth. A position with no legal move is terminal and scored a huge win/loss, nudged by the remaining depth so the AI prefers to win sooner and stall a loss. Alpha-beta pruning tracks the best score each side is already guaranteed and abandons any branch that cannot change the decision — often cutting the work by a large factor without changing the answer.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">&nbsp;&nbsp;&nbsp;&nbsp;AI (max)<br>&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;\\<br>&nbsp;you(min)&nbsp;you(min)<br>&nbsp;/ \\&nbsp;&nbsp;&nbsp;&nbsp;/ \\<br>eval eval eval eval<br><br>max of (min of …) · prune when β ≤ α</div>`, code:`function minimax(b, depth, alpha, beta, toMove){
+  const moves = genMoves(b, toMove);
+  if (!moves.length) return toMove===AI ? -1e6-depth : 1e6+depth; // no move = loss
+  if (depth === 0) return evaluate(b);
+  let best = toMove===AI ? -Infinity : Infinity;
+  for (const m of moves){
+    const v = minimax(applyMove(b,m,toMove), depth-1, alpha, beta, opp(toMove));
+    if (toMove===AI){ best=Math.max(best,v); alpha=Math.max(alpha,best); }
+    else            { best=Math.min(best,v); beta =Math.min(beta ,best); }
+    if (beta <= alpha) break;              // alpha-beta prune
+  }
+  return best;
+}` },
+
+ { title:"9. The evaluation function", why:"When the search hits its depth limit it needs a number for the position, and a good number wins games. The backbone is material: count each side's pieces, but weight a king far above a man (a king covers all four diagonals, so here it is worth about 1.75 men). On top, a little positional sense: a bonus for the centre files, a bonus for men that have advanced toward promotion, and a bonus for men still guarding their own back row — a full back row blocks the opponent from crowning. The score is always from the AI's point of view: positive is good for the AI.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">score = Σ my pieces − Σ your pieces<br><br>man = 100 &nbsp;·&nbsp; king = 175<br>+ centre files &nbsp; + advancing men<br>+ guarding the back row<br><br>(evaluated from the AI's point of view)</div>`, code:`const MAN = 100, KING = 175;               // a king ≈ 1.75 men
+function evaluate(b){
+  let s = 0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const p = b[r][c]; if (!p) continue;
+    let v = isKing(p) ? KING : MAN;
+    if (c>=2 && c<=5) v += 4;               // centre files
+    if (!isKing(p)){
+      v += (owner(p)===AI ? r : 7-r) * 3;    // reward advancing men
+      if ((owner(p)===AI && r===0) ||
+          (owner(p)===HUMAN && r===7)) v += 6; // guard the back row
+    }
+    s += owner(p)===AI ? v : -v;
+  }
+  return s;
+}` },
+
+ { title:"10. Branching factor vs. depth", why:"Search cost grows like the branching factor raised to the depth, so every extra ply multiplies the work. In checkers the branching factor is modest — often only a handful of legal moves — and the mandatory-capture rule squeezes it further, sometimes to a single move, which is exactly why a plain minimax can search several plies deep in real time here where it could not in chess. Alpha-beta pushes deeper still by pruning, and ordering captures first makes those cuts happen sooner. Deeper search means stronger play; the depth selector on the board lets you feel the trade between strength and thinking time.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">positions searched ≈ b ^ depth<br><br>b (checkers) ≈ 3–8 moves … often 1 when forced<br>each extra ply → ~b× more work<br><br>alpha-beta + capture-first ordering<br>= search the same depth for far less</div>`, code:`// depth: each extra ply multiplies positions by the branching factor b.
+// checkers keeps b small — and forced captures often make b = 1 —
+// so a plain minimax reaches a useful depth in real time.
+function bestMove(b, depth){
+  let best=null, bestV=-Infinity;
+  for (const m of genMoves(b, AI)){                       // b root moves
+    const v = minimax(applyMove(b,m,AI), depth-1, -Infinity, Infinity, HUMAN);
+    if (v > bestV){ bestV = v; best = m; }
+  }
+  return best;   // deeper = stronger, but ~b× slower per ply
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,curStep-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(curStep+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
