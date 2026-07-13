@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 32 — Battleship</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  .board-wrap { background:#0f172a; padding:12px; border-radius:16px; display:inline-block;
+                box-shadow:0 18px 40px rgba(0,0,0,.18); }
+  .board-title { color:#94a3b8; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; text-align:center; }
+  .b-grid { display:grid; grid-template-columns:0.9rem repeat(10, minmax(0,1fr)); gap:2px; width:min(88vw,320px); }
+  .b-lbl  { color:#64748b; font-size:9px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .b-cell { aspect-ratio:1; border-radius:3px; display:flex; align-items:center; justify-content:center;
+            font-size:clamp(9px,3vw,14px); line-height:1; user-select:none; background:#13324f; }
+  .b-water{ background:#13324f; }
+  .b-ship { background:#64748b; }
+  .b-miss { background:#0e2740; color:#93c5fd; }
+  .b-hit  { background:#e11d48; }
+  .b-sunk { background:#7f1d1d; }
+  .b-reveal { background:#334155; opacity:.75; }
+  .b-prevok { background:#10b981 !important; }
+  .b-prevbad{ background:#ef4444 !important; }
+  .enemy .b-water { cursor:crosshair; }
+  .enemy .b-water:hover { background:#1d4e7a; outline:2px solid #10b981; outline-offset:-2px; }
+
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+  select { border:1px solid #cbd5e1; border-radius:8px; padding:3px 8px; font-weight:600; font-size:13px; }
+  .pill { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px;
+          background:#e2e8f0; color:#475569; margin:2px; }
+  .pill-sunk { background:#fecdd3; color:#9f1239; text-decoration:line-through; }
+  #log { max-height:150px; overflow:auto; text-align:left; font-size:12px; }
+  #log .hit  { color:#e11d48; font-weight:700; }
+  #log .sunk { color:#be123c; font-weight:800; }
+  #log .miss { color:#64748b; }
+  @media (max-width:480px){ .board-wrap { padding:8px; } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 32</div>
+      <h1 class="text-xl font-bold">🚢 Battleship — Hide Your Fleet, Fire on the Grid, and Hunt-and-Target the Enemy to the Bottom</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Play Battleship against the AI.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">Hide your five ships, then take turns firing on the enemy's 10×10 grid until one fleet is sunk. Place your fleet on the left board — <strong>click a cell</strong> to drop the current ship, <strong>Rotate</strong> to turn it, or let <strong>Auto-place</strong> scatter them; ships may not overlap or hang off the edge. The AI hides its own five ships the same way. Then the battle: <strong>click any cell on the right</strong> (enemy waters) to fire — a shot is a miss (water) or a hit (💥), and when every cell of a ship is hit it is <strong>sunk</strong>. Sink all five enemy ships to win before the AI sinks yours. The interesting part is the opponent. Set it to <strong>Random</strong> and it fires blindly, wasting most shots on empty water. Set it to <strong>Hunt &amp; Target</strong> and it plays like a person: it searches on a <em>checkerboard parity</em> pattern — since the smallest ship is two cells long, hitting every other square is enough to find any ship — and the instant it lands a hit it switches to <em>target</em> mode, firing the neighbouring cells; once two hits line up it <em>locks the axis</em> and finishes the ship. Watch the shot counter: the smart AI needs far fewer shots.</p>
+
+      <div class="flex justify-center gap-5 mb-3 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Your ships: <span id="youAfloat" class="stat text-emerald-600">5</span> afloat</div>
+        <div>Enemy ships: <span id="enemyAfloat" class="stat text-rose-600">5</span> afloat</div>
+        <div>Your shots: <span id="shotStat" class="stat text-slate-500">0</span></div>
+        <div>Phase: <span id="phaseStat" class="stat text-emerald-600">Place your fleet</span></div>
+      </div>
+
+      <div class="flex items-center justify-center gap-4 mb-4 text-sm text-slate-500 flex-wrap">
+        <label class="flex items-center gap-1">Enemy AI
+          <select id="aiSel">
+            <option value="smart" selected>Hunt &amp; Target</option>
+            <option value="random">Random (naive)</option>
+          </select>
+        </label>
+        <button id="rotBtn" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-semibold text-sm">🔄 Rotate: Horizontal</button>
+        <button id="autoBtn" class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">🎲 Auto-place &amp; start</button>
+      </div>
+
+      <div class="flex justify-center gap-6 flex-wrap items-start">
+        <div class="board-wrap">
+          <div class="board-title">🛡 Your fleet</div>
+          <div id="meWrap"></div>
+        </div>
+        <div class="board-wrap enemy">
+          <div class="board-title">🎯 Enemy waters</div>
+          <div id="enemyWrap"></div>
+        </div>
+        <div class="board-wrap" style="background:#f8fafc;box-shadow:none;border:1px solid #e2e8f0;min-width:180px;">
+          <div class="board-title" style="color:#475569;">Fleet status</div>
+          <div class="text-left text-xs font-bold text-slate-500 mb-1">You</div>
+          <div id="myPills"></div>
+          <div class="text-left text-xs font-bold text-slate-500 mt-2 mb-1">Enemy</div>
+          <div id="enemyPills"></div>
+          <div class="text-left text-xs font-bold text-slate-500 mt-3 mb-1">Shot log</div>
+          <div id="log"></div>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-emerald-600"></div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↺ New game</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">Everything here is real Battleship. Each fleet is one 10×10 array of small integers — <code>0</code> for open water, otherwise the id of the ship that occupies the cell — plus a parallel <code>shots</code> grid that records what has been fired where (unknown, miss, or hit). Placement is validated cell by cell: a ship is legal only if every square it would cover is on the board and still empty, which is exactly what rules out overlaps and off-board pieces. A shot looks up the target cell, marks the shots grid, and if it struck a ship increments that ship's hit count; when the count reaches the ship's length the ship is sunk, and when all five are sunk the fleet is lost. The Random AI just picks any untried cell. The Hunt &amp; Target AI keeps a little memory: while <em>hunting</em> it fires on a checkerboard parity so no ship of length two or more can hide between its shots; the moment it hits it enters <em>target</em> mode and queues the hit's four orthogonal neighbours; once it has two hits in a row or column it throws away the off-axis candidates and fires only along that line until the ship sinks, then clears its memory and hunts again. All vanilla JavaScript, offline, no images or libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Battleship works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Two 10×10 integer grids and a five-ship fleet, a random placer that validates every cell, a fire function that resolves hit/miss and detects a sunk ship, a naive random AI as the baseline, then the real opponent: parity hunting, a target queue that locks onto a ship's axis, and a probability-density heat map. About 150 lines of vanilla JS — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The board and the fleet</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each side owns a 10×10 grid of integers — <code>0</code> is open water, any other number is the id of the ship sitting on that cell — plus a parallel <code>shots</code> grid recording what has been fired at it. The standard fleet is five ships of lengths 5, 4, 3, 3 and 2, so exactly 17 cells are occupied out of 100.</p>
+        <div class="relative"><pre>const SIZE = 10;
+const FLEET = [                              // the classic five ships
+  { name:"Carrier",    size:5 },
+  { name:"Battleship", size:4 },
+  { name:"Cruiser",    size:3 },
+  { name:"Submarine",  size:3 },
+  { name:"Destroyer",  size:2 },
+];                                           // 5+4+3+3+2 = 17 cells out of 100
+const inB = (r,c) =&gt; r&gt;=0 &amp;&amp; r&lt;SIZE &amp;&amp; c&gt;=0 &amp;&amp; c&lt;SIZE;
+const grid0 = () =&gt; Array.from({length:SIZE}, () =&gt; Array(SIZE).fill(0));
+// a "state" is { board, ships, shots }:
+//   board[r][c] = 0 water, else ship id (index+1)
+//   shots[r][c] = 0 unknown, 1 miss, 2 hit</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Random placement, validated cell by cell</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A ship is a run of cells, horizontal or vertical, from an anchor square. It is legal only if <em>every</em> one of those cells is on the board and still empty — that single rule is what forbids overlaps and off-board ships. To place the fleet, keep drawing a random square and orientation until the ship fits, then stamp its id onto the board.</p>
+        <div class="relative"><pre>function shipCells(r, c, size, horizontal){
+  const cells = [];
+  for (let i=0;i&lt;size;i++) cells.push(horizontal ? [r,c+i] : [r+i,c]);
+  return cells;
+}
+// legal ONLY if every cell is on-board AND empty — no overlap, no overhang
+function canPlace(board, cells){
+  return cells.every(([r,c]) =&gt; inB(r,c) &amp;&amp; board[r][c] === 0);
+}
+function randomFleet(){
+  const board = grid0(), ships = [];
+  FLEET.forEach((spec, idx) =&gt; {
+    for (;;){                                  // retry until it fits
+      const horizontal = Math.random() &lt; 0.5;
+      const r = (Math.random()*SIZE)|0, c = (Math.random()*SIZE)|0;
+      const cells = shipCells(r, c, spec.size, horizontal);
+      if (!canPlace(board, cells)) continue;
+      cells.forEach(([rr,cc]) =&gt; board[rr][cc] = idx+1);   // stamp the id
+      ships.push({ name:spec.name, size:spec.size, cells, hits:0, sunk:false });
+      break;
+    }
+  });
+  return { board, ships, shots: grid0() };
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Firing a shot: hit or miss</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A shot names a cell. Refuse a repeat by checking the <code>shots</code> grid first. Look up the board: water is a miss (mark <code>1</code>); a ship id is a hit (mark <code>2</code>) and we bump that ship's hit counter. Everything the rest of the game needs — win detection, the AI's memory — reads out of these two grids.</p>
+        <div class="relative"><pre>function fire(state, r, c){
+  if (state.shots[r][c] !== 0) return null;    // already fired here
+  const id = state.board[r][c];
+  if (id === 0){ state.shots[r][c] = 1; return { result:"miss", r, c }; }
+  state.shots[r][c] = 2;                        // a hit
+  const ship = state.ships[id-1];
+  ship.hits++;
+  if (ship.hits === ship.size){ ship.sunk = true; return { result:"sunk", ship, r, c }; }
+  return { result:"hit", ship, r, c };
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Sunk detection and winning</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Because each hit increments the ship's counter, a ship is <em>sunk</em> the moment its hit count equals its length — no scanning required. A fleet is lost when every ship is sunk. That is the whole win condition: the first player to sink all five enemy ships wins.</p>
+        <div class="relative"><pre>// sunk is decided in fire(): ship.hits === ship.size  →  ship.sunk = true
+function allSunk(state){ return state.ships.every(s =&gt; s.sunk); }
+function shipsAfloat(state){ return state.ships.filter(s =&gt; !s.sunk).length; }
+// after each shot:
+//   if (allSunk(enemy)) you win;  if (allSunk(me)) the AI wins.</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The naive AI: pure random</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The baseline opponent has no memory at all: it lists every cell it has not fired at and picks one at random. It will win eventually, but with 17 ship cells hidden in 100 it wastes most of its shots on water and typically needs the high-90s worth of shots to clear the board. This is the bar the smart AI must beat.</p>
+        <div class="relative"><pre>function untriedCells(shots){
+  const out = [];
+  for (let r=0;r&lt;SIZE;r++) for (let c=0;c&lt;SIZE;c++)
+    if (shots[r][c] === 0) out.push([r,c]);
+  return out;
+}
+function randomShot(shots){
+  const pool = untriedCells(shots);
+  return pool[(Math.random()*pool.length)|0];   // blind — no learning
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Parity hunting: skip every other cell</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The first real idea: while searching for a ship you have not touched yet, you never need to fire on two adjacent cells. Every ship is at least two cells long, so it must cover one dark <em>and</em> one light square of a checkerboard. Fire only on cells where <code>(r+c)</code> is even and you still cannot miss a ship — while halving the squares you must consider.</p>
+        <div class="relative"><pre>// HUNT: fire only on one colour of the checkerboard.
+// every ship (length &gt;= 2) covers both colours, so this can't miss one.
+function parityShot(shots, parity=0){
+  const par = [], all = [];
+  for (let r=0;r&lt;SIZE;r++) for (let c=0;c&lt;SIZE;c++)
+    if (shots[r][c] === 0){
+      all.push([r,c]);
+      if (((r+c) &amp; 1) === parity) par.push([r,c]);   // the checkerboard
+    }
+  const pool = par.length ? par : all;
+  return pool[(Math.random()*pool.length)|0];
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Target mode: queue neighbours, then lock the axis</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The moment a hunt shot connects, switch to <em>target</em> mode. Remember the hits belonging to the current ship. With one hit, the ship could run in any direction, so queue all four orthogonal neighbours. With two hits, you know the ship's axis — throw away the off-axis candidates and fire only at the two open ends of that line until the ship sinks. Then clear the memory and hunt again.</p>
+        <div class="relative"><pre>const ORTHO = [[-1,0],[1,0],[0,-1],[0,1]];
+// rebuild the list of cells to try from the current ship's known hits
+function targetQueue(hits){
+  if (hits.length === 1){                         // unknown axis → try all 4
+    const [r,c] = hits[0];
+    return ORTHO.map(([dr,dc]) =&gt; [r+dr, c+dc]);
+  }
+  const sameRow = hits.every(h =&gt; h[0] === hits[0][0]);
+  if (sameRow){                                   // horizontal → extend the row
+    const r = hits[0][0], cs = hits.map(h =&gt; h[1]).sort((a,b)=&gt;a-b);
+    return [[r, cs[0]-1], [r, cs[cs.length-1]+1]];
+  }
+  const c = hits[0][1], rs = hits.map(h =&gt; h[0]).sort((a,b)=&gt;a-b);
+  return [[rs[0]-1, c], [rs[rs.length-1]+1, c]];   // vertical → extend the column
+}
+function smartShot(ai, shots){
+  if (ai.hits.length){                            // TARGET: follow the ship
+    for (const [r,c] of targetQueue(ai.hits))
+      if (inB(r,c) &amp;&amp; shots[r][c] === 0) return [r,c];
+  }
+  return parityShot(shots, ai.parity);            // HUNT: checkerboard search
+}
+// after each AI shot, feed the result back:
+function observe(ai, r, c, res){
+  if (res.result === "hit")  ai.hits.push([r,c]);        // remember it
+  if (res.result === "sunk") ai.hits = [];               // done — hunt anew
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Probability density: where do ships fit best?</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Parity is a cheap stand-in for the strongest idea: for every ship still afloat, slide it into every legal position on the board (any run that avoids the known misses) and add one to each cell it would cover. The result is a heat map — the cell counted the most times is where a remaining ship can fit the most ways, and it is the mathematically best square to fire. This heuristic naturally concentrates fire in open space and even reproduces the parity pattern on its own.</p>
+        <div class="relative"><pre>// count, for every remaining ship and every legal position, how many
+// ways cover each cell. The hottest untried cell is the best shot.
+function densityShot(shots, remainingSizes){
+  const heat = grid0();
+  for (const size of remainingSizes){
+    for (let r=0;r&lt;SIZE;r++) for (let c=0;c&lt;SIZE;c++){
+      for (const horiz of [true,false]){
+        const cells = shipCells(r, c, size, horiz);
+        if (!cells.every(([y,x]) =&gt; inB(y,x) &amp;&amp; shots[y][x] !== 1)) continue; // clears misses
+        cells.forEach(([y,x]) =&gt; heat[y][x]++);
+      }
+    }
+  }
+  let best = null, bestV = -1;
+  for (let r=0;r&lt;SIZE;r++) for (let c=0;c&lt;SIZE;c++)
+    if (shots[r][c] === 0 &amp;&amp; heat[r][c] &gt; bestV){ bestV = heat[r][c]; best = [r,c]; }
+  return best;                                     // most ways a ship still fits
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Wire up the turn loop</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each side owns a state; the AI owns a small brain (<code>hits</code>, <code>parity</code>). You fire at the enemy state, check for a win, then the AI fires at your state through <code>smartShot</code> and feeds the result to <code>observe</code>. Alternate until one fleet is gone. Rendering is just a readout of the two grids.</p>
+        <div class="relative"><pre>let me    = randomFleet();          // your hidden fleet (AI fires here)
+let enemy = randomFleet();          // the AI's hidden fleet (you fire here)
+let ai    = { hits:[], parity:0, mode:"smart" };
+
+function playerFire(r, c){
+  const res = fire(enemy, r, c);
+  if (!res) return;                 // ignore repeats
+  render();
+  if (allSunk(enemy)) return win("you");
+  aiTurn();
+}
+function aiTurn(){
+  const [r,c] = ai.mode === "random" ? randomShot(me.shots)
+                                     : smartShot(ai, me.shots);
+  const res = fire(me, r, c);
+  observe(ai, r, c, res);           // update hunt/target memory
+  render();
+  if (allSunk(me)) return win("ai");
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 32 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Battleship end to end: two 10×10 integer grids and a five-ship fleet, a random placer that validates every cell so ships never overlap or hang off the board, a fire function that resolves hit/miss and detects a sunk ship by counting hits, a naive random AI as the baseline, and a real hunt-and-target opponent — checkerboard parity while searching, a target queue that locks onto a ship's axis once two hits align, and a probability-density heat map that fires where a ship can fit the most ways. Next: give the AI edge-avoidance in target mode, weight the density map by known hits, or add a two-player pass-and-play mode. <strong>👉 Tomorrow — Day 33: Bubble Shooter — aim, bounce, and pop clusters of same-coloured bubbles before they reach the bottom.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== BATTLESHIP ENGINE (real rules) =====
+const SIZE = 10;
+const COLS = "ABCDEFGHIJ";
+const FLEET = [
+  { name:"Carrier",    size:5 },
+  { name:"Battleship", size:4 },
+  { name:"Cruiser",    size:3 },
+  { name:"Submarine",  size:3 },
+  { name:"Destroyer",  size:2 },
+];
+const ORTHO = [[-1,0],[1,0],[0,-1],[0,1]];
+const inB = (r,c) => r>=0 && r<SIZE && c>=0 && c<SIZE;
+const grid0 = () => Array.from({length:SIZE}, () => Array(SIZE).fill(0));
+const coord = (r,c) => COLS[c] + (r+1);
+
+function shipCells(r, c, size, horizontal){
+  const cells = [];
+  for (let i=0;i<size;i++) cells.push(horizontal ? [r,c+i] : [r+i,c]);
+  return cells;
+}
+function canPlace(board, cells){
+  return cells.every(([r,c]) => inB(r,c) && board[r][c] === 0);
+}
+function emptyState(){ return { board:grid0(), ships:[], shots:grid0() }; }
+function randomFleet(){
+  const board = grid0(), ships = [];
+  FLEET.forEach((spec, idx) => {
+    for (let guard=0; guard<1000; guard++){
+      const horizontal = Math.random() < 0.5;
+      const r = (Math.random()*SIZE)|0, c = (Math.random()*SIZE)|0;
+      const cells = shipCells(r, c, spec.size, horizontal);
+      if (!canPlace(board, cells)) continue;
+      cells.forEach(([rr,cc]) => board[rr][cc] = idx+1);
+      ships.push({ name:spec.name, size:spec.size, cells, hits:0, sunk:false });
+      break;
+    }
+  });
+  return { board, ships, shots: grid0() };
+}
+function fire(state, r, c){
+  if (!inB(r,c) || state.shots[r][c] !== 0) return null;
+  const id = state.board[r][c];
+  if (id === 0){ state.shots[r][c] = 1; return { result:"miss", r, c }; }
+  state.shots[r][c] = 2;
+  const ship = state.ships[id-1];
+  ship.hits++;
+  if (ship.hits === ship.size){ ship.sunk = true; return { result:"sunk", ship, r, c }; }
+  return { result:"hit", ship, r, c };
+}
+const allSunk      = st => st.ships.length>0 && st.ships.every(s => s.sunk);
+const shipsAfloat  = st => st.ships.filter(s => !s.sunk).length;
+
+// ----- AI -----
+function makeAI(mode){ return { mode, hits:[], parity:0 }; }
+function untriedCells(shots){
+  const out = [];
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) if (shots[r][c] === 0) out.push([r,c]);
+  return out;
+}
+function randomShot(shots){
+  const pool = untriedCells(shots);
+  return pool.length ? pool[(Math.random()*pool.length)|0] : null;
+}
+function targetQueue(hits){
+  if (hits.length === 1){
+    const [r,c] = hits[0];
+    return ORTHO.map(([dr,dc]) => [r+dr, c+dc]);
+  }
+  const sameRow = hits.every(h => h[0] === hits[0][0]);
+  if (sameRow){
+    const r = hits[0][0], cs = hits.map(h => h[1]).sort((a,b)=>a-b);
+    return [[r, cs[0]-1], [r, cs[cs.length-1]+1]];
+  }
+  const sameCol = hits.every(h => h[1] === hits[0][1]);
+  if (sameCol){
+    const c = hits[0][1], rs = hits.map(h => h[0]).sort((a,b)=>a-b);
+    return [[rs[0]-1, c], [rs[rs.length-1]+1, c]];
+  }
+  // hits not aligned (touched a second ship) — probe neighbours of the last hit
+  const [r,c] = hits[hits.length-1];
+  return ORTHO.map(([dr,dc]) => [r+dr, c+dc]);
+}
+function parityShot(shots, parity){
+  const par = [], all = [];
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++)
+    if (shots[r][c] === 0){ all.push([r,c]); if (((r+c) & 1) === parity) par.push([r,c]); }
+  const pool = par.length ? par : all;
+  return pool.length ? pool[(Math.random()*pool.length)|0] : null;
+}
+function smartShot(ai, shots){
+  if (ai.hits.length){
+    for (const [r,c] of targetQueue(ai.hits))
+      if (inB(r,c) && shots[r][c] === 0) return [r,c];
+  }
+  return parityShot(shots, ai.parity);
+}
+function aiPick(ai, shots){
+  return ai.mode === "random" ? randomShot(shots) : smartShot(ai, shots);
+}
+function observe(ai, r, c, res){
+  if (ai.mode === "random" || !res) return;
+  if (res.result === "hit")  ai.hits.push([r,c]);
+  if (res.result === "sunk") ai.hits = [];
+}
+
+// ===== UI / GAME LOOP =====
+const meWrap    = document.getElementById("meWrap");
+const enemyWrap = document.getElementById("enemyWrap");
+const msgEl     = document.getElementById("msg");
+const logEl     = document.getElementById("log");
+
+let me, enemy, ai;
+let phase = "place";      // place | battle | over
+let placeIdx = 0;
+let orient = "H";
+let hover = null;
+let busy = false;
+let revealEnemy = false;
+let playerShots = 0;
+
+function cellHTML(state, which, r, c){
+  let cls = "b-cell", content = "";
+  const sid = state.board[r][c], sh = state.shots[r][c];
+  if (which === "me" && phase === "place" && hover){
+    const cells = shipCells(hover[0], hover[1], FLEET[placeIdx].size, orient === "H");
+    if (cells.some(([pr,pc]) => pr===r && pc===c))
+      cls += canPlace(state.board, cells) ? " b-prevok" : " b-prevbad";
+    else cls += sid>0 ? " b-ship" : " b-water";
+    return `<div class="${cls}" data-r="${r}" data-c="${c}"></div>`;
+  }
+  if (sh === 2){
+    const sunk = state.ships[sid-1] && state.ships[sid-1].sunk;
+    cls += sunk ? " b-sunk" : " b-hit"; content = "💥";
+  } else if (sh === 1){
+    cls += " b-miss"; content = "•";
+  } else if (which === "me" && sid > 0){
+    cls += " b-ship";
+  } else if (which === "enemy" && revealEnemy && sid > 0){
+    cls += " b-reveal";
+  } else {
+    cls += " b-water";
+  }
+  return `<div class="${cls}" data-r="${r}" data-c="${c}">${content}</div>`;
+}
+function boardHTML(state, which){
+  let h = '<div class="b-grid"><div class="b-lbl"></div>';
+  for (let c=0;c<SIZE;c++) h += `<div class="b-lbl">${COLS[c]}</div>`;
+  for (let r=0;r<SIZE;r++){
+    h += `<div class="b-lbl">${r+1}</div>`;
+    for (let c=0;c<SIZE;c++) h += cellHTML(state, which, r, c);
+  }
+  return h + "</div>";
+}
+function renderMe(){ meWrap.innerHTML = boardHTML(me, "me"); }
+function renderEnemy(){ enemyWrap.innerHTML = boardHTML(enemy, "enemy"); }
+function render(){ renderMe(); renderEnemy(); updatePanels(); }
+
+function pills(state, hideNames){
+  return state.ships.length
+    ? state.ships.map(s => `<span class="pill${s.sunk?" pill-sunk":""}">${s.name} ${s.size}</span>`).join("")
+    : FLEET.map(s => `<span class="pill">${s.name} ${s.size}</span>`).join("");
+}
+function updatePanels(){
+  document.getElementById("youAfloat").textContent   = me.ships.length ? shipsAfloat(me) : 5;
+  document.getElementById("enemyAfloat").textContent = shipsAfloat(enemy);
+  document.getElementById("shotStat").textContent    = playerShots;
+  document.getElementById("phaseStat").textContent   =
+    phase==="place" ? "Place your fleet" : phase==="battle" ? "Battle" : "Game over";
+  document.getElementById("myPills").innerHTML    = pills(me);
+  document.getElementById("enemyPills").innerHTML = pills(enemy);
+}
+function msg(text, tone){
+  msgEl.textContent = text;
+  msgEl.className = "mt-5 font-bold " + (tone==="warn" ? "text-amber-600" : tone==="lose" ? "text-rose-600" : "text-emerald-600");
+}
+function logShot(who, r, c, res){
+  if (!res) return;
+  const kind = res.result;
+  const line = res.result === "sunk"
+    ? `${who} sank the ${res.ship.name}!`
+    : `${who}: ${coord(r,c)} — ${res.result}`;
+  const div = document.createElement("div");
+  div.className = kind === "miss" ? "miss" : kind === "sunk" ? "sunk" : "hit";
+  div.textContent = line;
+  logEl.insertBefore(div, logEl.firstChild);
+}
+
+function tryPlace(r, c){
+  const spec = FLEET[placeIdx];
+  const cells = shipCells(r, c, spec.size, orient === "H");
+  if (!canPlace(me.board, cells)){ msg("Invalid — ships can't overlap or hang off the edge.", "warn"); return; }
+  const id = me.ships.length + 1;
+  cells.forEach(([rr,cc]) => me.board[rr][cc] = id);
+  me.ships.push({ name:spec.name, size:spec.size, cells, hits:0, sunk:false });
+  placeIdx++;
+  if (placeIdx >= FLEET.length) return beginBattle();
+  msg(`Place your ${FLEET[placeIdx].name} (${FLEET[placeIdx].size} cells) — click a cell.`);
+  renderMe(); updatePanels();
+}
+function autoPlace(){
+  while (placeIdx < FLEET.length){
+    const spec = FLEET[placeIdx];
+    let ok = false;
+    for (let g=0; g<1000 && !ok; g++){
+      const h = Math.random() < 0.5;
+      const r = (Math.random()*SIZE)|0, c = (Math.random()*SIZE)|0;
+      const cells = shipCells(r, c, spec.size, h);
+      if (!canPlace(me.board, cells)) continue;
+      const id = me.ships.length + 1;
+      cells.forEach(([rr,cc]) => me.board[rr][cc] = id);
+      me.ships.push({ name:spec.name, size:spec.size, cells, hits:0, sunk:false });
+      placeIdx++; ok = true;
+    }
+  }
+  beginBattle();
+}
+function beginBattle(){
+  phase = "battle"; hover = null;
+  msg("Battle! Click a cell in enemy waters to fire.");
+  render();
+}
+
+function playerFire(r, c){
+  if (phase !== "battle" || busy) return;
+  const res = fire(enemy, r, c);
+  if (!res) return;
+  playerShots++;
+  logShot("You", r, c, res);
+  renderEnemy(); updatePanels();
+  if (allSunk(enemy)) return endGame("you");
+  busy = true; msg("Enemy is taking aim…");
+  setTimeout(aiTurn, 520);
+}
+function aiTurn(){
+  const pick = aiPick(ai, me.shots);
+  if (!pick){ busy = false; return; }
+  const [r,c] = pick;
+  const res = fire(me, r, c);
+  observe(ai, r, c, res);
+  logShot("Enemy", r, c, res);
+  renderMe(); updatePanels();
+  busy = false;
+  if (allSunk(me)) return endGame("ai");
+  msg("Your turn — fire on enemy waters.");
+}
+function endGame(winner){
+  phase = "over"; busy = false; revealEnemy = true;
+  render();
+  if (winner === "you") msg(`You win! 🎉 Enemy fleet sunk in ${playerShots} shots.`);
+  else msg("The AI sank your whole fleet. Try again.", "lose");
+}
+
+meWrap.onclick = e => {
+  if (phase !== "place") return;
+  const cell = e.target.closest(".b-cell"); if (!cell) return;
+  tryPlace(+cell.dataset.r, +cell.dataset.c);
+};
+meWrap.onmouseover = e => {
+  if (phase !== "place") return;
+  const cell = e.target.closest(".b-cell"); if (!cell) return;
+  hover = [+cell.dataset.r, +cell.dataset.c]; renderMe();
+};
+meWrap.onmouseleave = () => { if (phase === "place"){ hover = null; renderMe(); } };
+enemyWrap.onclick = e => {
+  const cell = e.target.closest(".b-cell"); if (!cell) return;
+  playerFire(+cell.dataset.r, +cell.dataset.c);
+};
+
+document.getElementById("rotBtn").onclick = () => {
+  orient = orient === "H" ? "V" : "H";
+  document.getElementById("rotBtn").textContent = "🔄 Rotate: " + (orient === "H" ? "Horizontal" : "Vertical");
+  if (phase === "place") renderMe();
+};
+document.getElementById("autoBtn").onclick = () => { if (phase === "place") autoPlace(); };
+document.getElementById("newBtn").onclick  = newGame;
+document.getElementById("aiSel").onchange  = () => { if (phase === "place") ai = makeAI(document.getElementById("aiSel").value); };
+
+function newGame(){
+  me = emptyState();
+  enemy = randomFleet();
+  ai = makeAI(document.getElementById("aiSel").value);
+  phase = "place"; placeIdx = 0; orient = "H"; hover = null; busy = false;
+  revealEnemy = false; playerShots = 0;
+  document.getElementById("rotBtn").textContent = "🔄 Rotate: Horizontal";
+  logEl.innerHTML = "";
+  render();
+  msg(`Place your ${FLEET[0].name} (${FLEET[0].size} cells) — click a cell, or Auto-place.`);
+}
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The grid and the fleet", why:"Battleship is two hidden 10×10 grids — yours and the opponent's — and a fleet of five ships with fixed lengths: a carrier (5), a battleship (4), a cruiser (3), a submarine (3) and a destroyer (2). That is 17 occupied cells hidden among 100. The whole game fits in two small integer arrays per side: a board that records which ship, if any, sits on each cell, and a shots array that records what has been fired there. Everything else — placement, firing, the AI's memory — is just reads and writes on those grids.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the fleet — 17 cells in a 10×10 sea<br><br>Carrier &nbsp;&nbsp;&nbsp;■ ■ ■ ■ ■ &nbsp;(5)<br>Battleship &nbsp;■ ■ ■ ■ &nbsp;&nbsp;&nbsp;(4)<br>Cruiser &nbsp;&nbsp;&nbsp;■ ■ ■ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(3)<br>Submarine &nbsp;■ ■ ■ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(3)<br>Destroyer &nbsp;■ ■ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(2)<br><br>board[r][c] = ship id · shots[r][c] = 0/1/2</div>`, code:`const SIZE = 10;
+const FLEET = [
+  { name:"Carrier",    size:5 },
+  { name:"Battleship", size:4 },
+  { name:"Cruiser",    size:3 },
+  { name:"Submarine",  size:3 },
+  { name:"Destroyer",  size:2 },
+];                                     // 5+4+3+3+2 = 17 cells out of 100
+const inB   = (r,c) => r>=0 && r<SIZE && c>=0 && c<SIZE;
+const grid0 = () => Array.from({length:SIZE}, () => Array(SIZE).fill(0));
+// state = { board, ships, shots }` },
+
+ { title:"2. Placement rules: no overlap, no overhang", why:"A ship occupies a straight run of cells — horizontal or vertical — from an anchor square. The only placement rule that matters is a single test: every cell the ship would cover must be on the board and still empty. If any cell is off the edge, the ship overhangs; if any cell is already taken, two ships would overlap. Both are illegal, and both fall out of the same check. To lay down a whole fleet, keep proposing a random square and orientation until the ship passes that test, then stamp its id into the board.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every covered cell must be ON-BOARD and EMPTY<br><br>· · · · ·&nbsp;&nbsp;&nbsp;&nbsp;· · · · ·<br>· ■ ■ ■ ·&nbsp;&nbsp;&nbsp;· ■ ■ ■ X&nbsp; overhang<br>· · · · ·&nbsp;&nbsp;&nbsp;· · ▧ · ·&nbsp; overlap<br>&nbsp;&nbsp;OK &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ILLEGAL<br><br>fail if ANY cell is off-board or occupied</div>`, code:`function shipCells(r, c, size, horizontal){
+  const cells = [];
+  for (let i=0;i<size;i++) cells.push(horizontal ? [r,c+i] : [r+i,c]);
+  return cells;
+}
+// legal ONLY if every cell is on-board AND empty
+function canPlace(board, cells){
+  return cells.every(([r,c]) => inB(r,c) && board[r][c] === 0);
+}
+function randomFleet(){
+  const board = grid0(), ships = [];
+  FLEET.forEach((spec, idx) => {
+    for (;;){                                 // retry until it fits
+      const horiz = Math.random() < 0.5;
+      const r = (Math.random()*SIZE)|0, c = (Math.random()*SIZE)|0;
+      const cells = shipCells(r, c, spec.size, horiz);
+      if (!canPlace(board, cells)) continue;
+      cells.forEach(([y,x]) => board[y][x] = idx+1);
+      ships.push({ name:spec.name, size:spec.size, cells, hits:0, sunk:false });
+      break;
+    }
+  });
+  return { board, ships, shots: grid0() };
+}` },
+
+ { title:"3. The turn loop", why:"Play strictly alternates: you fire one shot at the enemy grid, then the AI fires one shot at yours, and around it goes until a fleet is wiped out. Each shot is resolved against the target's board and recorded in its shots grid. Keeping the two states symmetric — you have a board and shots, the AI has a board and shots — means the exact same fire function serves both sides; only the aimer differs. A human clicks a cell; the AI computes one.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">you fire → resolve → win?<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓ no<br>AI fires → resolve → win?<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓ no<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(repeat)<br><br>same fire() both sides · only the aimer differs</div>`, code:`function playerFire(r, c){
+  const res = fire(enemy, r, c);     // resolve against AI's board
+  if (!res) return;                  // ignore a repeat cell
+  if (allSunk(enemy)) return win("you");
+  aiTurn();
+}
+function aiTurn(){
+  const [r,c] = aiPick(ai, me.shots);// AI aims at YOUR board
+  const res   = fire(me, r, c);
+  observe(ai, r, c, res);            // let the AI learn from it
+  if (allSunk(me)) return win("ai");
+}` },
+
+ { title:"4. Hit, miss, and sunk detection", why:"Firing is a lookup. Refuse a repeat by checking the shots grid first. If the targeted board cell is water, it is a miss — mark it 1. If it holds a ship id, it is a hit — mark it 2 and bump that ship's hit counter. The counter is the trick for sunk detection: the instant a ship's hits equal its length, it is sunk, with no scanning. A fleet is lost when every ship is sunk, and that is the entire win condition.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">fire at a cell<br><br>water → MISS (shots = 1)<br>ship &nbsp;→ HIT &nbsp;(shots = 2, ship.hits++)<br>ship.hits === ship.size → SUNK<br>all ships sunk → &nbsp;fleet lost<br><br>(no scanning — the counter tells you)</div>`, code:`function fire(state, r, c){
+  if (state.shots[r][c] !== 0) return null;   // already fired
+  const id = state.board[r][c];
+  if (id === 0){ state.shots[r][c] = 1; return { result:"miss" }; }
+  state.shots[r][c] = 2;
+  const ship = state.ships[id-1];
+  ship.hits++;
+  if (ship.hits === ship.size){ ship.sunk = true; return { result:"sunk", ship }; }
+  return { result:"hit", ship };
+}
+const allSunk = st => st.ships.every(s => s.sunk);` },
+
+ { title:"5. The naive AI: pure random", why:"The simplest opponent has no memory: it collects every cell it has not fired at and picks one uniformly at random. It ignores its own hits entirely — after blasting the middle of a carrier it is just as likely to fire in the far corner next. With 17 ship cells hidden in 100, most shots splash into water, and clearing the whole board this way takes, on average, into the high 90s of shots. It is a useful baseline precisely because it is so wasteful: it shows how much a little memory is worth.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">random AI — no memory, no follow-up<br><br>· • · · • · · · • ·<br>• · · • · · • · · •<br>· · • · · • · X · ·&nbsp;&nbsp;(hit, then wanders off)<br>· • · · · • · · • ·<br><br>≈ 96 shots to clear the board on average</div>`, code:`function untriedCells(shots){
+  const out = [];
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++)
+    if (shots[r][c] === 0) out.push([r,c]);
+  return out;
+}
+function randomShot(shots){
+  const pool = untriedCells(shots);
+  return pool[(Math.random()*pool.length)|0];   // blind — never learns
+}` },
+
+ { title:"6. Parity hunting: fire every other cell", why:"Here is the first real idea. While you are still searching for an untouched ship, you never need to fire two adjacent cells. Every ship is at least two cells long, so wherever it sits it must cover one dark and one light square of a checkerboard pattern. Firing only on cells where (r+c) is even therefore cannot miss any ship, yet it halves the squares you must search. This alone noticeably cuts the shots wasted in the hunting phase, before any targeting cleverness.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">checkerboard hunt — one colour is enough<br><br>X · X · X · X · X ·<br>· X · X · X · X · X<br>X · X · X · X · X ·<br>· X · X · X · X · X<br><br>a length-2+ ship always covers an X · halves the search</div>`, code:`// HUNT: fire only on one colour of the checkerboard.
+// a ship of length >= 2 always covers both colours, so this can't miss one.
+function parityShot(shots, parity=0){
+  const par = [], all = [];
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++)
+    if (shots[r][c] === 0){
+      all.push([r,c]);
+      if (((r+c) & 1) === parity) par.push([r,c]);
+    }
+  const pool = par.length ? par : all;
+  return pool[(Math.random()*pool.length)|0];
+}` },
+
+ { title:"7. Target mode: queue neighbours, lock the axis", why:"The payoff comes when a hunt shot lands. The AI switches from hunting to targeting: it remembers the hits belonging to the current ship. With a single hit the ship could extend in any direction, so it queues all four orthogonal neighbours and tries them. As soon as it scores a second hit in the same row or column, it knows the ship's axis — it discards the off-axis candidates and fires only at the two open ends of that line, walking the ship to its grave. When the ship finally sinks it clears the memory and drops back to parity hunting. This hit → surround → line-up → finish behaviour is exactly how a person plays, and it is where the shot savings come from.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one hit → try 4 neighbours<br>&nbsp;&nbsp;&nbsp;&nbsp;· ? ·<br>&nbsp;&nbsp;&nbsp;&nbsp;? X ?<br>&nbsp;&nbsp;&nbsp;&nbsp;· ? ·<br><br>two aligned hits → LOCK the axis<br>&nbsp;&nbsp;? X X ?&nbsp;&nbsp;(fire only the open ends)</div>`, code:`const ORTHO = [[-1,0],[1,0],[0,-1],[0,1]];
+function targetQueue(hits){
+  if (hits.length === 1){                       // unknown axis → all 4
+    const [r,c] = hits[0];
+    return ORTHO.map(([dr,dc]) => [r+dr, c+dc]);
+  }
+  const sameRow = hits.every(h => h[0] === hits[0][0]);
+  if (sameRow){                                 // horizontal → extend the row
+    const r = hits[0][0], cs = hits.map(h => h[1]).sort((a,b)=>a-b);
+    return [[r, cs[0]-1], [r, cs[cs.length-1]+1]];
+  }
+  const c = hits[0][1], rs = hits.map(h => h[0]).sort((a,b)=>a-b);
+  return [[rs[0]-1, c], [rs[rs.length-1]+1, c]]; // vertical → extend the column
+}
+function smartShot(ai, shots){
+  if (ai.hits.length)                           // TARGET: chase the ship
+    for (const [r,c] of targetQueue(ai.hits))
+      if (inB(r,c) && shots[r][c] === 0) return [r,c];
+  return parityShot(shots, ai.parity);          // HUNT: checkerboard
+}
+function observe(ai, r, c, res){
+  if (res.result === "hit")  ai.hits.push([r,c]);
+  if (res.result === "sunk") ai.hits = [];      // finished — hunt again
+}` },
+
+ { title:"8. Probability density: where ships fit best", why:"Parity is a cheap approximation of the strongest heuristic. For every ship still afloat, imagine sliding it into every legal position on the board — every horizontal and vertical run that does not cross a known miss — and add one to each cell it would cover. The result is a heat map: a cell's value is the number of ways a remaining ship could still be sitting on it. The hottest untried cell is the mathematically best shot, because it is where a ship is most likely to be. Remarkably, this map produces the checkerboard parity by itself early on, and it automatically steers fire away from cramped corners and toward open water where the big ships must still hide.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">count the ways every remaining ship fits<br><br>1 2 3 3 3 3 3 3 2 1<br>2 4 6 6 6 6 6 6 4 2<br>3 6 8 9 9 9 9 8 6 3&nbsp;← hottest = best shot<br>2 4 6 6 6 6 6 6 4 2<br><br>heat map peaks in open water, dips near edges</div>`, code:`// for each remaining ship, add 1 to every cell of every legal position.
+// the hottest untried cell is where a ship can fit the most ways.
+function densityShot(shots, remainingSizes){
+  const heat = grid0();
+  for (const size of remainingSizes)
+    for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++)
+      for (const horiz of [true,false]){
+        const cells = shipCells(r, c, size, horiz);
+        if (!cells.every(([y,x]) => inB(y,x) && shots[y][x] !== 1)) continue;
+        cells.forEach(([y,x]) => heat[y][x]++);
+      }
+  let best = null, bestV = -1;
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++)
+    if (shots[r][c] === 0 && heat[r][c] > bestV){ bestV = heat[r][c]; best = [r,c]; }
+  return best;
+}` },
+
+ { title:"9. Why hunt-and-target beats random", why:"The random AI spends its whole game hunting: every one of its ~96 shots is a fresh blind guess, and the 17 ship cells are found only by exhaustion. Hunt-and-target splits the work. Hunting on parity finds a ship in roughly half the searching shots, and once found, targeting spends only a handful of extra shots to finish it rather than stumbling back onto it by luck. The net effect is large and consistent: over many games the smart AI clears the board in the 50s to 60s of shots against the random AI's 90s. The lesson generalises — a tiny amount of state (remember your hits, act on them) beats a memoryless policy by a wide margin.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">average shots to sink the whole fleet<br><br>random &nbsp;&nbsp;&nbsp;██████████████████ ~96<br>hunt+target ███████████ ~55<br><br>same rules · the only difference is MEMORY</div>`, code:`// no search — just play both AIs on many random boards and count shots.
+function shotsToClear(pickFn){
+  const enemy = randomFleet();
+  const ai = { hits:[], parity:0 };
+  let n = 0;
+  while (!allSunk(enemy)){
+    const [r,c] = pickFn(ai, enemy.shots);
+    const res = fire(enemy, r, c);
+    observe(ai, r, c, res);
+    n++;
+  }
+  return n;               // average this over 1000s of games per AI
+}` },
+
+ { title:"10. State tracking: the AI's memory", why:"Everything that separates the two opponents is a little state carried between shots. The shots grid is shared bookkeeping — it stops repeats and defines what is still untried. The smart AI adds its own memory: a list of the current ship's hits and which parity it is hunting. That list is the whole difference between wandering and chasing — it is what turns a hit into a follow-up, two hits into a locked axis, and a sunk ship into a clean slate. Store the right few facts and simple rules on top of them play a genuinely good game; store nothing and you are back to blind luck.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">what the AI remembers<br><br>shots[10][10] &nbsp;→ tried / miss / hit (shared)<br>ai.hits[]     &nbsp;→ current ship's hits<br>ai.parity     &nbsp;→ which checkerboard colour<br><br>hit → push · sunk → clear · that's the brain</div>`, code:`function makeAI(mode){
+  return { mode, hits:[], parity:0 };   // the entire "brain"
+}
+function observe(ai, r, c, res){
+  if (res.result === "hit")  ai.hits.push([r,c]);  // build up the ship
+  if (res.result === "sunk") ai.hits = [];         // wipe, back to hunting
+}
+// smartShot reads ai.hits: non-empty → target mode, empty → hunt mode.
+// three facts and two rules — that is all the memory a strong player needs.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,curStep-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(curStep+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>

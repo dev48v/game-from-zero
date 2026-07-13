@@ -38,6 +38,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 29 — Maze (generate + solve)](https://dev48v.infy.uk/game/day29-maze.html) — `day29-maze.html`
 - [GameFromZero · Day 30 — Reversi/Othello](https://dev48v.infy.uk/game/day30-reversi.html) — `day30-reversi.html`
 - [GameFromZero · Day 31 — Checkers](https://dev48v.infy.uk/game/day31-checkers.html) — `day31-checkers.html`
+- [GameFromZero · Day 32 — Battleship](https://dev48v.infy.uk/game/day32-battleship.html) — `day32-battleship.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
