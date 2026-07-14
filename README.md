@@ -39,6 +39,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 30 — Reversi/Othello](https://dev48v.infy.uk/game/day30-reversi.html) — `day30-reversi.html`
 - [GameFromZero · Day 31 — Checkers](https://dev48v.infy.uk/game/day31-checkers.html) — `day31-checkers.html`
 - [GameFromZero · Day 32 — Battleship](https://dev48v.infy.uk/game/day32-battleship.html) — `day32-battleship.html`
+- [GameFromZero · Day 33 — Bubble Shooter](https://dev48v.infy.uk/game/day33-bubble-shooter.html) — `day33-bubble-shooter.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

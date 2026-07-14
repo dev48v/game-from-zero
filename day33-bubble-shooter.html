@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 33 — Bubble Shooter</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  .stage { background:#0b1220; padding:14px; border-radius:20px; display:inline-block;
+           box-shadow:0 18px 40px rgba(0,0,0,.22); }
+  canvas#game { display:block; border-radius:12px; background:#0f172a; touch-action:none; cursor:crosshair;
+                width:min(92vw,432px); height:auto; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:26px; }
+  .swatch { display:inline-block; width:14px; height:14px; border-radius:50%; vertical-align:middle;
+            margin:0 3px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.15); }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 33</div>
+      <h1 class="text-xl font-bold">🫧 Bubble Shooter — Aim, Bounce Off the Walls, Snap to a Hex Grid, and Pop Clusters of Three</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Clear the board before the bubbles pile up.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto"><strong>Move the mouse</strong> to aim the cannon at the bottom (or nudge with the <strong>← →</strong> arrow keys), then <strong>click</strong> or press <strong>Space</strong> to fire the coloured bubble sitting in the barrel. The shot flies in a straight line, <strong>bounces off the side walls</strong>, and the instant it touches the ceiling or another bubble it <strong>snaps into the honeycomb grid</strong> at the nearest open cell. If that lands it against two or more of the same colour — three or more touching in total — the whole <strong>cluster pops</strong>. And here is the satisfying part: any bubbles that were only hanging on <em>through</em> the ones you just popped are now attached to nothing, so they <strong>drop off</strong> in a shower. A little preview shows the next bubble so you can plan two shots ahead. Bank shots off the wall to reach bubbles tucked into a corner. Clear every bubble to win; let the stack grow past the red line and it is over.</p>
+
+      <div class="flex justify-center gap-5 mb-3 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Score: <span id="scoreStat" class="stat text-emerald-600">0</span></div>
+        <div>Bubbles left: <span id="leftStat" class="stat text-slate-500">0</span></div>
+        <div>Shots: <span id="shotStat" class="stat text-slate-500">0</span></div>
+        <div>Best combo: <span id="comboStat" class="stat text-amber-600">0</span></div>
+      </div>
+
+      <div class="flex justify-center">
+        <div class="stage">
+          <canvas id="game" width="432" height="520"></canvas>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-emerald-600">Move to aim · click or Space to fire.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↺ New game</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">Everything here is real bubble-shooter mechanics. The board is a <strong>staggered hexagonal grid</strong> — every other row is shoved half a bubble to the side so each bubble nestles against six neighbours instead of four, which is why clusters feel round rather than blocky. The moving bubble is pure physics: an aim angle becomes a velocity, and hitting a side wall simply flips the horizontal component (<code>vx = -vx</code>) so the angle reflects. When it collides it <strong>snaps</strong> to the closest empty cell by rounding its pixel position back to a row and column. Popping is a <strong>breadth-first flood-fill</strong> from the cell it landed in, walking only to same-colour neighbours; if the connected group is three or more it is removed. Then a <strong>second flood-fill starts from the ceiling row</strong> and marks everything still hanging from the top — any bubble it never reaches is floating, so it drops. All vanilla JavaScript on one canvas, offline, no images or libraries.</p>
+      <div class="text-xs text-slate-400 mt-3">Colours in play: <span class="swatch" style="background:#ef4444"></span><span class="swatch" style="background:#3b82f6"></span><span class="swatch" style="background:#f59e0b"></span><span class="swatch" style="background:#10b981"></span><span class="swatch" style="background:#a855f7"></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Bubble Shooter works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A staggered hex grid, a cell-to-pixel map with six neighbours, an aim angle that becomes a velocity, a flight loop that reflects off the walls, a snap that rounds the bubble back onto the grid, a breadth-first flood-fill to pop same-colour clusters of three or more, and a second flood-fill from the ceiling to drop whatever is left floating. About 160 lines of vanilla JavaScript on one canvas — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The staggered hex grid</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The board is rows of bubbles, but every <em>odd</em> row is pushed half a bubble to the right and holds one fewer bubble. That stagger is what turns a square grid into a honeycomb: each bubble ends up touching six neighbours, not four. Store it as a 2D array of colour ids (or <code>null</code> for empty), with the row's length depending on whether the row is even or odd.</p>
+        <div class="relative"><pre>const R = 18;                       // bubble radius
+const N = 12;                       // bubbles in an even row
+const W = 2 * R * N;                // canvas width fits N of them
+const rowH = R * Math.sqrt(3);      // hex rows nest tighter than 2R
+const MAXROWS = 15;
+// odd rows are offset half a bubble AND hold one fewer bubble
+const colsInRow = r =&gt; (r % 2) ? N - 1 : N;
+
+function newGrid(rows){
+  const g = Array.from({length:MAXROWS}, (_,r) =&gt; Array(colsInRow(r)).fill(null));
+  for (let r=0;r&lt;rows;r++)
+    for (let c=0;c&lt;colsInRow(r);c++) g[r][c] = Math.random()*COLORS.length | 0;
+  return g;                          // g[r][c] = colour index, or null
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Cell ↔ pixel, and the six neighbours</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A cell's centre is its column times the diameter, plus a half-bubble shift on odd rows; the row simply steps down by <code>rowH</code>. The neighbour list is the whole reason to use hexes — and it depends on row parity, because the half-bubble shift changes which cells above and below actually touch.</p>
+        <div class="relative"><pre>function cellCenter(r, c){
+  const offset = (r % 2) ? R : 0;          // odd rows shifted right
+  return { x: R + c*2*R + offset, y: R + r*rowH };
+}
+// the 6 touching cells differ for even vs odd rows
+function neighbors(r, c){
+  const even = (r % 2) === 0;
+  const list = even
+    ? [[r,c-1],[r,c+1],[r-1,c-1],[r-1,c],[r+1,c-1],[r+1,c]]
+    : [[r,c-1],[r,c+1],[r-1,c],[r-1,c+1],[r+1,c],[r+1,c+1]];
+  return list.filter(([nr,nc]) =&gt; nr&gt;=0 &amp;&amp; nr&lt;MAXROWS &amp;&amp; nc&gt;=0 &amp;&amp; nc&lt;colsInRow(nr));
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Aim: an angle becomes a velocity</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The cannon sits at the bottom centre. Point at the mouse, take the angle from the cannon to the cursor, and clamp it so the shot always heads upward — never sideways or down. Firing just turns that angle into a velocity vector with a fixed speed.</p>
+        <div class="relative"><pre>const SPEED = 8;
+const ox = W/2, oy = H - 38;               // cannon origin
+let aim = -Math.PI/2;                      // start pointing straight up
+
+function aimAt(px, py){
+  let a = Math.atan2(py - oy, px - ox);    // angle to the cursor
+  if (a &gt;= 0) a = (px &lt; ox) ? -Math.PI+0.18 : -0.18;  // never fire downward
+  aim = Math.max(-Math.PI+0.18, Math.min(-0.18, a));  // clamp near-horizontal
+}
+function fire(){
+  if (state !== "aim") return;
+  fly = { x:ox, y:oy, vx:Math.cos(aim)*SPEED, vy:Math.sin(aim)*SPEED, color:current };
+  state = "fly";
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Flight and wall reflection</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Advance the bubble a few sub-steps per frame so it can never tunnel through a wall or a bubble. When its centre reaches within a radius of a side wall, <strong>reflect the angle by flipping <code>vx</code></strong> — that single sign flip is the whole bounce. Reaching the ceiling, or touching any placed bubble, ends the flight.</p>
+        <div class="relative"><pre>function update(){
+  if (state !== "fly") return;
+  const sub = 4;                           // sub-steps stop tunnelling
+  for (let i=0;i&lt;sub;i++){
+    fly.x += fly.vx/sub;  fly.y += fly.vy/sub;
+    if (fly.x &lt; R){ fly.x = R;    fly.vx = -fly.vx; }        // bounce off left
+    else if (fly.x &gt; W-R){ fly.x = W-R; fly.vx = -fly.vx; } // bounce off right
+    if (fly.y &lt;= R)  return land();          // hit the ceiling
+    if (hitsGrid()) return land();           // touched a bubble
+  }
+}
+function hitsGrid(){
+  for (let r=0;r&lt;MAXROWS;r++) for (let c=0;c&lt;colsInRow(r);c++){
+    if (grid[r][c] == null) continue;
+    const p = cellCenter(r,c), dx = p.x-fly.x, dy = p.y-fly.y;
+    if (dx*dx + dy*dy &lt; (2*R)*(2*R)) return true;   // centres within a diameter
+  }
+  return false;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Snap to the nearest empty cell</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Where the bubble stopped is almost never a perfect cell centre, so round its pixel position back to a row and column, then pick the closest <em>empty</em> cell in that neighbourhood. That is the "snap" — it is what keeps every bubble on the honeycomb lattice no matter where it collided.</p>
+        <div class="relative"><pre>function snapCell(x, y){
+  let row = Math.round((y - R) / rowH);
+  row = Math.max(0, Math.min(MAXROWS-1, row));
+  let best = null, bestD = Infinity;
+  for (let r=Math.max(0,row-1); r&lt;=Math.min(MAXROWS-1,row+1); r++)
+    for (let c=0;c&lt;colsInRow(r);c++){
+      if (grid[r][c] != null) continue;             // must be empty
+      const p = cellCenter(r,c), d = (p.x-x)**2 + (p.y-y)**2;
+      if (d &lt; bestD){ bestD = d; best = {row:r, col:c}; }  // closest one wins
+    }
+  return best;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Flood-fill the same-colour cluster (BFS)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">From the cell the bubble just landed in, walk outward through touching neighbours, but only step onto cells of the <em>same colour</em>. A visited set stops loops. The list you come back with is the connected same-colour cluster — exactly the group that might pop.</p>
+        <div class="relative"><pre>function colorCluster(r0, c0, color){
+  const seen = new Set([r0+","+c0]);
+  const out = [], stack = [[r0,c0]];
+  while (stack.length){
+    const [r,c] = stack.pop();
+    if (grid[r][c] !== color) continue;
+    out.push([r,c]);
+    for (const [nr,nc] of neighbors(r,c)){
+      const k = nr+","+nc;
+      if (!seen.has(k) &amp;&amp; grid[nr][nc] === color){ seen.add(k); stack.push([nr,nc]); }
+    }
+  }
+  return out;                          // every same-colour bubble touching the start
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">The pop rule (three or more) and scoring</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The rule is simply a size test: if the cluster the new bubble joined has three or more bubbles, clear them all; otherwise the bubble just sticks and it becomes the next player's problem. Score the pop, and reward chains — every consecutive shot that pops something bumps a combo multiplier.</p>
+        <div class="relative"><pre>function land(){
+  const cell = snapCell(fly.x, fly.y);
+  grid[cell.row][cell.col] = fly.color;              // place it
+  const cluster = colorCluster(cell.row, cell.col, fly.color);
+  let popped = 0, dropped = 0;
+  if (cluster.length &gt;= 3){                           // THE POP RULE
+    cluster.forEach(([r,c]) =&gt; grid[r][c] = null);
+    popped = cluster.length;
+    dropped = dropFloating();                         // step 8
+    combo++;                                          // chain bonus
+  } else combo = 0;
+  score += popped*10 + dropped*20 + Math.max(0,combo-1)*15;
+  fly = null; nextBubble(); state = "aim";
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Drop the floaters (a second BFS from the ceiling)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">After a pop, some bubbles may have been held up only by the ones that vanished. To find them, flood-fill from the top row through <em>any</em> colour: everything the fill reaches is still anchored to the ceiling. Anything it never reaches is floating — remove it. This is what makes a good shot cascade into an avalanche.</p>
+        <div class="relative"><pre>function dropFloating(){
+  const anchored = new Set(), stack = [];
+  for (let c=0;c&lt;colsInRow(0);c++)                    // seed with the ceiling row
+    if (grid[0][c] != null){ anchored.add("0,"+c); stack.push([0,c]); }
+  while (stack.length){                               // BFS through ANY colour
+    const [r,c] = stack.pop();
+    for (const [nr,nc] of neighbors(r,c)){
+      const k = nr+","+nc;
+      if (!anchored.has(k) &amp;&amp; grid[nr][nc] != null){ anchored.add(k); stack.push([nr,nc]); }
+    }
+  }
+  let dropped = 0;                                    // unreached = floating
+  for (let r=0;r&lt;MAXROWS;r++) for (let c=0;c&lt;colsInRow(r);c++)
+    if (grid[r][c] != null &amp;&amp; !anchored.has(r+","+c)){ grid[r][c] = null; dropped++; }
+  return dropped;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Spawn, preview, win and lose</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Load the next bubble into the barrel and roll a fresh preview — biased to colours still on the board so the game stays winnable. Clearing every bubble wins; letting the stack sink past the danger line loses. Then it is just a render loop reading the grid onto the canvas.</p>
+        <div class="relative"><pre>function pickColor(){
+  const present = [...new Set(grid.flat().filter(v =&gt; v != null))];
+  const pool = present.length ? present : COLORS.map((_,i) =&gt; i);
+  return pool[Math.random()*pool.length | 0];        // stay winnable
+}
+function nextBubble(){ current = next; next = pickColor(); shots++; checkEnd(); }
+function checkEnd(){
+  const cells = grid.flat().filter(v =&gt; v != null);
+  if (cells.length === 0) return end("You cleared the board! 🎉");
+  for (let r=0;r&lt;MAXROWS;r++) for (let c=0;c&lt;colsInRow(r);c++)
+    if (grid[r][c] != null &amp;&amp; cellCenter(r,c).y + R &gt;= loseLineY)
+      return end("The bubbles crossed the line. Try again.");
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 33 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Bubble Shooter end to end: a staggered hex grid with parity-dependent neighbours, an aim angle turned into a velocity, a flight loop that reflects off the walls by flipping <code>vx</code>, a snap that rounds a collision back onto the lattice, a breadth-first flood-fill that pops same-colour clusters of three or more, and a second flood-fill from the ceiling that drops everything left floating. Next: add a row that descends every few shots, a bank-shot aiming guide, or special bombs that clear a colour. <strong>👉 Tomorrow — Day 34: Hangman — guess the hidden word letter by letter before the drawing is complete.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== BUBBLE SHOOTER ENGINE (real mechanics) =====
+const COLORS = ["#ef4444","#3b82f6","#f59e0b","#10b981","#a855f7"];
+const R = 18;                       // bubble radius
+const N = 12;                       // bubbles in an even row
+const W = 2 * R * N;                // 432
+const rowH = R * Math.sqrt(3);      // hex rows nest tighter than a diameter
+const MAXROWS = 15;
+const H = 520;
+const ox = W/2, oy = H - 38;        // cannon origin
+const loseLineY = oy - 30;
+const SPEED = 8;
+const START_ROWS = 5;
+
+const colsInRow = r => (r % 2) ? N - 1 : N;
+function cellCenter(r, c){
+  const offset = (r % 2) ? R : 0;
+  return { x: R + c*2*R + offset, y: R + r*rowH };
+}
+function neighbors(r, c){
+  const even = (r % 2) === 0;
+  const list = even
+    ? [[r,c-1],[r,c+1],[r-1,c-1],[r-1,c],[r+1,c-1],[r+1,c]]
+    : [[r,c-1],[r,c+1],[r-1,c],[r-1,c+1],[r+1,c],[r+1,c+1]];
+  return list.filter(([nr,nc]) => nr>=0 && nr<MAXROWS && nc>=0 && nc<colsInRow(nr));
+}
+
+let grid, fly, current, next, aim, state, score, shots, combo, bestCombo, flash;
+
+function newGrid(rows){
+  const g = Array.from({length:MAXROWS}, (_,r) => Array(colsInRow(r)).fill(null));
+  for (let r=0;r<rows;r++)
+    for (let c=0;c<colsInRow(r);c++) g[r][c] = Math.random()*COLORS.length | 0;
+  return g;
+}
+function pickColor(){
+  const present = [...new Set(grid.flat().filter(v => v != null))];
+  const pool = present.length ? present : COLORS.map((_,i) => i);
+  return pool[Math.random()*pool.length | 0];
+}
+
+// ----- aiming -----
+function aimAt(px, py){
+  let a = Math.atan2(py - oy, px - ox);
+  if (a >= 0) a = (px < ox) ? -Math.PI+0.18 : -0.18;
+  aim = Math.max(-Math.PI+0.18, Math.min(-0.18, a));
+}
+function fire(){
+  if (state !== "aim") return;
+  fly = { x:ox, y:oy, vx:Math.cos(aim)*SPEED, vy:Math.sin(aim)*SPEED, color:current };
+  state = "fly";
+}
+
+// ----- flight + wall reflection -----
+function hitsGrid(){
+  for (let r=0;r<MAXROWS;r++) for (let c=0;c<colsInRow(r);c++){
+    if (grid[r][c] == null) continue;
+    const p = cellCenter(r,c), dx = p.x-fly.x, dy = p.y-fly.y;
+    if (dx*dx + dy*dy < (2*R)*(2*R)) return true;
+  }
+  return false;
+}
+function update(){
+  if (state !== "fly") return;
+  const sub = 4;
+  for (let i=0;i<sub;i++){
+    fly.x += fly.vx/sub;  fly.y += fly.vy/sub;
+    if (fly.x < R){ fly.x = R; fly.vx = -fly.vx; }
+    else if (fly.x > W-R){ fly.x = W-R; fly.vx = -fly.vx; }
+    if (fly.y <= R){ fly.y = R; return land(); }
+    if (hitsGrid()) return land();
+  }
+}
+
+// ----- snap to grid -----
+function snapCell(x, y){
+  let row = Math.round((y - R) / rowH);
+  row = Math.max(0, Math.min(MAXROWS-1, row));
+  let best = null, bestD = Infinity;
+  for (let r=Math.max(0,row-1); r<=Math.min(MAXROWS-1,row+1); r++)
+    for (let c=0;c<colsInRow(r);c++){
+      if (grid[r][c] != null) continue;
+      const p = cellCenter(r,c), d = (p.x-x)**2 + (p.y-y)**2;
+      if (d < bestD){ bestD = d; best = {row:r, col:c}; }
+    }
+  return best;
+}
+
+// ----- flood-fill cluster + floaters -----
+function colorCluster(r0, c0, color){
+  const seen = new Set([r0+","+c0]);
+  const out = [], stack = [[r0,c0]];
+  while (stack.length){
+    const [r,c] = stack.pop();
+    if (grid[r][c] !== color) continue;
+    out.push([r,c]);
+    for (const [nr,nc] of neighbors(r,c)){
+      const k = nr+","+nc;
+      if (!seen.has(k) && grid[nr][nc] === color){ seen.add(k); stack.push([nr,nc]); }
+    }
+  }
+  return out;
+}
+function dropFloating(){
+  const anchored = new Set(), stack = [];
+  for (let c=0;c<colsInRow(0);c++)
+    if (grid[0][c] != null){ anchored.add("0,"+c); stack.push([0,c]); }
+  while (stack.length){
+    const [r,c] = stack.pop();
+    for (const [nr,nc] of neighbors(r,c)){
+      const k = nr+","+nc;
+      if (!anchored.has(k) && grid[nr][nc] != null){ anchored.add(k); stack.push([nr,nc]); }
+    }
+  }
+  const dropped = [];
+  for (let r=0;r<MAXROWS;r++) for (let c=0;c<colsInRow(r);c++)
+    if (grid[r][c] != null && !anchored.has(r+","+c)) dropped.push([r,c]);
+  dropped.forEach(([r,c]) => grid[r][c] = null);
+  return dropped;
+}
+
+// ----- landing -----
+function land(){
+  const cell = snapCell(fly.x, fly.y);
+  const color = fly.color;
+  fly = null;
+  if (!cell){ nextBubble(); state = "aim"; return; }
+  grid[cell.row][cell.col] = color;
+  const cluster = colorCluster(cell.row, cell.col, color);
+  let popped = 0, dropped = 0;
+  if (cluster.length >= 3){
+    cluster.forEach(([r,c]) => grid[r][c] = null);
+    popped = cluster.length;
+    dropped = dropFloating().length;
+    combo++; if (combo > bestCombo) bestCombo = combo;
+    flash = 12;
+  } else combo = 0;
+  score += popped*10 + dropped*20 + Math.max(0, combo-1)*15;
+  nextBubble();
+  if (state !== "over") state = "aim";
+}
+function nextBubble(){ current = next; next = pickColor(); shots++; hud(); checkEnd(); }
+function checkEnd(){
+  const remaining = grid.flat().filter(v => v != null).length;
+  if (remaining === 0) return end("You cleared the board! 🎉");
+  for (let r=0;r<MAXROWS;r++) for (let c=0;c<colsInRow(r);c++)
+    if (grid[r][c] != null && cellCenter(r,c).y + R >= loseLineY)
+      return end("The bubbles crossed the line. Try again.");
+}
+function end(text){ state = "over"; msg(text, text.includes("cleared") ? "win" : "lose"); }
+
+// ----- rendering -----
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+function drawBubble(x, y, idx, r){
+  r = r || R - 1;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = COLORS[idx]; ctx.fill();
+  ctx.beginPath(); ctx.arc(x - r*0.3, y - r*0.32, r*0.34, 0, Math.PI*2);
+  ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fill();
+}
+function drawAimGuide(){
+  if (state !== "aim") return;
+  let x = ox, y = oy, vx = Math.cos(aim)*SPEED, vy = Math.sin(aim)*SPEED;
+  ctx.fillStyle = "rgba(255,255,255,.45)";
+  for (let i=0;i<180;i++){
+    x += vx; y += vy;
+    if (x < R){ x = R; vx = -vx; } else if (x > W-R){ x = W-R; vx = -vx; }
+    if (y <= R) break;
+    let hit = false;
+    for (let r=0;r<MAXROWS && !hit;r++) for (let c=0;c<colsInRow(r);c++){
+      if (grid[r][c] == null) continue;
+      const p = cellCenter(r,c);
+      if ((p.x-x)**2 + (p.y-y)**2 < (2*R)*(2*R)){ hit = true; break; }
+    }
+    if (hit) break;
+    if (i % 5 === 0){ ctx.beginPath(); ctx.arc(x, y, 2.4, 0, Math.PI*2); ctx.fill(); }
+  }
+}
+function draw(){
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, W, H);
+  // danger line
+  ctx.strokeStyle = "rgba(239,68,68,.55)"; ctx.lineWidth = 2; ctx.setLineDash([8,6]);
+  ctx.beginPath(); ctx.moveTo(0, loseLineY); ctx.lineTo(W, loseLineY); ctx.stroke();
+  ctx.setLineDash([]);
+  // grid
+  for (let r=0;r<MAXROWS;r++) for (let c=0;c<colsInRow(r);c++){
+    if (grid[r][c] == null) continue;
+    const p = cellCenter(r,c); drawBubble(p.x, p.y, grid[r][c]);
+  }
+  drawAimGuide();
+  // flying bubble
+  if (fly) drawBubble(fly.x, fly.y, fly.color);
+  // cannon + loaded + preview
+  ctx.fillStyle = "#1e293b"; ctx.beginPath(); ctx.arc(ox, oy, R+7, 0, Math.PI*2); ctx.fill();
+  if (state === "aim"){
+    ctx.strokeStyle = "#334155"; ctx.lineWidth = 6; ctx.beginPath();
+    ctx.moveTo(ox, oy); ctx.lineTo(ox + Math.cos(aim)*(R+16), oy + Math.sin(aim)*(R+16)); ctx.stroke();
+  }
+  if (current != null && !fly) drawBubble(ox, oy, current);
+  if (next != null){
+    ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = "10px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("NEXT", W - 30, oy - 20);
+    drawBubble(W - 30, oy, next, R - 4);
+  }
+  if (flash > 0) flash--;
+}
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+
+// ----- HUD / messages -----
+function hud(){
+  document.getElementById("scoreStat").textContent = score;
+  document.getElementById("leftStat").textContent  = grid.flat().filter(v => v != null).length;
+  document.getElementById("shotStat").textContent  = shots;
+  document.getElementById("comboStat").textContent = bestCombo;
+}
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold " + (tone === "lose" ? "text-rose-600" : tone === "win" ? "text-emerald-600" : "text-emerald-600");
+}
+
+// ----- input -----
+function evtPos(e){
+  const rect = canvas.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return { x: (t.clientX - rect.left) * (W/rect.width), y: (t.clientY - rect.top) * (H/rect.height) };
+}
+canvas.addEventListener("mousemove", e => { if (state === "aim"){ const p = evtPos(e); aimAt(p.x, p.y); } });
+canvas.addEventListener("click", () => fire());
+canvas.addEventListener("touchmove", e => { if (state === "aim"){ const p = evtPos(e); aimAt(p.x, p.y); } e.preventDefault(); }, {passive:false});
+canvas.addEventListener("touchend", e => { fire(); e.preventDefault(); }, {passive:false});
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft"){ aim = Math.max(-Math.PI+0.18, aim - 0.04); }
+  else if (e.key === "ArrowRight"){ aim = Math.min(-0.18, aim + 0.04); }
+  else if (e.key === " " || e.key === "Enter"){ fire(); e.preventDefault(); }
+});
+document.getElementById("newBtn").onclick = newGame;
+
+function newGame(){
+  grid = newGrid(START_ROWS);
+  fly = null; aim = -Math.PI/2; state = "aim";
+  score = 0; shots = 0; combo = 0; bestCombo = 0; flash = 0;
+  current = pickColor(); next = pickColor();
+  hud(); msg("Move to aim · click or Space to fire.");
+}
+newGame();
+loop();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The staggered hex grid", why:"A bubble shooter board is not a square grid — it is a honeycomb. Every other row is nudged sideways by half a bubble so the bubbles nestle into the gaps of the row above, and each bubble ends up touching six neighbours instead of four. That is why the clusters you pop feel round and organic rather than blocky. Under the hood it is still a 2D array of colour ids (with null for empty), but the odd rows hold one fewer bubble and are offset — that single fact ripples through every other calculation in the game.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">even and odd rows interlock<br><br>row 0 &nbsp;( )( )( )( )( )( )<br>row 1 &nbsp;&nbsp;( )( )( )( )( )&nbsp;&nbsp;&larr; shifted ½ bubble<br>row 2 &nbsp;( )( )( )( )( )( )<br>row 3 &nbsp;&nbsp;( )( )( )( )( )<br><br>each bubble touches SIX others, not four</div>`, code:`const R = 18;                    // bubble radius
+const N = 12;                    // bubbles in an even row
+const W = 2 * R * N;             // canvas width
+const rowH = R * Math.sqrt(3);   // hex rows nest tighter than 2R
+const MAXROWS = 15;
+// odd rows are offset AND hold one fewer bubble
+const colsInRow = r => (r % 2) ? N - 1 : N;
+// grid[r][c] = colour index, or null for empty` },
+
+ { title:"2. Cell ↔ pixel and the six neighbours", why:"To draw a bubble you need its pixel centre; to reason about clusters you need its neighbours. The centre is the column times a diameter, plus a half-bubble shift on odd rows, with the row stepping down by rowH (which is R·√3, not 2R, because hex rows overlap). The neighbour list is the crux: because odd rows are shifted, the two cells directly above and below a bubble have different column indices on even rows than on odd rows. Get this parity wrong and clusters silently break apart.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the six neighbours of ● depend on row parity<br><br>&nbsp;( )( )&nbsp;&nbsp;&nbsp;&nbsp;up-left / up-right<br>( )●( )&nbsp;&nbsp;left / right<br>&nbsp;( )( )&nbsp;&nbsp;&nbsp;&nbsp;down-left / down-right<br><br>even row: up = (r-1,c-1)(r-1,c)<br>odd&nbsp; row: up = (r-1,c)&nbsp;&nbsp;(r-1,c+1)</div>`, code:`function cellCenter(r, c){
+  const offset = (r % 2) ? R : 0;      // odd rows shifted right
+  return { x: R + c*2*R + offset, y: R + r*rowH };
+}
+function neighbors(r, c){
+  const even = (r % 2) === 0;
+  const list = even
+    ? [[r,c-1],[r,c+1],[r-1,c-1],[r-1,c],[r+1,c-1],[r+1,c]]
+    : [[r,c-1],[r,c+1],[r-1,c],[r-1,c+1],[r+1,c],[r+1,c+1]];
+  return list.filter(([nr,nc]) =>
+    nr>=0 && nr<MAXROWS && nc>=0 && nc<colsInRow(nr));
+}` },
+
+ { title:"3. Aim: an angle becomes a velocity", why:"The cannon lives at the bottom centre. Aiming is just taking the angle from the cannon to the mouse with atan2, then clamping it so the shot always travels upward — a bubble shooter never lets you fire sideways or down into your own cannon. Firing converts that clamped angle into a velocity vector of fixed speed: vx = cos(angle)·speed, vy = sin(angle)·speed. From here the bubble is a tiny physics object; nothing about it knows it is a game piece yet.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">angle → velocity vector<br><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\\ | /&nbsp;&nbsp;&nbsp;allowed arc (always up)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\\|/<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▲ &nbsp;cannon<br><br>vx = cos(a)·SPEED &nbsp; vy = sin(a)·SPEED</div>`, code:`const SPEED = 8;
+const ox = W/2, oy = H - 38;          // cannon origin
+let aim = -Math.PI/2;                 // straight up to start
+
+function aimAt(px, py){
+  let a = Math.atan2(py - oy, px - ox);
+  if (a >= 0) a = (px < ox) ? -Math.PI+0.18 : -0.18;   // never downward
+  aim = Math.max(-Math.PI+0.18, Math.min(-0.18, a));   // clamp
+}
+function fire(){
+  fly = { x:ox, y:oy, vx:Math.cos(aim)*SPEED,
+          vy:Math.sin(aim)*SPEED, color:current };
+}` },
+
+ { title:"4. Flight and wall reflection", why:"Once fired, the bubble moves by adding its velocity to its position every frame. To keep it from tunnelling straight through a thin wall or a bubble at high speed, we advance it in a few small sub-steps per frame and test after each. The wall bounce is the prettiest bit of physics in the whole game and also the simplest: when the bubble's centre reaches within one radius of a side wall, we flip the sign of its horizontal velocity. A rightward shot becomes a leftward one, the vertical motion is untouched, and the angle reflects exactly like light off a mirror. That is the bank shot players use to reach into corners.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">wall reflection = flip vx<br><br>|&nbsp;&nbsp;&nbsp;/\\&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|<br>|&nbsp;&nbsp;/&nbsp;&nbsp;\\&nbsp;&nbsp;&nbsp;&nbsp;|<br>| /&nbsp;&nbsp;&nbsp;\\&nbsp;&nbsp;&nbsp;|<br>|/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&gt;| &larr; vx = -vx here<br><br>angle in = angle out · vy unchanged</div>`, code:`function update(){
+  if (state !== "fly") return;
+  const sub = 4;                       // sub-steps stop tunnelling
+  for (let i=0;i<sub;i++){
+    fly.x += fly.vx/sub;  fly.y += fly.vy/sub;
+    if (fly.x < R){ fly.x = R; fly.vx = -fly.vx; }          // bounce left
+    else if (fly.x > W-R){ fly.x = W-R; fly.vx = -fly.vx; } // bounce right
+    if (fly.y <= R)  return land();      // ceiling
+    if (hitsGrid()) return land();       // touched a bubble
+  }
+}` },
+
+ { title:"5. Collision → snap to the nearest empty cell", why:"A collision is detected the moment the flying bubble's centre comes within a diameter of any placed bubble (or it reaches the ceiling). But it almost never stops exactly on a lattice point, so we cannot just leave it where it is — it would drift off the honeycomb. Instead we snap: round the pixel position back to an approximate row and column, then scan that little neighbourhood for the closest cell that is still empty, and drop the bubble there. This is what guarantees the grid stays a clean hex lattice no matter how messy the collision was.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">round to a cell, pick the nearest EMPTY one<br><br>&nbsp;( )( )( )<br>( )[✱]( )&nbsp;&nbsp;✱ = where it stopped<br>&nbsp;( )(●)( )&nbsp;&nbsp;● = closest free cell → snap here<br><br>collision within 2·R → find free lattice cell</div>`, code:`function snapCell(x, y){
+  let row = Math.round((y - R) / rowH);
+  row = Math.max(0, Math.min(MAXROWS-1, row));
+  let best = null, bestD = Infinity;
+  for (let r=Math.max(0,row-1); r<=Math.min(MAXROWS-1,row+1); r++)
+    for (let c=0;c<colsInRow(r);c++){
+      if (grid[r][c] != null) continue;         // must be empty
+      const p = cellCenter(r,c), d = (p.x-x)**2 + (p.y-y)**2;
+      if (d < bestD){ bestD = d; best = {row:r, col:c}; }
+    }
+  return best;                                  // closest free cell
+}` },
+
+ { title:"6. Flood-fill the same-colour cluster (BFS)", why:"With the bubble snapped into place, the question is: how many same-colour bubbles is it now touching, transitively? That is a classic connected-components search. Start a breadth-first (or depth-first) flood-fill from the new cell, and only step onto neighbours that share its colour, tracking a visited set so you never revisit a cell. The list you return is the entire connected blob of that colour — the candidate for popping. This is the same flood-fill idea behind Minesweeper's reveal and Flood-It, just walking a hex lattice instead of a square one.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">BFS outward, same colour only<br><br>&nbsp;&nbsp;&nbsp;🔴 ← start<br>&nbsp;🔴 🔴&nbsp;&nbsp;&nbsp;visit same-colour neighbours<br>🔴 🔴 🟦&nbsp;&nbsp;stop at other colours<br><br>returns { every 🔴 touching the start }</div>`, code:`function colorCluster(r0, c0, color){
+  const seen = new Set([r0+","+c0]);
+  const out = [], stack = [[r0,c0]];
+  while (stack.length){
+    const [r,c] = stack.pop();
+    if (grid[r][c] !== color) continue;
+    out.push([r,c]);
+    for (const [nr,nc] of neighbors(r,c)){
+      const k = nr+","+nc;
+      if (!seen.has(k) && grid[nr][nc] === color){
+        seen.add(k); stack.push([nr,nc]);
+      }
+    }
+  }
+  return out;
+}` },
+
+ { title:"7. The pop rule: three or more", why:"The rule that defines the whole genre is a size threshold. If the cluster the new bubble joined has three or more bubbles, the entire cluster pops and is cleared; if it is only one or two, nothing happens and the bubble just sticks to the wall of colour, waiting. This is why aiming matters — you are trying to complete groups of three, and a good board setup lets a single bubble trigger a huge chain. Scoring rewards bigger pops, and a combo multiplier rewards popping on consecutive shots without a wasted one in between.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">cluster size decides everything<br><br>🔴🔴&nbsp;&nbsp;&nbsp;→ size 2 → sticks, no pop<br>🔴🔴🔴 → size 3 → POP! all cleared<br><br>score += popped·10 + combo bonus</div>`, code:`function land(){
+  const cell = snapCell(fly.x, fly.y);
+  grid[cell.row][cell.col] = fly.color;         // place it
+  const cluster = colorCluster(cell.row, cell.col, fly.color);
+  let popped = 0, dropped = 0;
+  if (cluster.length >= 3){                      // THE POP RULE
+    cluster.forEach(([r,c]) => grid[r][c] = null);
+    popped = cluster.length;
+    dropped = dropFloating();                    // step 8
+    combo++;
+  } else combo = 0;
+  score += popped*10 + dropped*20 + Math.max(0,combo-1)*15;
+}` },
+
+ { title:"8. Floating bubbles: a second BFS from the ceiling", why:"Here is the move that separates a toy from a real bubble shooter. When a cluster pops, other bubbles that were only clinging on through it are now attached to nothing — but they will not fall on their own; you have to find them. So run a second flood-fill, this time seeded from every bubble in the top row and stepping through neighbours of any colour. Everything the fill reaches is still anchored to the ceiling. Anything it never reaches is floating in mid-air, so it drops. This is why one well-placed shot can trigger an avalanche and clear half the board.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">reachable from ceiling = safe · rest drops<br><br>═══ ceiling ═══<br>🟦🟦🟦&nbsp;&nbsp;anchored (BFS reaches these)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;💥&nbsp;&nbsp;&nbsp;&larr; cluster just popped here<br>🟡🟡&nbsp;&nbsp;&nbsp;unreached → FLOATING → fall</div>`, code:`function dropFloating(){
+  const anchored = new Set(), stack = [];
+  for (let c=0;c<colsInRow(0);c++)              // seed with the ceiling
+    if (grid[0][c] != null){ anchored.add("0,"+c); stack.push([0,c]); }
+  while (stack.length){                          // BFS through ANY colour
+    const [r,c] = stack.pop();
+    for (const [nr,nc] of neighbors(r,c)){
+      const k = nr+","+nc;
+      if (!anchored.has(k) && grid[nr][nc] != null){
+        anchored.add(k); stack.push([nr,nc]);
+      }
+    }
+  }
+  let dropped = 0;                               // unreached = floating
+  for (let r=0;r<MAXROWS;r++) for (let c=0;c<colsInRow(r);c++)
+    if (grid[r][c] != null && !anchored.has(r+","+c)){ grid[r][c]=null; dropped++; }
+  return dropped;
+}` },
+
+ { title:"9. Spawn, preview, and the lose line", why:"After every shot the barrel reloads the previewed bubble and rolls a new preview. A subtle but important trick: bias the random colour toward colours still on the board, so you are never handed a colour that cannot possibly match anything — that keeps the game winnable. Winning is simply an empty board. Losing is the stack of bubbles sinking past a danger line near the cannon: after each shot, check whether any bubble's centre has crossed that line, and if so it is game over.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">preview the next shot · watch the line<br><br>next: 🟢&nbsp;&nbsp;loaded: 🔵&nbsp;&nbsp;▲ cannon<br><br>- - - - - danger line - - - - -<br>cross it → you lose · empty board → you win</div>`, code:`function pickColor(){
+  const present = [...new Set(grid.flat().filter(v => v != null))];
+  const pool = present.length ? present : COLORS.map((_,i) => i);
+  return pool[Math.random()*pool.length | 0];    // stay winnable
+}
+function checkEnd(){
+  if (grid.flat().every(v => v == null)) return end("You win!");
+  for (let r=0;r<MAXROWS;r++) for (let c=0;c<colsInRow(r);c++)
+    if (grid[r][c] != null && cellCenter(r,c).y + R >= loseLineY)
+      return end("Bubbles crossed the line.");
+}` },
+
+ { title:"10. Why hexes, not squares", why:"You could build this on a plain square grid, and some clones do — but hexes are worth the extra parity bookkeeping. On a square grid a bubble has four orthogonal neighbours (or eight if you count diagonals, which then touch only at a corner, not an edge). On a hex lattice every one of the six neighbours is a true edge contact at equal distance, which matches how round bubbles actually pack against each other. That makes collisions look natural, makes clusters connect the way your eye expects, and makes the floating-drop cascades feel fair. The price is that half your rows are offset, so neighbour and pixel maths must branch on row parity — a small, contained cost for a board that feels right.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">square (4 edges) &nbsp; vs &nbsp; hex (6 edges)<br><br>&nbsp;( )&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;( )( )<br>( )●( )&nbsp;&nbsp;( )●( )<br>&nbsp;( )&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;( )( )<br><br>round bubbles pack six-around-one · hex wins</div>`, code:`// the ONLY real cost of hexes: neighbour maths branches on parity.
+// square grid: same 4 neighbours everywhere
+//   [[r,c-1],[r,c+1],[r-1,c],[r+1,c]]
+// hex grid: even and odd rows differ, because odd rows are shifted
+//   even: [...,[r-1,c-1],[r-1,c],[r+1,c-1],[r+1,c]]
+//   odd : [...,[r-1,c],[r-1,c+1],[r+1,c],[r+1,c+1]]
+// in return, all six contacts are equal-distance edge touches —
+// exactly how physical bubbles rest against one another.` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,curStep-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(curStep+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
