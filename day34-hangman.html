@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 34 — Hangman</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+
+  .stage { background:#0b1220; padding:14px; border-radius:20px; display:inline-block;
+           box-shadow:0 18px 40px rgba(0,0,0,.22); }
+  canvas#gallows { display:block; border-radius:12px; background:#0f172a; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:28px; }
+
+  .wchar { display:inline-block; min-width:30px; border-bottom:4px solid #94a3b8; margin:0 5px;
+           font-size:30px; font-weight:800; text-align:center; color:#0f172a;
+           font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; line-height:1.25; min-height:40px; }
+  #keyboard { max-width:520px; margin:0 auto; }
+  .kbtn { width:38px; height:46px; margin:3px; border-radius:8px; border:1px solid #cbd5e1;
+          font-weight:700; font-size:15px; cursor:pointer; transition:background .12s, transform .06s; }
+  .kbtn:active { transform:translateY(1px); }
+  .kb-idle { background:#fff; color:#334155; }
+  .kb-idle:hover { background:#ecfdf5; border-color:#34d399; }
+  .kb-hit  { background:#10b981; color:#fff; border-color:#10b981; }
+  .kb-miss { background:#e2e8f0; color:#94a3b8; border-color:#e2e8f0; }
+  .kbtn:disabled { cursor:default; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 34</div>
+      <h1 class="text-xl font-bold">💀 Hangman — Guess the Hidden Word Letter by Letter Before the Drawing Is Complete</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Uncover the word before the figure hangs.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">The computer has picked a secret word and shown you only its length — a row of blanks. <strong>Guess one letter at a time</strong>, either by tapping the on-screen keys or just typing on your keyboard. If the letter is in the word, every place it appears is <strong>revealed at once</strong> and the key turns green. If it is not, you lose a life and one more piece of the poor stick figure is drawn: first the head, then the body, both arms, both legs. <strong>Six wrong guesses and the drawing is complete</strong> — game over. Fill in every blank before that happens and you have saved him. A one-line hint nudges you toward the category, and your win streak keeps count across rounds. There is no timer and no penalty for thinking, so this is pure deduction: spend your early guesses on common vowels and letters, then use the shape of the word to close it out.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Won: <span id="winStat" class="stat text-emerald-600">0</span></div>
+        <div>Win streak: <span id="streakStat" class="stat text-amber-600">0</span></div>
+        <div>Lives left: <span id="livesStat" class="stat text-slate-500">6</span></div>
+        <div>Wrong: <span id="wrongStat" class="stat text-rose-500">0</span></div>
+      </div>
+
+      <div class="flex justify-center">
+        <div class="stage">
+          <canvas id="gallows" width="280" height="320"></canvas>
+        </div>
+      </div>
+
+      <div id="hint" class="mt-4 text-sm text-slate-500 italic">Hint: —</div>
+      <div id="word" class="mt-3 mb-2 flex justify-center flex-wrap"></div>
+      <div id="keyboard" class="mt-4 flex justify-center flex-wrap"></div>
+
+      <div id="msg" class="mt-5 font-bold text-lg text-emerald-600">Guess a letter — tap a key below or use your keyboard.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↺ New word</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">This is real Hangman logic, nothing faked. The whole game is driven by three tiny pieces of state: the <strong>secret word</strong>, a <strong>Set of letters you have guessed</strong>, and a single <strong>wrong-guess counter</strong>. The blanks you see are not stored anywhere — they are rebuilt from scratch on every render by walking the secret word and asking, letter by letter, "is this one in the guessed set?" A correct guess adds a letter to that set; a wrong one bumps the counter. The gallows drawing is a pure function of that one counter — head at one mistake, body at two, arms at three and four, legs at five and six — so the picture can never disagree with the score. You win the instant no blank remains, and lose the instant the counter hits six. All vanilla JavaScript on one canvas, offline, no images or libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Hangman works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A word list, a guessed Set that dedupes for free, a single wrong-guess counter that doubles as your lives, a reveal that falls straight out of set membership, a win test that asks whether any blank is left, and a gallows drawing gated entirely on that one counter. About 90 lines of vanilla JavaScript on one canvas — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The word list and the game state</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A Hangman round is defined by remarkably little: the <em>secret</em> word (with a hint), the <em>set</em> of letters tried so far, and one <em>wrong</em> counter. The limit of six wrong guesses is the whole difficulty knob — one for each body part. Everything the player sees is derived from these few variables.</p>
+        <div class="relative"><pre>const WORDS = [
+  { word:"PLANET",    hint:"Earth is one of eight" },
+  { word:"CANVAS",    hint:"Where we draw the gallows" },
+  { word:"ALGORITHM", hint:"A precise step-by-step recipe" },
+  // …add as many as you like
+];
+const MAX_WRONG = 6;                 // six wrong guesses = full figure
+let secret, guessed, wrong, state;   // the entire game state
+
+function newGame(){
+  secret = WORDS[Math.random()*WORDS.length | 0];   // pick one at random
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The guessed Set and one way in</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every letter the player tries lands in a <code>Set</code>, not an array. A Set dedupes automatically, so guessing "E" twice is a harmless no-op, and it answers "have we tried this?" in one call. Both good and bad guesses live in the same set — whether a letter counts as wrong is decided by asking the word, not by extra bookkeeping.</p>
+        <div class="relative"><pre>function newGame(){
+  /* …pick secret… */
+  guessed = new Set();     // letters tried, deduped for free
+  wrong   = 0;
+  state   = "playing";
+}
+function guess(letter){
+  letter = letter.toUpperCase();
+  if (state !== "playing" || guessed.has(letter)) return;  // ignore repeats
+  guessed.add(letter);
+  if (!secret.word.includes(letter)) wrong++;   // a wrong letter costs a life
+  settle();                                      // decide what happens next
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Win, lose, or keep playing</h3></div>
+        <p class="text-sm text-slate-600 mb-3">After each guess, one function settles the round. You have won when no blank remains — every letter of the secret is in the set. You have lost when the wrong counter reaches the limit. Otherwise the state stays "playing". A win bumps a streak; a loss resets it to zero.</p>
+        <div class="relative"><pre>function isWon(){
+  return secret.word.split("").every(ch =&gt; guessed.has(ch));  // no blanks left
+}
+let wins = 0, streak = 0;
+function settle(){
+  if (isWon())                 { state = "won";  wins++; streak++; }
+  else if (wrong &gt;= MAX_WRONG) { state = "lost"; streak = 0;      }
+  render();                                      // repaint everything
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The reveal (blanks fall out of the Set)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Drawing the word is a single map over the secret. For each character, if it is in the guessed set we show it; otherwise a blank. We never mutate the word or track positions — the reveal is a pure read of set membership. On a loss we relax the test so the missed letters show too.</p>
+        <div class="relative"><pre>function renderWord(){
+  const el = document.getElementById("word");
+  el.innerHTML = secret.word.split("").map(ch =&gt; {
+    const show = guessed.has(ch) || state === "lost";   // reveal all on a loss
+    return `&lt;span class="wchar"&gt;${show ? ch : ""}&lt;/span&gt;`;
+  }).join("");
+  document.getElementById("hint").textContent = "Hint: " + secret.hint;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The A–Z keyboard, colour-coded</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Build one button per letter of the alphabet. After a key is used it is coloured by asking the word: green if the letter was in it, grey if it was a wasted guess. Because the colour is derived from state, a full re-render always shows the correct thing without any manual toggling.</p>
+        <div class="relative"><pre>const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+function buildKeyboard(){
+  const kb = document.getElementById("keyboard");
+  kb.innerHTML = "";
+  ALPHA.forEach(l =&gt; {
+    const b = document.createElement("button");
+    b.textContent = l;  b.onclick = () =&gt; guess(l);
+    kb.appendChild(b);
+  });
+}
+function keyClass(l){                    // colour a key from state alone
+  if (!guessed.has(l))         return "kbtn kb-idle";
+  if (secret.word.includes(l)) return "kbtn kb-hit";   // green: it was in the word
+  return "kbtn kb-miss";                                // grey: a wasted guess
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Draw the gallows from one number</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole scene is a function of the wrong counter. The gallows is always drawn; then each body part is gated behind a threshold — head at 1, torso at 2, arms at 3 and 4, legs at 5 and 6. Because the picture reads only <code>wrong</code>, it can never disagree with the score.</p>
+        <div class="relative"><pre>const ctx = document.getElementById("gallows").getContext("2d");
+const line = (x1,y1,x2,y2) =&gt; { ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); };
+
+function drawFigure(){
+  ctx.clearRect(0,0,280,320);
+  ctx.strokeStyle = "#64748b"; ctx.lineWidth = 6; ctx.lineCap = "round";
+  line(30,305,150,305); line(70,305,70,35); line(70,35,190,35); line(190,35,190,68); // gallows
+  ctx.strokeStyle = state === "lost" ? "#f43f5e" : "#e2e8f0"; ctx.lineWidth = 5;
+  if (wrong &gt;= 1){ ctx.beginPath(); ctx.arc(190,92,22,0,Math.PI*2); ctx.stroke(); }   // head
+  if (wrong &gt;= 2) line(190,114,190,190);   // body
+  if (wrong &gt;= 3) line(190,135,160,165);   // left arm
+  if (wrong &gt;= 4) line(190,135,220,165);   // right arm
+  if (wrong &gt;= 5) line(190,190,165,235);   // left leg
+  if (wrong &gt;= 6) line(190,190,215,235);   // right leg
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Two inputs, one door</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A letter can arrive from a click on an on-screen key or a press on the physical keyboard, but both funnel into the same <code>guess()</code> function. That is the payoff of keeping the rules in one place: the input layer only normalises the letter and hands it over; the deduping, life-spending, and win/lose check all happen inside.</p>
+        <div class="relative"><pre>buildKeyboard();     // on-screen keys wired to guess(l) in step 5
+document.addEventListener("keydown", e =&gt; {
+  if (/^[a-zA-Z]$/.test(e.key))                      guess(e.key);   // physical key
+  else if (e.key === "Enter" &amp;&amp; state !== "playing") newGame();     // Enter restarts
+});</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">The scoreboard (lives are derived)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The HUD reads straight from state. Notice there is no separate "lives" variable to keep in sync — lives is simply the limit minus the wrong count, computed when shown. The message line just reports the outcome, revealing the word on either a win or a loss.</p>
+        <div class="relative"><pre>function hud(){
+  document.getElementById("livesStat").textContent  = MAX_WRONG - wrong;   // derived
+  document.getElementById("wrongStat").textContent   = wrong;
+  document.getElementById("winStat").textContent     = wins;
+  document.getElementById("streakStat").textContent  = streak;
+}
+function message(){
+  if (state === "won")  msg(`Saved! The word was ${secret.word}. 🎉`, "win");
+  if (state === "lost") msg(`Out of guesses — it was ${secret.word}.`, "lose");
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Render, reset, and boot</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One <code>render()</code> repaints everything from state, so nothing can drift out of sync. Starting a new word is just resetting the three variables and rebuilding the keyboard. Call <code>newGame()</code> once at the bottom and the game is live.</p>
+        <div class="relative"><pre>function render(){ drawFigure(); renderWord(); updateKeys(); hud(); message(); }
+function newGame(){
+  secret  = WORDS[Math.random()*WORDS.length | 0];
+  guessed = new Set();  wrong = 0;  state = "playing";
+  buildKeyboard();  render();
+}
+newGame();                       // deal the first word and start playing</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 34 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Hangman end to end: a word list, a guessed Set that dedupes and answers membership in one call, a single wrong counter that doubles as your lives, a reveal that falls straight out of set membership, a win test that asks whether any blank is left, and a gallows drawing gated entirely on that one counter. Next: add difficulty tiers by word length, a per-letter frequency hint, or a two-player mode where one person sets the word. <strong>👉 Tomorrow — Day 35: Tron — ride the light cycle, lay a wall of light behind you, and box your opponent in.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== HANGMAN ENGINE (real mechanics) =====
+const WORDS = [
+  { word:"PLANET",    hint:"Earth is one of eight" },
+  { word:"CANVAS",    hint:"Where we draw the gallows" },
+  { word:"ALGORITHM", hint:"A precise step-by-step recipe" },
+  { word:"JAVASCRIPT",hint:"The language running this page" },
+  { word:"KEYBOARD",  hint:"You are typing on one now" },
+  { word:"VARIABLE",  hint:"A named box that holds a value" },
+  { word:"FUNCTION",  hint:"A reusable block of code" },
+  { word:"BROWSER",   hint:"Chrome, Firefox, Safari…" },
+  { word:"NETWORK",   hint:"Computers wired together" },
+  { word:"DATABASE",  hint:"Where an app stores its rows" },
+  { word:"GRAVITY",   hint:"What pulls the apple down" },
+  { word:"OXYGEN",    hint:"Element number eight" },
+  { word:"PYRAMID",   hint:"Ancient Egyptian monument" },
+  { word:"VOLCANO",   hint:"A mountain that can erupt" },
+  { word:"DOLPHIN",   hint:"A clever sea mammal" },
+  { word:"GUITAR",    hint:"Six strings, strummed" },
+  { word:"PENGUIN",   hint:"A bird in a tuxedo" },
+  { word:"RAINBOW",   hint:"Arc of colour after rain" },
+  { word:"COMPILER",  hint:"Turns source into machine code" },
+  { word:"MONITOR",   hint:"The screen you are reading" }
+];
+const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const MAX_WRONG = 6;
+let secret, guessed, wrong, state, wins = 0, streak = 0;
+
+const canvas = document.getElementById("gallows");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+function line(x1,y1,x2,y2){ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+
+// ----- drawing -----
+function drawGallows(){
+  ctx.strokeStyle = "#64748b"; ctx.lineWidth = 6; ctx.lineCap = "round";
+  line(30,305,150,305);   // base
+  line(70,305,70,35);     // pole
+  line(70,35,190,35);     // beam
+  ctx.lineWidth = 4;
+  line(190,35,190,68);    // rope
+}
+function drawFigure(){
+  ctx.clearRect(0,0,W,H);
+  drawGallows();
+  ctx.strokeStyle = state === "lost" ? "#f43f5e" : "#e2e8f0";
+  ctx.lineWidth = 5;
+  if (wrong >= 1){ ctx.beginPath(); ctx.arc(190,92,22,0,Math.PI*2); ctx.stroke(); } // head
+  if (wrong >= 2) line(190,114,190,190);   // body
+  if (wrong >= 3) line(190,135,160,165);   // left arm
+  if (wrong >= 4) line(190,135,220,165);   // right arm
+  if (wrong >= 5) line(190,190,165,235);   // left leg
+  if (wrong >= 6) line(190,190,215,235);   // right leg
+  if (wrong >= 1){                          // a little face
+    ctx.lineWidth = 3;
+    if (state === "lost"){                  // X eyes
+      line(181,86,189,94); line(189,86,181,94);
+      line(191,86,199,94); line(199,86,191,94);
+    } else {
+      ctx.fillStyle = state === "won" ? "#10b981" : "#e2e8f0";
+      ctx.beginPath(); ctx.arc(184,89,2.4,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(196,89,2.4,0,Math.PI*2); ctx.fill();
+      if (state === "won"){ ctx.strokeStyle = "#10b981"; ctx.beginPath(); ctx.arc(190,98,6,0,Math.PI,false); ctx.stroke(); }
+    }
+  }
+}
+
+// ----- word + keyboard -----
+function renderWord(){
+  const el = document.getElementById("word");
+  el.innerHTML = secret.word.split("").map(ch => {
+    const show = guessed.has(ch) || state === "lost";
+    const miss = state === "lost" && !guessed.has(ch);
+    return `<span class="wchar" style="${miss ? "color:#f43f5e;border-color:#fca5a5;" : ""}">${show ? ch : ""}</span>`;
+  }).join("");
+  document.getElementById("hint").textContent = "Hint: " + secret.hint;
+}
+function keyClass(l){
+  if (!guessed.has(l)) return "kbtn kb-idle";
+  if (secret.word.includes(l)) return "kbtn kb-hit";
+  return "kbtn kb-miss";
+}
+function buildKeyboard(){
+  const kb = document.getElementById("keyboard");
+  kb.innerHTML = "";
+  ALPHA.forEach(l => {
+    const b = document.createElement("button");
+    b.textContent = l; b.dataset.k = l;
+    b.onclick = () => guess(l);
+    kb.appendChild(b);
+  });
+}
+function updateKeys(){
+  document.querySelectorAll("#keyboard button").forEach(b => {
+    b.className = keyClass(b.dataset.k);
+    b.disabled = guessed.has(b.dataset.k) || state !== "playing";
+  });
+}
+
+// ----- rules -----
+function isWon(){ return secret.word.split("").every(ch => guessed.has(ch)); }
+function guess(letter){
+  letter = (letter || "").toUpperCase();
+  if (state !== "playing" || !/^[A-Z]$/.test(letter) || guessed.has(letter)) return;
+  guessed.add(letter);
+  if (!secret.word.includes(letter)) wrong++;
+  if (isWon()){ state = "won"; wins++; streak++; msg(`Saved! The word was ${secret.word}. 🎉`, "win"); }
+  else if (wrong >= MAX_WRONG){ state = "lost"; streak = 0; msg(`Out of guesses — it was ${secret.word}.`, "lose"); }
+  render();
+}
+
+// ----- hud / message / render -----
+function hud(){
+  document.getElementById("winStat").textContent    = wins;
+  document.getElementById("streakStat").textContent  = streak;
+  document.getElementById("livesStat").textContent   = MAX_WRONG - wrong;
+  document.getElementById("wrongStat").textContent   = wrong;
+}
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "lose" ? "text-rose-600" : "text-emerald-600");
+}
+function render(){ drawFigure(); renderWord(); updateKeys(); hud(); }
+
+// ----- input + boot -----
+document.addEventListener("keydown", e => {
+  if (/^[a-zA-Z]$/.test(e.key)) guess(e.key);
+  else if (e.key === "Enter" && state !== "playing") newGame();
+});
+document.getElementById("newBtn").onclick = newGame;
+
+function newGame(){
+  secret = WORDS[Math.random()*WORDS.length | 0];
+  guessed = new Set(); wrong = 0; state = "playing";
+  buildKeyboard(); render();
+  msg("Guess a letter — tap a key below or use your keyboard.");
+}
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The word and the mask", why:"A game of Hangman is really two things living in lockstep: the secret word the computer picked, and the masked version the player sees. The trick is that the mask is never stored — it is rebuilt from the secret plus the guessed letters every time we render. Keeping the mask as a pure function of (word, guessed) means there is exactly one source of truth, and no way for the display to drift out of sync with the state. The word list carries a one-line hint too, so a player who is stuck has something to grab onto without giving the answer away.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the mask is DERIVED, not stored<br><br>secret &nbsp;P L A N E T<br>guessed { A , E , T }<br>mask &nbsp;&nbsp;&nbsp;_ _ A _ E T<br><br>rebuilt from (word, guessed) every render</div>`, code:`const WORDS = [
+  { word:"PLANET", hint:"Earth is one of eight" },
+  { word:"CANVAS", hint:"Where we draw the gallows" },
+  // …
+];
+let secret;                          // the chosen { word, hint }
+function newGame(){
+  secret = WORDS[Math.random()*WORDS.length | 0];
+}
+// the mask is DERIVED, never stored:
+const mask = () => secret.word.split("")
+  .map(ch => guessed.has(ch) ? ch : "_").join(" ");` },
+
+ { title:"2. The guessed Set", why:"Every letter the player tries goes into a Set, not an array. A Set buys three things for free. It dedupes, so guessing the same letter twice does nothing. It answers 'have we tried this?' in constant time with has(). And it makes the reveal a one-line membership test. Crucially, both the correct and the wrong guesses live in the same set — whether a letter was a good pick is not recorded anywhere; it is decided later by asking the secret word itself.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one Set holds every guess<br><br>guessed = { A, E, T, R }<br><br>· stored once each (dedupe)<br>· has(x) is O(1)<br>· good vs bad decided by the WORD, not here</div>`, code:`let guessed;                         // a Set of letters tried
+function newGame(){ guessed = new Set(); }
+
+function guess(letter){
+  letter = letter.toUpperCase();
+  if (guessed.has(letter)) return;   // ignore repeats for free
+  guessed.add(letter);
+  // …decide right vs wrong next
+}` },
+
+ { title:"3. Right vs wrong: spending a life", why:"The instant a letter is added, we ask the secret word a single question: do you contain this? If yes, nothing is lost — the letter will simply reveal itself on the next render. If no, a life is spent by bumping the wrong counter. That one branch is the entire risk model of the game. The word holds all the authority, and the wrong count is the only cost. There is no clock and no penalty for thinking, which is what makes Hangman a pure deduction puzzle.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the word is the judge<br><br>guess "A" → in PLANET? yes → free<br>guess "Z" → in PLANET? no &nbsp;→ wrong++<br><br>wrong is the ONLY cost of a mistake</div>`, code:`const MAX_WRONG = 6;
+let wrong;                           // wrong guesses so far
+function guess(letter){
+  // …dedupe from step 2…
+  guessed.add(letter);
+  if (!secret.word.includes(letter)) wrong++;   // spend a life
+  settle();                          // win? lose? keep going?
+}` },
+
+ { title:"4. The reveal", why:"Showing the board is a single map over the secret word. For each character, if it is in the guessed set we show it; otherwise we show a blank. This is exactly why we never mutate the word or track which positions are open — the reveal falls straight out of the set membership test, letter by letter, on every render. On a loss we flip one condition so the missed letters show too, painted red, so the player can see the word they were chasing.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">map every letter → shown or blank<br><br>P → in set? no → _<br>L → in set? no → _<br>A → in set? yes → A<br>N E T → _ E T<br><br>result: _ _ A _ E T</div>`, code:`function renderWord(){
+  return secret.word.split("").map(ch => {
+    const show = guessed.has(ch) || state === "lost";
+    return show ? ch : "_";           // reveal all on a loss
+  });
+}` },
+
+ { title:"5. Win: every letter uncovered", why:"You have won the instant there is no hidden letter left — that is, every character of the secret word is already in the guessed set. Array.every() says exactly that in a single line, and it is checked after each guess. Notice it does not care how many wrong guesses you made along the way: a win with five mistakes on the board is still a win. The win condition is about the word being complete, never about the mistakes.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">win = no blanks remain<br><br>P L A N E T<br>✓ ✓ ✓ ✓ ✓ ✓ &nbsp;all in guessed<br><br>every(ch → guessed.has(ch)) === true → WIN</div>`, code:`function isWon(){
+  return secret.word.split("")
+    .every(ch => guessed.has(ch));   // no blanks left anywhere
+}` },
+
+ { title:"6. Lose: the counter hits the limit", why:"The flip side is just as simple: the game is lost when the wrong counter reaches the limit — classically six, one for each part of the body being drawn. There is no separate 'lives' variable to keep in sync with anything. Lives is simply MAX_WRONG minus wrong, computed only when we need to display it. That means a single counter drives both the loss condition and the drawing, so the two can never contradict each other.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one counter, two jobs<br><br>wrong: 0 1 2 3 4 5 6<br>lives: 6 5 4 3 2 1 0 ← MAX_WRONG − wrong<br><br>wrong === 6 → LOSE</div>`, code:`function settle(){
+  if (isWon())                 state = "won";
+  else if (wrong >= MAX_WRONG) state = "lost";
+  // otherwise state stays "playing"
+}
+const livesLeft = () => MAX_WRONG - wrong;   // derived, not stored` },
+
+ { title:"7. Drawing the figure from one number", why:"The entire gallows scene is a pure function of the wrong counter. The gallows itself is always drawn; then each body part is gated behind a threshold — head at one mistake, torso at two, the arms at three and four, the legs at five and six. Because the drawing reads only from wrong, it can never disagree with the score: the figure is always exactly as complete as the number of mistakes. Redrawing from scratch each time is simpler and safer than trying to add one limb per event.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">wrong count → how much is drawn<br><br>0 → gallows only<br>1 → + head &nbsp;&nbsp;2 → + body<br>3 → + L arm &nbsp;4 → + R arm<br>5 → + L leg &nbsp;6 → + R leg → dead</div>`, code:`function drawFigure(){
+  ctx.clearRect(0,0,W,H);
+  drawGallows();                              // always present
+  if (wrong >= 1) circle(190, 92, 22);        // head
+  if (wrong >= 2) line(190,114, 190,190);     // body
+  if (wrong >= 3) line(190,135, 160,165);     // left arm
+  if (wrong >= 4) line(190,135, 220,165);     // right arm
+  if (wrong >= 5) line(190,190, 165,235);     // left leg
+  if (wrong >= 6) line(190,190, 215,235);     // right leg
+}` },
+
+ { title:"8. Input: click and keyboard, one door", why:"A letter can arrive two ways — a tap on an on-screen key or a press on the physical keyboard — but both funnel into the exact same guess() function. That is the payoff of putting every rule in one place: the input layer only has to normalise the letter to uppercase and hand it over. The deduping, the life-spending, and the win/lose check all happen inside guess() regardless of where the letter came from, so the two input paths can never behave differently.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">two sources, one entry point<br><br>tap key &nbsp;A ─┐<br>type &nbsp;&nbsp;"a" ─┴──▶ guess("A")<br><br>guess() owns all the rules</div>`, code:`// on-screen keys
+kb.querySelectorAll("button").forEach(b =>
+  b.onclick = () => guess(b.dataset.k));
+// physical keyboard
+document.addEventListener("keydown", e => {
+  if (/^[a-zA-Z]$/.test(e.key)) guess(e.key);
+  else if (e.key === "Enter" && state !== "playing") newGame();
+});` },
+
+ { title:"9. New game, streak, and staying fair", why:"Starting over is just resetting the three pieces of state — pick a fresh word, empty the guessed set, zero the wrong count — and rebuilding the keyboard so every key is live again. A win bumps a streak counter; a loss resets it to zero, which is the only reason we keep any score across rounds. Everything else about a round is disposable and rebuilt from scratch, which is what makes the whole game so small: there is almost no state to corrupt.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a round is three variables<br><br>newGame → pick word · clear Set · wrong=0<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;state = "playing"<br><br>win → streak++ &nbsp;·&nbsp; lose → streak = 0</div>`, code:`let wins = 0, streak = 0, state;
+function newGame(){
+  secret  = WORDS[Math.random()*WORDS.length | 0];
+  guessed = new Set();
+  wrong   = 0;
+  state   = "playing";
+  render();
+}
+function win(){  state = "won";  wins++; streak++; }
+function lose(){ state = "lost"; streak = 0;      }` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,curStep-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(curStep+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
