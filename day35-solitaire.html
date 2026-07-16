@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 35 — Klondike Solitaire</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:28px; }
+
+  /* ---- the felt table ---- */
+  .board { background:linear-gradient(160deg,#065f46,#064e3b 55%,#022c22);
+           padding:18px; border-radius:20px; display:inline-block;
+           box-shadow:0 18px 40px rgba(0,0,0,.28); }
+  .row-top { display:flex; justify-content:space-between; gap:10px; margin-bottom:22px; flex-wrap:wrap; }
+  .group { display:flex; gap:8px; }
+  .tableau { display:grid; grid-template-columns:repeat(7,64px); gap:8px; justify-content:center; }
+  .tcol { position:relative; width:64px; min-height:90px; }
+
+  /* ---- slots (empty piles) ---- */
+  .pile { width:64px; height:90px; border-radius:8px; position:relative; }
+  .slot { border:2px dashed rgba(255,255,255,.28); background:rgba(255,255,255,.05); }
+  .slot .fhint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+                 color:rgba(255,255,255,.35); font-size:26px; font-weight:700; }
+  .recycle { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+             color:rgba(255,255,255,.5); font-size:30px; }
+
+  /* ---- cards ---- */
+  .card { width:64px; height:90px; border-radius:8px; position:absolute; left:0; top:0;
+          box-sizing:border-box; user-select:none; cursor:pointer;
+          box-shadow:0 1px 3px rgba(0,0,0,.35); }
+  .card.up   { background:#fff; border:1px solid #cbd5e1; }
+  .card.down { background:repeating-linear-gradient(45deg,#1e3a8a,#1e3a8a 6px,#2563eb 6px,#2563eb 12px);
+               border:1px solid #1e3a8a; }
+  .card.red   { color:#dc2626; }
+  .card.black { color:#0f172a; }
+  .card .corner { position:absolute; font-weight:800; font-size:13px; line-height:1.02;
+                  font-family:ui-monospace,"SFMono-Regular",Menlo,monospace; text-align:center; }
+  .card .tl { top:5px; left:6px; }
+  .card .br { bottom:5px; right:6px; transform:rotate(180deg); }
+  .card .pip { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:30px; }
+  .card.sel { outline:3px solid #fbbf24; outline-offset:1px; z-index:60; box-shadow:0 4px 12px rgba(0,0,0,.45); }
+  .card.up:not(.sel):hover { border-color:#34d399; }
+
+  #stockPile .card.down { cursor:pointer; }
+  .legend { color:#64748b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 35</div>
+      <h1 class="text-xl font-bold">♠️ Klondike Solitaire — Deal Seven Piles, Uncover the Cards, and Build All Four Suits from Ace to King</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Turn a shuffled deck into four tidy suits.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">A full 52-card deck is dealt into <strong>seven tableau piles</strong> — one card in the first, two in the second, up to seven in the last — with only the bottom card of each pile face-up. The 24 leftover cards become the face-down <strong>stock</strong> in the top-left; click it to flip cards one at a time into the <strong>waste</strong>, and click again when it empties to recycle. Your goal is the four <strong>foundations</strong> top-right: build each one up <strong>by suit from Ace to King</strong>. On the tableau you stack <strong>downward in alternating colours</strong> — a red six goes on a black seven — and you can lift a whole ordered run at once. Empty a column and only a <strong>King</strong> may start it. To move a card, <strong>click it then click where it should go</strong>, or drag it; <strong>double-click</strong> sends it straight to a foundation if it fits. Uncover a face-down card and it flips automatically. Land all 52 cards home and you have won.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Foundations: <span id="foundStat" class="stat text-emerald-600">0/52</span></div>
+        <div>Moves: <span id="moveStat" class="stat text-slate-500">0</span></div>
+        <div>Time: <span id="timeStat" class="stat text-amber-600">00:00</span></div>
+        <div>Games won: <span id="winStat" class="stat text-emerald-600">0</span></div>
+      </div>
+
+      <div class="flex justify-center">
+        <div class="board">
+          <div class="row-top">
+            <div class="group">
+              <div id="stockPile" class="pile slot" title="click to deal / recycle"></div>
+              <div id="wastePile" class="pile"></div>
+            </div>
+            <div class="group" id="foundations">
+              <div class="pile slot" data-pile="f0"><div class="fhint">A</div></div>
+              <div class="pile slot" data-pile="f1"><div class="fhint">A</div></div>
+              <div class="pile slot" data-pile="f2"><div class="fhint">A</div></div>
+              <div class="pile slot" data-pile="f3"><div class="fhint">A</div></div>
+            </div>
+          </div>
+          <div class="tableau" id="tableau">
+            <div class="tcol" data-pile="t0"></div>
+            <div class="tcol" data-pile="t1"></div>
+            <div class="tcol" data-pile="t2"></div>
+            <div class="tcol" data-pile="t3"></div>
+            <div class="tcol" data-pile="t4"></div>
+            <div class="tcol" data-pile="t5"></div>
+            <div class="tcol" data-pile="t6"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-lg text-slate-600">Click the stock to deal. Move cards to build the foundations A→K.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↺ New game</button>
+        <button id="autoBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">⤴ Auto-collect</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">This is real Klondike, nothing faked. The whole game is just a handful of <strong>arrays of cards</strong> — one stock, one waste, four foundations, seven tableau piles — and every card is an object that knows its suit, rank, and whether it is <strong>face-up</strong>. There is no separate record of "what is a legal move"; instead every move funnels through a single <code>move()</code> function that <em>asks the destination</em> whether the card is allowed: to a foundation it must be the next rank up in the same suit (Ace first); to a tableau it must be the next rank down in the opposite colour (King onto an empty column). Moving several cards is simply moving a slice of one array onto the end of another, allowed only when that slice is already a valid descending run. Whenever a tableau move leaves a face-down card on top, it flips. You win the instant all four foundations hold thirteen cards. All vanilla JavaScript, offline, no images, no libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Klondike works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Eleven piles, one card object, one shuffle, one <code>move()</code> door that asks the destination whether a card is welcome, a run-check that lets you lift several cards at once, an auto-flip when a pile is uncovered, and a win test that counts to 52. About 130 lines of vanilla JavaScript with no canvas and no images — copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A card is three facts</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every card knows only its <em>suit</em>, its <em>rank</em> (1 = Ace … 13 = King), and whether it is <em>face-up</em>. Colour is not stored — it is derived from the suit, because hearts and diamonds are red and spades and clubs are black. Deriving colour instead of storing it means it can never fall out of sync.</p>
+        <div class="relative"><pre>const SUITS = ["S","H","D","C"];                 // spade heart diamond club
+const SYM   = { S:"♠", H:"♥", D:"♦", C:"♣" };
+const RANKS = ["","A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const isRed = c =&gt; c.suit === "H" || c.suit === "D";   // colour is DERIVED
+
+// a card: { suit:"H", rank:11, faceUp:false }  → J♥, face-down</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Eleven piles, all just arrays</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The entire board is arrays of cards. One <code>stock</code>, one <code>waste</code>, four <code>foundations</code>, and seven <code>tableau</code> piles. The last element of any array is its top card. A tiny lookup turns a pile id like <code>"t3"</code> or <code>"f0"</code> into the array it names, so the rest of the code never cares which kind of pile it is holding.</p>
+        <div class="relative"><pre>let stock, waste, foundations, tableau;
+function pile(id){
+  if (id === "stock") return stock;
+  if (id === "waste") return waste;
+  if (id[0] === "f")  return foundations[+id.slice(1)];   // "f2" → foundations[2]
+  if (id[0] === "t")  return tableau[+id.slice(1)];        // "t5" → tableau[5]
+}
+const top = arr =&gt; arr[arr.length - 1];   // top card = last element</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Shuffle and deal the staircase</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Build all 52 cards, shuffle with Fisher–Yates, then deal the classic staircase: column <em>i</em> gets <em>i+1</em> cards, and only the last card dealt to each column is turned face-up. The 24 cards left over become the stock. That is the whole starting position.</p>
+        <div class="relative"><pre>function newGame(){
+  const deck = [];
+  for (const s of SUITS) for (let r = 1; r &lt;= 13; r++) deck.push({ suit:s, rank:r, faceUp:false });
+  for (let i = deck.length - 1; i &gt; 0; i--){            // Fisher–Yates shuffle
+    const j = Math.random() * (i + 1) | 0;
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  tableau = [[],[],[],[],[],[],[]];
+  for (let col = 0; col &lt; 7; col++)
+    for (let n = 0; n &lt;= col; n++){
+      const c = deck.pop();
+      c.faceUp = (n === col);                            // only the top one shows
+      tableau[col].push(c);
+    }
+  stock = deck; waste = []; foundations = [[],[],[],[]];  // 24 left → the stock
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The stock: deal one, then recycle</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Clicking the stock flips its top card face-up into the waste. When the stock runs out, the same click tips the whole waste back over — face-down, order reversed — to become the stock again. One handler, two behaviours, chosen by whether the stock is empty.</p>
+        <div class="relative"><pre>function drawStock(){
+  if (stock.length){
+    const c = stock.pop(); c.faceUp = true; waste.push(c);   // deal one to waste
+  } else {
+    while (waste.length){                                    // recycle waste → stock
+      const c = waste.pop(); c.faceUp = false; stock.push(c);
+    }
+  }
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Ask the tableau: may this card land?</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A tableau pile builds <em>down</em> in <em>alternating colour</em>. So a card is welcome only if the pile's top card is one rank higher and the opposite colour. An empty column is special: only a King may start it. The rule lives with the destination, not with the card being moved.</p>
+        <div class="relative"><pre>function canDropTableau(moving, destId){
+  const d = pile(destId);
+  if (d.length === 0) return moving.rank === 13;              // empty → King only
+  const t = top(d);
+  return isRed(t) !== isRed(moving) &amp;&amp; t.rank === moving.rank + 1;  // down + alt colour
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Ask the foundation: is this next in suit?</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A foundation builds <em>up</em> in a <em>single suit</em>. Empty, it accepts only an Ace, and that Ace fixes the suit. After that, each card must be the same suit and exactly one rank higher. This mirror image of the tableau rule is the goal you are working toward.</p>
+        <div class="relative"><pre>function canDropFoundation(moving, destId){
+  const d = pile(destId);
+  if (d.length === 0) return moving.rank === 1;              // empty → Ace only
+  const t = top(d);
+  return t.suit === moving.suit &amp;&amp; moving.rank === t.rank + 1;   // up + same suit
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Lifting a run of cards</h3></div>
+        <p class="text-sm text-slate-600 mb-3">You may grab several cards at once from a tableau pile, but only if they already form a valid descending, alternating-colour run and every one of them is face-up. This single check lets a whole ordered sequence move as a unit — foundations always take just one card, so this only matters for tableau-to-tableau moves.</p>
+        <div class="relative"><pre>function isRun(fromId, idx){                 // is p[idx..end] a movable run?
+  const p = pile(fromId);
+  for (let i = idx; i &lt; p.length; i++){
+    if (!p[i].faceUp) return false;          // no face-down card inside a run
+    if (i &gt; idx){
+      const a = p[i - 1], b = p[i];
+      if (!(isRed(a) !== isRed(b) &amp;&amp; a.rank === b.rank + 1)) return false;
+    }
+  }
+  return true;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">One move() door, and the auto-flip</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every attempted move — from a click or a drag — funnels through one function. It refuses multi-card moves to a foundation, checks the right rule for the destination, then splices the cards off one array and pushes them onto another. If that uncovers a face-down card on the source pile, it flips face-up. All the rules live here, so click and drag can never disagree.</p>
+        <div class="relative"><pre>function move(fromId, idx, toId){
+  const from = pile(fromId), to = pile(toId);
+  if (fromId === toId || !from[idx] || !from[idx].faceUp) return false;
+  const moving = from[idx], count = from.length - idx;
+
+  let ok = false;
+  if (toId[0] === "f") ok = count === 1 &amp;&amp; canDropFoundation(moving, toId);
+  else if (toId[0] === "t") ok = isRun(fromId, idx) &amp;&amp; canDropTableau(moving, toId);
+  if (!ok) return false;
+
+  to.push(...from.splice(idx));                        // move the slice
+  if (fromId[0] === "t" &amp;&amp; from.length &amp;&amp; !top(from).faceUp)
+    top(from).faceUp = true;                            // auto-flip what we uncovered
+  settle(); render();
+  return true;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Two ways to grab, both through move()</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Click a face-up card to select it (and the run beneath it), then click a destination pile. Or drag the card onto a pile. Double-click shoots a card to the first foundation that will take it. Every path ends in the same <code>move()</code> call, so there is exactly one place where legality is decided.</p>
+        <div class="relative"><pre>function onCardClick(fromId, idx){
+  if (sel){ move(sel.pile, sel.idx, fromId); sel = null; }   // 2nd click = destination
+  else if (pile(fromId)[idx].faceUp) sel = { pile:fromId, idx };
+  render();
+}
+function autoToFoundation(fromId, idx){                      // double-click helper
+  if (idx !== pile(fromId).length - 1) return;               // top card only
+  for (let f = 0; f &lt; 4; f++) if (move(fromId, idx, "f" + f)) return;
+}
+card.ondragstart = () =&gt; drag = { pile:fromId, idx };        // drag path
+target.ondrop    = () =&gt; { move(drag.pile, drag.idx, targetId); };</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Winning is counting to 52</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no clever end-state to track. After every move, add up the four foundations; when they hold all 52 cards, every suit has been built Ace to King and the game is won. The scoreboard reads straight off the same state — moves made, cards home, and time elapsed.</p>
+        <div class="relative"><pre>function settle(){
+  const home = foundations.reduce((n, f) =&gt; n + f.length, 0);
+  document.getElementById("foundStat").textContent = home + "/52";
+  if (home === 52){ won = true; stopTimer(); msg("You won! 🎉 All 52 cards home."); }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 35 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Klondike Solitaire end to end: a card that is three facts, eleven piles that are all just arrays, a shuffle-and-deal staircase, a stock that deals then recycles, two mirror-image legality rules that let the <em>destination</em> decide, a run-check that lets you lift ordered sequences, an auto-flip when a pile is uncovered, a single <code>move()</code> door that click and drag both pass through, and a win test that simply counts to 52. Next: add draw-three from the stock, an undo stack, a scoring system, or an auto-solver that finishes a won-but-tedious board. <strong>👉 Tomorrow — Day 36: Lunar Lander — fire the thruster against gravity and set down gently before the fuel runs out.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== KLONDIKE SOLITAIRE ENGINE (real mechanics) =====
+const SUITS = ["S","H","D","C"];
+const SYM   = { S:"♠", H:"♥", D:"♦", C:"♣" };
+const RANKS = ["","A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const isRed = c => c.suit === "H" || c.suit === "D";
+
+let stock, waste, foundations, tableau;      // the eleven piles
+let sel = null, drag = null;                 // click-selection + drag payload
+let moves = 0, wins = 0, won = false;
+let startTime = null, timer = null;
+
+// ----- pile lookup + helpers -----
+function pile(id){
+  if (id === "stock") return stock;
+  if (id === "waste") return waste;
+  if (id[0] === "f")  return foundations[+id.slice(1)];
+  if (id[0] === "t")  return tableau[+id.slice(1)];
+}
+const top = arr => arr[arr.length - 1];
+
+// ----- legality (the destination decides) -----
+function canDropTableau(moving, destId){
+  const d = pile(destId);
+  if (d.length === 0) return moving.rank === 13;                 // empty → King only
+  const t = top(d);
+  return t.faceUp && isRed(t) !== isRed(moving) && t.rank === moving.rank + 1;
+}
+function canDropFoundation(moving, destId){
+  const d = pile(destId);
+  if (d.length === 0) return moving.rank === 1;                  // empty → Ace only
+  const t = top(d);
+  return t.suit === moving.suit && moving.rank === t.rank + 1;
+}
+function isRun(fromId, idx){
+  const p = pile(fromId);
+  for (let i = idx; i < p.length; i++){
+    if (!p[i].faceUp) return false;
+    if (i > idx){
+      const a = p[i - 1], b = p[i];
+      if (!(isRed(a) !== isRed(b) && a.rank === b.rank + 1)) return false;
+    }
+  }
+  return true;
+}
+
+// ----- the one move door -----
+function move(fromId, idx, toId){
+  if (won) return false;
+  const from = pile(fromId), to = pile(toId);
+  if (!from || !to || fromId === toId) return false;
+  if (idx < 0 || idx >= from.length || !from[idx].faceUp) return false;
+  // waste and foundations only ever move their top card
+  if (fromId !== "" && fromId[0] !== "t" && idx !== from.length - 1) return false;
+
+  const moving = from[idx], count = from.length - idx;
+  let ok = false;
+  if (toId[0] === "f")      ok = count === 1 && canDropFoundation(moving, toId);
+  else if (toId[0] === "t") ok = isRun(fromId, idx) && canDropTableau(moving, toId);
+  if (!ok) return false;
+
+  to.push(...from.splice(idx));                                  // move the slice
+  if (fromId[0] === "t" && from.length && !top(from).faceUp)
+    top(from).faceUp = true;                                     // auto-flip
+  ensureStarted(); moves++; sel = null;
+  settle(); render();
+  return true;
+}
+function autoToFoundation(fromId, idx){
+  if (idx !== pile(fromId).length - 1) return false;             // top card only
+  for (let f = 0; f < 4; f++) if (move(fromId, idx, "f" + f)) return true;
+  return false;
+}
+
+// ----- stock deal / recycle -----
+function drawStock(){
+  if (won) return;
+  if (stock.length){ const c = stock.pop(); c.faceUp = true; waste.push(c); }
+  else { while (waste.length){ const c = waste.pop(); c.faceUp = false; stock.push(c); } }
+  ensureStarted(); sel = null; render();
+}
+
+// ----- selection / click routing -----
+function selectable(fromId, idx){
+  const p = pile(fromId);
+  if (!p[idx] || !p[idx].faceUp) return false;
+  if (fromId === "waste" || fromId[0] === "f") return idx === p.length - 1;
+  return true; // any face-up tableau card
+}
+function onCardClick(fromId, idx){
+  if (won) return;
+  if (sel){
+    if (sel.pile === fromId){                                    // clicked within same pile
+      sel = (sel.idx === idx) ? null : { pile:fromId, idx };
+      render(); return;
+    }
+    if (!move(sel.pile, sel.idx, fromId)){                       // treat clicked pile as destination
+      sel = selectable(fromId, idx) ? { pile:fromId, idx } : null;
+      render();
+    }
+    return;
+  }
+  if (selectable(fromId, idx)){ sel = { pile:fromId, idx }; render(); }
+}
+function onPileClick(toId){                                       // click on empty area of a pile
+  if (won || !sel) return;
+  if (!move(sel.pile, sel.idx, toId)){ sel = null; render(); }
+}
+
+// ----- rendering -----
+function makeCard(card, fromId, idx){
+  const el = document.createElement("div");
+  if (card.faceUp){
+    el.className = "card up " + (isRed(card) ? "red" : "black");
+    const r = RANKS[card.rank], s = SYM[card.suit];
+    el.innerHTML = `<div class="corner tl">${r}<br>${s}</div><div class="pip">${s}</div><div class="corner br">${r}<br>${s}</div>`;
+  } else {
+    el.className = "card down";
+  }
+  if (sel && sel.pile === fromId && idx >= sel.idx && fromId[0] === "t") el.classList.add("sel");
+  if (sel && sel.pile === fromId && idx === sel.idx && fromId[0] !== "t") el.classList.add("sel");
+
+  if (card.faceUp && selectable(fromId, idx)){
+    el.draggable = true;
+    el.addEventListener("dragstart", e => { drag = { pile:fromId, idx }; e.stopPropagation(); });
+    el.addEventListener("dragend",   () => { drag = null; });
+  }
+  el.addEventListener("click", e => { e.stopPropagation(); onCardClick(fromId, idx); });
+  el.addEventListener("dblclick", e => { e.stopPropagation(); autoToFoundation(fromId, idx); });
+  return el;
+}
+
+function render(){
+  // stock
+  const st = document.getElementById("stockPile");
+  st.innerHTML = "";
+  st.className = "pile" + (stock.length ? "" : " slot");
+  if (stock.length){ const b = document.createElement("div"); b.className = "card down"; st.appendChild(b); }
+  else st.innerHTML = '<div class="recycle">↺</div>';
+
+  // waste (show top card only)
+  const w = document.getElementById("wastePile");
+  w.className = "pile" + (waste.length ? "" : " slot");
+  w.innerHTML = "";
+  if (waste.length) w.appendChild(makeCard(top(waste), "waste", waste.length - 1));
+
+  // foundations
+  document.querySelectorAll("#foundations .pile").forEach(fp => {
+    const id = fp.dataset.pile, f = pile(id);
+    fp.className = "pile" + (f.length ? "" : " slot");
+    fp.innerHTML = f.length ? "" : '<div class="fhint">A</div>';
+    if (f.length) fp.appendChild(makeCard(top(f), id, f.length - 1));
+  });
+
+  // tableau
+  document.querySelectorAll("#tableau .tcol").forEach(col => {
+    const id = col.dataset.pile, p = pile(id);
+    col.innerHTML = "";
+    let y = 0;
+    p.forEach((card, idx) => {
+      const el = makeCard(card, id, idx);
+      el.style.top = y + "px";
+      col.appendChild(el);
+      y += card.faceUp ? 24 : 11;
+    });
+    col.style.height = Math.max(90, y + 70) + "px";
+  });
+
+  hud();
+}
+
+// ----- hud / message / timer -----
+function hud(){
+  const home = foundations.reduce((n, f) => n + f.length, 0);
+  document.getElementById("foundStat").textContent = home + "/52";
+  document.getElementById("moveStat").textContent  = moves;
+  document.getElementById("winStat").textContent   = wins;
+}
+function settle(){
+  const home = foundations.reduce((n, f) => n + f.length, 0);
+  if (home === 52){ won = true; wins++; stopTimer(); msg("You won! 🎉 All 52 cards home.", "win"); }
+}
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : "text-slate-600");
+}
+function ensureStarted(){ if (!startTime){ startTime = Date.now(); timer = setInterval(tick, 1000); } }
+function stopTimer(){ if (timer){ clearInterval(timer); timer = null; } }
+function tick(){
+  const s = ((Date.now() - startTime) / 1000) | 0;
+  const mm = String(s / 60 | 0).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
+  document.getElementById("timeStat").textContent = mm + ":" + ss;
+}
+
+// ----- auto-collect: repeatedly send any legal card to a foundation -----
+function autoCollect(){
+  if (won) return;
+  let moved = true, guard = 0;
+  while (moved && guard++ < 200){
+    moved = false;
+    if (waste.length && autoToFoundation("waste", waste.length - 1)) { moved = true; continue; }
+    for (let t = 0; t < 7; t++){
+      const p = tableau[t];
+      if (p.length && autoToFoundation("t" + t, p.length - 1)) { moved = true; break; }
+    }
+  }
+}
+
+// ----- wire the persistent containers once -----
+document.getElementById("stockPile").addEventListener("click", drawStock);
+document.querySelectorAll("#foundations .pile, #tableau .tcol").forEach(box => {
+  const id = box.dataset.pile;
+  box.addEventListener("click", () => onPileClick(id));
+  box.addEventListener("dragover", e => e.preventDefault());
+  box.addEventListener("drop", e => {
+    e.preventDefault();
+    if (drag){ move(drag.pile, drag.idx, id); drag = null; }
+  });
+});
+document.getElementById("newBtn").onclick = newGame;
+document.getElementById("autoBtn").onclick = autoCollect;
+
+// ----- new game -----
+function newGame(){
+  const deck = [];
+  for (const s of SUITS) for (let r = 1; r <= 13; r++) deck.push({ suit:s, rank:r, faceUp:false });
+  for (let i = deck.length - 1; i > 0; i--){
+    const j = Math.random() * (i + 1) | 0;
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  tableau = [[],[],[],[],[],[],[]];
+  for (let col = 0; col < 7; col++)
+    for (let n = 0; n <= col; n++){
+      const c = deck.pop();
+      c.faceUp = (n === col);
+      tableau[col].push(c);
+    }
+  stock = deck; stock.forEach(c => c.faceUp = false);
+  waste = []; foundations = [[],[],[],[]];
+  sel = null; drag = null; moves = 0; won = false;
+  startTime = null; stopTimer();
+  document.getElementById("timeStat").textContent = "00:00";
+  render();
+  msg("Click the stock to deal. Move cards to build the foundations A→K.");
+}
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. A card is three facts", why:"A card in this game carries only three pieces of information: its suit, its rank as a number from 1 (Ace) to 13 (King), and whether it is currently face-up. Everything else is derived. Colour, for instance, is never stored — a card is red exactly when its suit is hearts or diamonds. Deriving colour instead of recording it removes an entire class of bug: there is no second field that could ever disagree with the suit. This tiny object is the atom the whole game is built from, and keeping it minimal is what keeps the rest of the code short.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a card = suit · rank · faceUp<br><br>{ suit:"H", rank:11, faceUp:false }<br>→ J♥, face-down<br><br>colour is DERIVED: red ⇔ suit is H or D</div>`, code:`const SUITS = ["S","H","D","C"];
+const SYM   = { S:"♠", H:"♥", D:"♦", C:"♣" };
+const RANKS = ["","A","2","3",/*…*/,"J","Q","K"];   // index by rank
+const isRed = c => c.suit === "H" || c.suit === "D"; // colour is derived` },
+
+ { title:"2. Eleven piles, all arrays", why:"Klondike looks complicated but it is only eleven stacks of cards: the stock you draw from, the waste it deals into, four foundations you are trying to fill, and seven tableau columns in the middle. Every one of them is just a JavaScript array, and the top card is always the last element. A small lookup translates a short id like \"t3\" or \"f0\" into the array it refers to, which means the rest of the code can talk about any pile the same way without caring what kind it is.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">stock  waste &nbsp;&nbsp; F F F F<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(foundations)<br><br>T0 T1 T2 T3 T4 T5 T6 &nbsp;(tableau)<br><br>each pile = an array · top = last element</div>`, code:`let stock, waste, foundations, tableau;
+function pile(id){
+  if (id === "stock") return stock;
+  if (id === "waste") return waste;
+  if (id[0] === "f")  return foundations[+id.slice(1)];
+  if (id[0] === "t")  return tableau[+id.slice(1)];
+}
+const top = arr => arr[arr.length - 1];` },
+
+ { title:"3. Shuffle and deal", why:"A new game builds the full 52-card deck, shuffles it with Fisher–Yates — the standard, unbiased shuffle — and then deals the signature staircase. The first column gets one card, the second two, and so on to seven, and in each column only the very last card dealt is turned face-up. The two dozen cards nobody was dealt become the stock. Because the deal is driven purely by loops over the shuffled array, every game is a genuinely random, solvable-or-not Klondike layout.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">deal the staircase (only top shows)<br><br>T0 ▮<br>T1 ▯▮<br>T2 ▯▯▮<br>T3 ▯▯▯▮ &nbsp;… up to T6<br><br>24 leftover cards → stock</div>`, code:`const deck = [];
+for (const s of SUITS) for (let r = 1; r <= 13; r++)
+  deck.push({ suit:s, rank:r, faceUp:false });
+// Fisher–Yates shuffle, then:
+for (let col = 0; col < 7; col++)
+  for (let n = 0; n <= col; n++){
+    const c = deck.pop();
+    c.faceUp = (n === col);           // only the last is face-up
+    tableau[col].push(c);
+  }
+stock = deck;                         // the 24 that are left` },
+
+ { title:"4. Stock: deal then recycle", why:"The stock in the corner has exactly two jobs, and which one it does depends only on whether it still holds cards. While it has cards, each click flips the top one face-up onto the waste pile, giving you a fresh option to play. When it is empty, the very same click flips the entire waste pile back over — face-down, and in reversed order — turning it back into the stock so you can go through it again. One handler covers both because the emptiness of the stock is the switch.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click the stock<br><br>has cards → deal top to waste<br>empty &nbsp;&nbsp;&nbsp; → tip waste back, face-down<br><br>one handler, chosen by stock.length</div>`, code:`function drawStock(){
+  if (stock.length){
+    const c = stock.pop(); c.faceUp = true; waste.push(c);
+  } else {
+    while (waste.length){            // recycle for another pass
+      const c = waste.pop(); c.faceUp = false; stock.push(c);
+    }
+  }
+  render();
+}` },
+
+ { title:"5. Tableau rule: down, alternating", why:"The columns in the middle are built downward in alternating colours: a red six can only be placed on a black seven, a black four only on a red five. So when a card wants to land on a column, we ask that column's top card a single question — are you one rank higher and the opposite colour? An empty column is the one exception, and it is deliberately strict: only a King may be moved into an empty space, which is what makes vacancies valuable and a little hard to earn.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">tableau builds DOWN + ALT colour<br><br>&nbsp;7♠ (black)<br>&nbsp;6♥ (red) &nbsp;✓ one lower, opposite<br>&nbsp;6♣ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ✗ same colour<br><br>empty column → King only</div>`, code:`function canDropTableau(moving, destId){
+  const d = pile(destId);
+  if (d.length === 0) return moving.rank === 13;   // empty → King
+  const t = top(d);
+  return isRed(t) !== isRed(moving)                // opposite colour
+      && t.rank === moving.rank + 1;               // one rank down
+}` },
+
+ { title:"6. Foundation rule: up, one suit", why:"The four foundations are the goal, and they are the mirror image of the tableau. Each builds upward within a single suit, starting with an Ace. An empty foundation therefore accepts only an Ace, and that first Ace silently claims the pile for its suit. From then on the pile takes exactly the next rank up in that same suit — the two of that suit, then the three, and so on to the King. Filling all four this way, thirteen cards each, is how you win.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">foundation builds UP + SAME suit<br><br>empty → A♠<br>A♠ → 2♠ → 3♠ → … → K♠<br><br>next rank up, matching suit only</div>`, code:`function canDropFoundation(moving, destId){
+  const d = pile(destId);
+  if (d.length === 0) return moving.rank === 1;    // empty → Ace
+  const t = top(d);
+  return t.suit === moving.suit                    // same suit
+      && moving.rank === t.rank + 1;               // one rank up
+}` },
+
+ { title:"7. Lifting a run", why:"Real Klondike lets you pick up more than one card at a time from a column, but only if those cards already form a proper sequence — descending by rank and alternating in colour — and all of them are face-up. Before allowing a multi-card move we walk from the grabbed card to the bottom of the column and verify exactly that. If any card is face-down or breaks the sequence, the run is invalid and the move is refused. Foundations never use this, since they take a single card, so it matters only column-to-column.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a movable run = descending + alt colour<br><br>9♥ 8♠ 7♦ &nbsp;✓ valid run, move all 3<br>9♥ 8♠ 7♠ &nbsp;✗ 7 breaks colour<br><br>every card in the run must be face-up</div>`, code:`function isRun(fromId, idx){
+  const p = pile(fromId);
+  for (let i = idx; i < p.length; i++){
+    if (!p[i].faceUp) return false;
+    if (i > idx){
+      const a = p[i-1], b = p[i];
+      if (!(isRed(a) !== isRed(b) && a.rank === b.rank + 1))
+        return false;
+    }
+  }
+  return true;
+}` },
+
+ { title:"8. One move() door", why:"Every attempted move in the entire game passes through a single function, and that is what keeps the rules honest. It first rules out illegal shapes — you cannot send more than one card to a foundation — then asks the correct question of the destination. If the move is legal it splices the cards off the source array and pushes them onto the target. The one extra courtesy it performs is the auto-flip: if moving cards off a column leaves a face-down card exposed on top, that card is turned face-up.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every move → move(from, idx, to)<br><br>1 · legal? ask the destination<br>2 · splice slice → push onto target<br>3 · uncovered a face-down top? flip it<br><br>one door = rules can't disagree</div>`, code:`function move(fromId, idx, toId){
+  const from = pile(fromId), to = pile(toId);
+  const moving = from[idx], count = from.length - idx;
+  let ok = false;
+  if (toId[0] === "f") ok = count === 1 && canDropFoundation(moving, toId);
+  else if (toId[0] === "t") ok = isRun(fromId, idx) && canDropTableau(moving, toId);
+  if (!ok) return false;
+  to.push(...from.splice(idx));
+  if (fromId[0] === "t" && from.length && !top(from).faceUp)
+    top(from).faceUp = true;                       // auto-flip
+  settle(); render();
+}` },
+
+ { title:"9. Click or drag, same door", why:"There are three ways to move a card and all of them end at the same move() call. A click selects a face-up card and the run beneath it, and a second click on a pile is treated as the destination. A drag carries a little payload naming the source card and drops it on a pile. A double-click is a shortcut that tries to send the top card to the first foundation that will accept it. Because none of these input paths contain any rules of their own, they can never behave inconsistently.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">three inputs, one entry point<br><br>click+click ─┐<br>drag+drop &nbsp;&nbsp;├──▶ move(from, idx, to)<br>double-click ┘ (→ first legal foundation)<br><br>rules live only inside move()</div>`, code:`function onCardClick(fromId, idx){
+  if (sel){ move(sel.pile, sel.idx, fromId); sel = null; }
+  else if (selectable(fromId, idx)) sel = { pile:fromId, idx };
+  render();
+}
+// drag: card.ondragstart = () => drag = { pile, idx };
+//       target.ondrop    = () => move(drag.pile, drag.idx, id);
+// dblclick: try foundations f0..f3 until one accepts the top card` },
+
+ { title:"10. Winning is counting to 52", why:"The end of the game needs no special machinery. After every move we simply add up how many cards sit on the four foundations; when that total reaches 52, all four suits have been completed from Ace to King and you have won. The same running total also feeds the scoreboard, alongside a move counter and an elapsed timer that starts on your first action. State drives the display, the display never drives the state, so nothing can drift.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">win = 52 cards on the foundations<br><br>♠13 + ♥13 + ♦13 + ♣13 = 52<br><br>settle() sums them after every move</div>`, code:`function settle(){
+  const home = foundations.reduce((n, f) => n + f.length, 0);
+  document.getElementById("foundStat").textContent = home + "/52";
+  if (home === 52){ won = true; stopTimer(); msg("You won! 🎉"); }
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,curStep-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(curStep+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
