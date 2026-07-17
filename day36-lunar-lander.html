@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 36 — Lunar Lander</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:28px; }
+
+  /* ---- the space view ---- */
+  .board { background:radial-gradient(circle at 50% 12%, #0b1220, #020617 72%);
+           padding:14px; border-radius:20px; display:inline-block;
+           box-shadow:0 18px 40px rgba(0,0,0,.35); }
+  canvas#game { display:block; border-radius:12px; background:#020617; max-width:100%; height:auto;
+                touch-action:none; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .legend { color:#64748b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 36</div>
+      <h1 class="text-xl font-bold">🚀 Lunar Lander — Fire the Thruster Against Gravity and Set Down Gently on the Pad Before the Fuel Runs Out</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Beat gravity with a short tank of fuel.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">Gravity pulls your lander <strong>down</strong> the whole time — the only thing fighting it is your <strong>thruster</strong>, and the thruster burns a limited tank of <strong>fuel</strong>. Hold <span class="keycap">↑</span> or <span class="keycap">Space</span> to fire the engine out of the lander's belly, and steer by tilting: <span class="keycap">←</span> and <span class="keycap">→</span> rotate the craft, so the thrust pushes <em>in whatever direction the nose is pointing</em>. Your job is to bring it down onto the green <strong>landing pad</strong> — the one flat ledge in the jagged terrain — <strong>gently</strong>: slow vertical speed, slow sideways drift, and <strong>near-upright</strong>. Come in too fast, drift off the pad, or land tilted, and you crash. The read-outs above tell you everything the physics knows: how high you are, how fast you are falling and sliding, how much fuel is left, and your tilt. Land the Eagle and it stays put; misjudge it and it explodes.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Altitude: <span id="hAlt" class="stat text-slate-700">—</span></div>
+        <div>V-Speed: <span id="hVy" class="stat text-slate-700">—</span></div>
+        <div>H-Speed: <span id="hVx" class="stat text-slate-700">—</span></div>
+        <div>Fuel: <span id="hFuel" class="stat text-slate-700">—</span></div>
+        <div>Angle: <span id="hAng" class="stat text-slate-700">—</span></div>
+        <div>Landings: <span id="hLand" class="stat text-emerald-600">0</span></div>
+      </div>
+
+      <div class="flex justify-center">
+        <div class="board">
+          <canvas id="game" width="720" height="460"></canvas>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-lg text-slate-600">Land gently on the flat pad. ↑/Space = thrust · ←/→ = rotate.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="retryBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">↺ Retry drop</button>
+        <button id="newBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">🌑 New terrain</button>
+      </div>
+      <p class="text-xs legend mt-3"><span class="keycap">↑</span> / <span class="keycap">Space</span> thrust &nbsp;·&nbsp; <span class="keycap">←</span> <span class="keycap">→</span> rotate &nbsp;·&nbsp; <span class="keycap">R</span> retry &nbsp;·&nbsp; safe = V-Speed &le; 28, H-Speed &le; 20, Angle &le; 8°</p>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">This is a real physics simulation, nothing scripted. The lander is just six numbers — a position, a velocity, an angle, and a fuel gauge. Every frame two forces act on it: <strong>gravity</strong>, which always adds a little downward speed, and <strong>thrust</strong>, which exists only while you hold the key and still have fuel. The thruster always pushes along the nose, so its force is split into sideways and upward parts with <code>sin</code> and <code>cos</code> of the tilt. Those forces become acceleration, acceleration is added to velocity, and velocity is added to position — the same <em>accel → velocity → position</em> chain that moves every planet and rocket. The ground is a jagged line of points with one deliberately flat pair — that flat pair is your pad. The instant the lander's feet reach the terrain, one test decides everything: were you over the pad, slow enough, and upright enough? All vanilla JavaScript on a canvas, offline, no images, no libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the flight works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">One tiny state object, two forces, a thrust vector split with <code>sin</code> and <code>cos</code>, the classic <em>accel → velocity → position</em> integration scaled by a clamped <code>dt</code>, a jagged terrain with one flat pad, a straight-line lookup for the ground height, and a single three-part touchdown test. About 120 lines of vanilla JavaScript on a canvas — no images, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The lander is just numbers</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no sprite and no physics engine — the whole spacecraft is one small object. It knows where it is (<code>x</code>, <code>y</code>), how fast it is moving (<code>vx</code>, <code>vy</code>), which way it is tilted (<code>angle</code>, in radians, with 0 meaning nose-up), and how much fuel is left. Everything you see on screen is drawn from these six numbers each frame.</p>
+        <div class="relative"><pre>const LW = 18, LH = 26;           // lander body size (for drawing + feet)
+
+let L = {
+  x: 360, y: 50,                  // position, in pixels
+  vx: 0,   vy: 0,                 // velocity, in pixels per second
+  angle: 0,                       // tilt in radians · 0 = pointing straight up
+  fuel: 100,                      // burns only while the thruster is lit
+  thrusting: false
+};</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Two forces: gravity and thrust</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Only two things ever push on the lander. <strong>Gravity</strong> is constant and always points down, so it is always part of the vertical acceleration. <strong>Thrust</strong> is the opposite: it exists only when you hold the key <em>and</em> the tank is not empty. Because thrust must be able to cancel gravity and then lift you, its strength is set well above gravity.</p>
+        <div class="relative"><pre>const GRAVITY = 30;   // px/s², always pulling DOWN (+y)
+const THRUST  = 78;   // px/s² out of the engine — must beat gravity
+const BURN    = 14;   // fuel spent per second while thrusting
+
+// gravity is unconditional; thrust needs both a held key AND fuel
+L.thrusting = keys.thrust &amp;&amp; L.fuel &gt; 0;</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Aiming the thrust with sin &amp; cos</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The engine always fires along the nose, so where the lander points is where the push goes. When the lander is upright (angle 0) the push is straight up. Tilt it, and the same push splits into a sideways part (<code>sin</code>) and an upward part (<code>cos</code>). This one bit of trigonometry is what lets you cancel sideways drift by leaning into it.</p>
+        <div class="relative"><pre>let ax = 0, ay = GRAVITY;                 // start with gravity on the y axis
+if (L.thrusting){
+  ax += Math.sin(L.angle) * THRUST;       // sideways part of the push
+  ay -= Math.cos(L.angle) * THRUST;       // upward part (negative y = up)
+  L.fuel -= BURN * dt;                    // and it costs fuel
+}
+// angle 0  → sin 0, cos 1 → ax 0, ay = GRAVITY - THRUST  (pure lift)</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Integrate: accel → velocity → position</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the heart of every physics simulation. Acceleration is how fast velocity changes, and velocity is how fast position changes — so each frame you add the acceleration onto the velocity, then add the velocity onto the position, each scaled by <code>dt</code> (the seconds since the last frame). Updating velocity <em>before</em> position is the stable "semi-implicit Euler" method.</p>
+        <div class="relative"><pre>L.vx += ax * dt;      // acceleration changes velocity
+L.vy += ay * dt;
+L.x  += L.vx * dt;    // velocity changes position
+L.y  += L.vy * dt;
+
+// dt scaling means the flight runs at the same speed on any monitor</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Rotating the craft</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Steering is just nudging the angle while a turn key is held, again scaled by <code>dt</code> so it turns at a steady rate. The angle feeds straight back into the thrust split from step 3, so turning and burning are all the control you have. There is no separate "facing" to keep in sync — the single <code>angle</code> value both draws the lander and aims its engine.</p>
+        <div class="relative"><pre>const ROT = 2.6;                    // radians per second
+
+if (keys.left)  L.angle -= ROT * dt;
+if (keys.right) L.angle += ROT * dt;
+
+// that same L.angle is used by Math.sin / Math.cos above AND by ctx.rotate below</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">The terrain and the one flat pad</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The ground is nothing but a list of points across the width of the canvas at random heights — connect them and you get jagged hills. The landing pad is made simply by forcing two neighbouring points to the <em>same</em> height, which draws as a flat ledge. We remember that pad's left and right edges so the touchdown test can ask "were we over it?".</p>
+        <div class="relative"><pre>function buildTerrain(){
+  const n = 16, seg = W / (n - 1), pts = [];
+  for (let i = 0; i &lt; n; i++)
+    pts.push({ x: i * seg, y: H - 30 - Math.random() * H * 0.4 });
+
+  const pi = 3 + (Math.random() * (n - 7) | 0);   // where the flat pad sits
+  const py = H - 30 - Math.random() * 50;
+  pts[pi].y = pts[pi + 1].y = py;                  // two points, one height = flat
+  pad = { x1: pts[pi].x, x2: pts[pi + 1].x, y: py };
+  return pts;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">How high is the ground right here?</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To know when the lander touches down — and to show altitude — we need the terrain height directly under any x. Find the two points the lander sits between and draw a straight line between them, then read off the y at our x. That linear interpolation turns a handful of points into a continuous surface the lander can rest on.</p>
+        <div class="relative"><pre>function groundY(x){
+  for (let i = 0; i &lt; terrain.length - 1; i++){
+    const a = terrain[i], b = terrain[i + 1];
+    if (x &gt;= a.x &amp;&amp; x &lt;= b.x){
+      const t = (x - a.x) / (b.x - a.x);      // 0..1 across this segment
+      return a.y + (b.y - a.y) * t;           // straight-line interpolation
+    }
+  }
+  return terrain[terrain.length - 1].y;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Touchdown or crash: three tolerances</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When the feet reach the ground, one test decides the whole game. You must be <em>over the pad</em>, <em>slow enough</em> in both directions, and <em>near-upright</em>. Miss any one of the three and it is a crash — and the reason is easy to report, because each condition is a separate boolean. These three numbers are the entire difficulty of the game.</p>
+        <div class="relative"><pre>const SAFE_VY = 28, SAFE_VX = 20, SAFE_ANG = 0.14;   // ~8°
+
+function land(){
+  const onPad   = L.x &gt;= pad.x1 &amp;&amp; L.x &lt;= pad.x2;
+  const gentle  = Math.abs(L.vy) &lt;= SAFE_VY &amp;&amp; Math.abs(L.vx) &lt;= SAFE_VX;
+  const upright = Math.abs(L.angle) &lt;= SAFE_ANG;
+  state = (onPad &amp;&amp; gentle &amp;&amp; upright) ? "landed" : "crash";
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">The loop that ties dt together</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A single <code>requestAnimationFrame</code> loop drives everything. It measures how many seconds passed since the last frame and <strong>clamps</strong> it, so a lag spike or a background tab can never let the lander jump straight through the ground. It steps the physics, checks whether the feet have reached the terrain, draws, and asks for the next frame only while still flying.</p>
+        <div class="relative"><pre>function loop(now){
+  const dt = Math.min(0.05, (now - last) / 1000);   // clamp — no teleporting
+  last = now;
+  if (state === "fly"){
+    step(dt);                                        // forces + integration
+    if (L.y + LH / 2 &gt;= groundY(L.x)) land();        // did the feet touch?
+  }
+  draw();
+  if (state === "fly") requestAnimationFrame(loop);  // stop when landed/crashed
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Draw the world through the lander's frame</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Drawing a rotating ship is easy if you move the canvas instead of the ship: <code>translate</code> to the lander's position, <code>rotate</code> by its angle, then draw the body at the origin as if it were never tilted. A flame is drawn below only while thrusting. The HUD simply reads the state numbers — the display never changes the physics, so nothing can drift.</p>
+        <div class="relative"><pre>function draw(){
+  ctx.fillStyle = "#020617"; ctx.fillRect(0, 0, W, H);   // space
+  drawTerrain();                                          // hills + green pad
+  ctx.save();
+  ctx.translate(L.x, L.y);                                // move INTO the lander
+  ctx.rotate(L.angle);
+  if (L.thrusting) drawFlame();
+  drawBody();                                             // drawn upright at (0,0)
+  ctx.restore();
+}
+// HUD: altitude = groundY(L.x) - (L.y + LH/2), speeds/fuel/angle read straight off L</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 36 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Lunar Lander end to end: a lander that is just six numbers, two forces where gravity is constant and thrust is conditional, a thrust vector aimed with <code>sin</code> and <code>cos</code>, the <em>accel → velocity → position</em> integration that powers every physics sim, rotation that both draws and aims the ship from one angle, a terrain of random points with one flattened pad, a straight-line lookup for the ground height, a three-part touchdown test, and a <code>dt</code>-clamped loop that can never teleport through the floor. Next: add a scrolling camera, terrain that scores harder pads higher, a fuel-efficiency bonus, or wind that pushes you sideways. <strong>👉 Tomorrow — Day 37: Doodle Jump — bounce ever upward on disappearing platforms and never fall back to the bottom.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== LUNAR LANDER ENGINE (real physics) =====
+const cv  = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;
+
+const GRAVITY  = 30;      // px/s², always down (+y)
+const THRUST   = 78;      // px/s² along the nose
+const ROT      = 2.6;     // rad/s rotation rate
+const FUEL0    = 100;
+const BURN     = 14;      // fuel per second while thrusting
+const SAFE_VY  = 28;      // max safe vertical speed
+const SAFE_VX  = 20;      // max safe horizontal speed
+const SAFE_ANG = 0.14;    // ~8 degrees
+const LW = 18, LH = 26;   // lander body size
+
+let L, terrain, pad, keys = {}, state = "fly";
+let landings = 0, last = 0, raf = 0;
+
+// one starfield, built once
+const stars = [];
+for (let i = 0; i < 80; i++)
+  stars.push({ x: Math.random() * W, y: Math.random() * H * 0.62, r: Math.random() < 0.5 ? 1 : 2, a: 0.25 + Math.random() * 0.6 });
+
+function normAngle(a){ a %= Math.PI * 2; if (a > Math.PI) a -= Math.PI * 2; if (a < -Math.PI) a += Math.PI * 2; return a; }
+
+// ----- terrain with one flat pad -----
+function buildTerrain(){
+  const n = 16, seg = W / (n - 1), pts = [];
+  for (let i = 0; i < n; i++)
+    pts.push({ x: i * seg, y: H - 30 - Math.random() * H * 0.4 });
+  const pi = 3 + (Math.random() * (n - 7) | 0);
+  const py = H - 30 - Math.random() * 50;
+  pts[pi].y = pts[pi + 1].y = py;                 // two points at one height = flat
+  pad = { x1: pts[pi].x, x2: pts[pi + 1].x, y: py };
+  terrain = pts;
+}
+function groundY(x){
+  for (let i = 0; i < terrain.length - 1; i++){
+    const a = terrain[i], b = terrain[i + 1];
+    if (x >= a.x && x <= b.x){
+      const t = (x - a.x) / (b.x - a.x);
+      return a.y + (b.y - a.y) * t;
+    }
+  }
+  return terrain[terrain.length - 1].y;
+}
+
+// ----- reset / new drop -----
+function reset(newTerrain){
+  if (newTerrain || !terrain) buildTerrain();
+  L = {
+    x: 70 + Math.random() * (W - 140),
+    y: 46,
+    vx: (Math.random() * 2 - 1) * 22,
+    vy: 6,
+    angle: (Math.random() * 2 - 1) * 0.25,
+    fuel: FUEL0,
+    thrusting: false,
+    exploded: false
+  };
+  keys = {}; state = "fly";
+  msg("Land gently on the flat pad. ↑/Space = thrust · ←/→ = rotate.");
+  hud();
+  last = performance.now();
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(loop);
+}
+
+// ----- physics step: forces → velocity → position -----
+function step(dt){
+  if (keys.left)  L.angle -= ROT * dt;
+  if (keys.right) L.angle += ROT * dt;
+
+  L.thrusting = keys.thrust && L.fuel > 0;
+  let ax = 0, ay = GRAVITY;                          // gravity is unconditional
+  if (L.thrusting){
+    ax += Math.sin(L.angle) * THRUST;                // aim the push along the nose
+    ay -= Math.cos(L.angle) * THRUST;
+    L.fuel = Math.max(0, L.fuel - BURN * dt);
+  }
+
+  L.vx += ax * dt;                                   // accel → velocity
+  L.vy += ay * dt;
+  L.x  += L.vx * dt;                                 // velocity → position
+  L.y  += L.vy * dt;
+
+  if (L.x < 8){ L.x = 8; L.vx = Math.abs(L.vx) * 0.4; }        // soft side walls
+  if (L.x > W - 8){ L.x = W - 8; L.vx = -Math.abs(L.vx) * 0.4; }
+
+  if (L.y + LH / 2 >= groundY(L.x)){                 // feet reached the ground
+    L.y = groundY(L.x) - LH / 2;
+    land();
+  }
+  hud();
+}
+
+// ----- touchdown test -----
+function land(){
+  const onPad   = L.x >= pad.x1 && L.x <= pad.x2;
+  const gentle  = Math.abs(L.vy) <= SAFE_VY && Math.abs(L.vx) <= SAFE_VX;
+  const upright = Math.abs(normAngle(L.angle)) <= SAFE_ANG;
+  if (onPad && gentle && upright){
+    state = "landed"; landings++;
+    msg("🎉 Perfect touchdown — the Eagle has landed!", "win");
+  } else {
+    state = "crash"; L.exploded = true;
+    const why = !onPad ? "missed the landing pad" : !gentle ? "came in too fast" : "landed at too steep an angle";
+    msg("💥 Crashed — " + why + ". Press R to retry.", "lose");
+  }
+  hud();
+}
+
+// ----- loop with clamped dt -----
+function loop(now){
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (state === "fly") step(dt);
+  draw();
+  if (state === "fly") raf = requestAnimationFrame(loop);
+}
+
+// ----- drawing -----
+function drawTerrain(){
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  ctx.lineTo(terrain[0].x, terrain[0].y);
+  for (let i = 1; i < terrain.length; i++) ctx.lineTo(terrain[i].x, terrain[i].y);
+  ctx.lineTo(W, H); ctx.closePath();
+  ctx.fillStyle = "#1e293b"; ctx.fill();
+  ctx.strokeStyle = "#64748b"; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(terrain[0].x, terrain[0].y);
+  for (let i = 1; i < terrain.length; i++) ctx.lineTo(terrain[i].x, terrain[i].y);
+  ctx.stroke();
+  // the pad — glowing green ledge
+  ctx.strokeStyle = "#34d399"; ctx.lineWidth = 5; ctx.lineCap = "round";
+  ctx.shadowColor = "#34d399"; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.moveTo(pad.x1, pad.y); ctx.lineTo(pad.x2, pad.y); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.lineCap = "butt";
+}
+function drawBody(){
+  // legs
+  ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-6, 7);  ctx.lineTo(-12, 13);
+  ctx.moveTo( 6, 7);  ctx.lineTo( 12, 13);
+  ctx.stroke();
+  // body
+  ctx.fillStyle = "#e2e8f0"; ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-9, 7); ctx.lineTo(-9, -6);
+  ctx.quadraticCurveTo(-9, -14, 0, -14);
+  ctx.quadraticCurveTo(9, -14, 9, -6);
+  ctx.lineTo(9, 7); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  // window
+  ctx.fillStyle = "#38bdf8";
+  ctx.beginPath(); ctx.arc(0, -4, 4, 0, Math.PI * 2); ctx.fill();
+}
+function drawFlame(){
+  const f = 10 + Math.random() * 9;
+  ctx.fillStyle = "#f97316";
+  ctx.beginPath(); ctx.moveTo(-5, 7); ctx.lineTo(5, 7); ctx.lineTo(0, 7 + f); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#fde047";
+  ctx.beginPath(); ctx.moveTo(-2.5, 7); ctx.lineTo(2.5, 7); ctx.lineTo(0, 7 + f * 0.55); ctx.closePath(); ctx.fill();
+}
+function drawExplosion(){
+  for (let i = 0; i < 12; i++){
+    const a = i / 12 * Math.PI * 2, d = 8 + (i % 3) * 6;
+    ctx.fillStyle = i % 2 ? "#f59e0b" : "#fca5a5";
+    ctx.beginPath(); ctx.arc(Math.cos(a) * d, Math.sin(a) * d, 4, 0, Math.PI * 2); ctx.fill();
+  }
+}
+function draw(){
+  ctx.fillStyle = "#020617"; ctx.fillRect(0, 0, W, H);
+  for (const s of stars){ ctx.globalAlpha = s.a; ctx.fillStyle = "#e2e8f0"; ctx.fillRect(s.x, s.y, s.r, s.r); }
+  ctx.globalAlpha = 1;
+  drawTerrain();
+  ctx.save();
+  ctx.translate(L.x, L.y);
+  ctx.rotate(L.angle);
+  if (L.exploded) drawExplosion();
+  else { if (L.thrusting) drawFlame(); drawBody(); }
+  ctx.restore();
+  if (state !== "fly"){
+    ctx.fillStyle = "rgba(2,6,23,.55)"; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center";
+    ctx.fillStyle = state === "landed" ? "#34d399" : "#fb7185";
+    ctx.font = "bold 34px -apple-system, sans-serif";
+    ctx.fillText(state === "landed" ? "THE EAGLE HAS LANDED" : "CRASHED", W / 2, H / 2 - 4);
+    ctx.fillStyle = "#e2e8f0"; ctx.font = "15px -apple-system, sans-serif";
+    ctx.fillText("press R or Retry drop to fly again", W / 2, H / 2 + 26);
+    ctx.textAlign = "start";
+  }
+}
+
+// ----- HUD (reads state, never changes it) -----
+function setTone(el, ok){ el.className = "stat " + (ok ? "text-emerald-600" : "text-rose-600"); }
+function hud(){
+  const alt = Math.max(0, groundY(L.x) - (L.y + LH / 2));
+  document.getElementById("hAlt").textContent = alt.toFixed(0) + " m";
+
+  const vyEl = document.getElementById("hVy");
+  vyEl.textContent = (L.vy >= 0 ? "▼ " : "▲ ") + Math.abs(L.vy).toFixed(0);
+  setTone(vyEl, Math.abs(L.vy) <= SAFE_VY);
+
+  const vxEl = document.getElementById("hVx");
+  vxEl.textContent = (L.vx >= 0 ? "▶ " : "◀ ") + Math.abs(L.vx).toFixed(0);
+  setTone(vxEl, Math.abs(L.vx) <= SAFE_VX);
+
+  const fEl = document.getElementById("hFuel");
+  fEl.textContent = L.fuel.toFixed(0);
+  fEl.className = "stat " + (L.fuel > 25 ? "text-emerald-600" : L.fuel > 0 ? "text-amber-600" : "text-rose-600");
+
+  const aEl = document.getElementById("hAng");
+  aEl.textContent = (normAngle(L.angle) * 180 / Math.PI).toFixed(0) + "°";
+  setTone(aEl, Math.abs(normAngle(L.angle)) <= SAFE_ANG);
+
+  document.getElementById("hLand").textContent = landings;
+}
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : tone === "lose" ? "text-rose-600" : "text-slate-600");
+}
+
+// ----- input (only while the LOOK tab is visible) -----
+function looking(){ return !document.getElementById("look").classList.contains("hidden"); }
+document.addEventListener("keydown", e => {
+  if (!looking()) return;
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) e.preventDefault();
+  if (e.key === "ArrowLeft")  keys.left = true;
+  if (e.key === "ArrowRight") keys.right = true;
+  if (e.key === "ArrowUp" || e.key === " ") keys.thrust = true;
+  if (e.key === "r" || e.key === "R") reset(false);
+});
+document.addEventListener("keyup", e => {
+  if (e.key === "ArrowLeft")  keys.left = false;
+  if (e.key === "ArrowRight") keys.right = false;
+  if (e.key === "ArrowUp" || e.key === " ") keys.thrust = false;
+});
+document.getElementById("retryBtn").onclick = () => reset(false);
+document.getElementById("newBtn").onclick   = () => reset(true);
+
+reset(true);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The lander is just numbers", why:"There is no hidden physics library and no sprite doing the work — the whole spacecraft is one small JavaScript object holding six numbers. It knows its position on screen, how fast it is moving horizontally and vertically, which way it is tilted, and how much fuel remains. Everything the game does is read from or written to these numbers each frame, and everything you see is drawn from them. Keeping the state this small is exactly why the whole game fits in about a hundred lines. Master these six values and you understand the entire simulation.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the lander = 6 numbers<br><br>x, y &nbsp;&nbsp;&nbsp;&nbsp;→ where it is<br>vx, vy &nbsp;→ how fast it moves<br>angle &nbsp;&nbsp;→ how it is tilted<br>fuel &nbsp;&nbsp;&nbsp;→ how long you can burn</div>`, code:`let L = {
+  x: 360, y: 50,       // position, pixels
+  vx: 0,   vy: 0,      // velocity, px/second
+  angle: 0,            // tilt in radians, 0 = nose up
+  fuel: 100,           // burns only while thrusting
+  thrusting: false
+};` },
+
+ { title:"2. Two forces act on it", why:"Only two influences ever push the lander around. Gravity is constant: every single frame it adds a little more downward speed, and it never turns off. Thrust is its mirror image — it only exists while you are holding the thruster key and the fuel tank still has something in it. Because thrust needs to be able to cancel gravity and then lift you off, it is set noticeably stronger than gravity. Understanding that gravity is unconditional but thrust is a choice is the core tension of the whole game.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">gravity ↓ &nbsp; ALWAYS on (30)<br>thrust &nbsp;↑ &nbsp; only if key + fuel (78)<br><br>net accel = gravity − thrust(if lit)<br>78 &gt; 30 → you can climb</div>`, code:`const GRAVITY = 30;   // px/s², always down
+const THRUST  = 78;   // px/s², only while burning
+const BURN    = 14;   // fuel / second
+
+L.thrusting = keys.thrust && L.fuel > 0;` },
+
+ { title:"3. Aiming thrust with sin & cos", why:"The engine fires out of the bottom of the lander, so the push always goes in whatever direction the nose is pointing. When the craft is upright the push is straight up and simply fights gravity. The moment you tilt, that single push has to be split into a horizontal part and a vertical part — and the exact split is given by the sine and cosine of the tilt angle. Sine gives the sideways share, cosine gives the upward share. This tiny piece of trigonometry is what lets you lean into sideways drift and cancel it out.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">tilt splits the push<br><br>upright &nbsp;→ all up &nbsp;&nbsp;(sin0=0, cos0=1)<br>tilted &nbsp;&nbsp;→ some sideways, some up<br><br>ax = sin(angle)·T &nbsp; ay = −cos(angle)·T</div>`, code:`let ax = 0, ay = GRAVITY;
+if (L.thrusting){
+  ax += Math.sin(L.angle) * THRUST;   // sideways part
+  ay -= Math.cos(L.angle) * THRUST;   // upward part (−y)
+  L.fuel -= BURN * dt;
+}` },
+
+ { title:"4. Integrate: accel → velocity → position", why:"This is the single most important idea in the whole simulation, and it powers every physics engine ever written. Acceleration is the rate at which velocity changes, and velocity is the rate at which position changes. So each frame you take the acceleration and add it onto the velocity, then take that velocity and add it onto the position — each multiplied by dt, the fraction of a second since the previous frame. Crucially you update velocity first and then position, which is the stable 'semi-implicit Euler' order. Do this sixty times a second and smooth, believable motion falls out for free.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the chain, every frame<br><br>accel ──+dt──▶ velocity ──+dt──▶ position<br><br>vy += ay·dt<br>y &nbsp;+= vy·dt<br><br>velocity FIRST, then position</div>`, code:`L.vx += ax * dt;    // accel changes velocity
+L.vy += ay * dt;
+L.x  += L.vx * dt;  // velocity changes position
+L.y  += L.vy * dt;` },
+
+ { title:"5. Steering by rotating", why:"All of your steering comes down to nudging one number: the tilt angle. While the left key is held the angle decreases and while the right key is held it increases, each change scaled by dt so it rotates at a steady rate no matter the frame speed. There is nothing else to keep in sync, because that same angle is used two ways — it aims the thrust in step 3, and it rotates the drawing in step 10. One value both controls and displays the craft, which is why turning immediately changes where your engine pushes.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one angle, two jobs<br><br>← key → angle −= ROT·dt<br>→ key → angle += ROT·dt<br><br>angle → aims thrust &nbsp;AND&nbsp; rotates drawing</div>`, code:`const ROT = 2.6;   // radians / second
+
+if (keys.left)  L.angle -= ROT * dt;
+if (keys.right) L.angle += ROT * dt;` },
+
+ { title:"6. Terrain and the one flat pad", why:"The ground looks elaborate but it is only a list of points spread across the width of the canvas, each at a random height; connecting them with lines makes jagged hills. The landing pad is created by the simplest trick imaginable — force two neighbouring points to exactly the same height, and the line between them draws as a flat ledge. We store that pad's left and right x-edges so the touchdown test later can check whether the lander was actually above it. A fresh random terrain, with a fresh pad, is one function call away.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">ground = random points + lines<br><br>/\\&nbsp;&nbsp;/\\___&nbsp;&nbsp;&nbsp;&nbsp;/\\<br>&nbsp;&nbsp;\\/&nbsp;&nbsp;&nbsp;&nbsp;pad&nbsp;&nbsp;\\/<br><br>pad = two points at the SAME height</div>`, code:`function buildTerrain(){
+  const n = 16, seg = W/(n-1), pts = [];
+  for (let i = 0; i < n; i++)
+    pts.push({ x: i*seg, y: H - 30 - Math.random()*H*0.4 });
+  const pi = 3 + (Math.random()*(n-7) | 0);
+  const py = H - 30 - Math.random()*50;
+  pts[pi].y = pts[pi+1].y = py;          // flat pad
+  pad = { x1: pts[pi].x, x2: pts[pi+1].x, y: py };
+  return pts;
+}` },
+
+ { title:"7. The ground height under any x", why:"To decide when the lander has touched down, and to display the altitude, we constantly need to know how high the terrain is directly beneath the craft. Since the ground is only defined at a handful of points, we find the two points the lander currently sits between and imagine a straight line joining them, then read the height of that line at the lander's exact x. This is called linear interpolation, and it quietly turns a sparse list of points into a smooth continuous surface the lander can rest on. It is the bridge between the jagged data and the physics.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">height under the lander<br><br>a •———?———• b<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↑ x<br><br>t = (x−a.x)/(b.x−a.x)<br>y = a.y + (b.y−a.y)·t</div>`, code:`function groundY(x){
+  for (let i = 0; i < terrain.length-1; i++){
+    const a = terrain[i], b = terrain[i+1];
+    if (x >= a.x && x <= b.x){
+      const t = (x - a.x) / (b.x - a.x);
+      return a.y + (b.y - a.y) * t;
+    }
+  }
+  return terrain[terrain.length-1].y;
+}` },
+
+ { title:"8. Touchdown: three tolerances", why:"When the lander's feet finally reach the ground, one test decides whether you are a hero or a crater. Three conditions must all be true at once: you must be over the flat pad, you must be slow enough both vertically and horizontally, and you must be close to upright. If any one of them fails it is a crash, and because each is a separate true/false value we can even tell you which one you got wrong. Those three numbers — the safe speeds and the safe angle — are literally the entire difficulty of the game; loosen them and it is trivial, tighten them and it is brutal.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">land = ALL three true<br><br>✓ over the pad<br>✓ |vy| ≤ 28 &nbsp; |vx| ≤ 20<br>✓ |angle| ≤ 8°<br><br>miss any one → 💥 crash</div>`, code:`const SAFE_VY = 28, SAFE_VX = 20, SAFE_ANG = 0.14;
+
+function land(){
+  const onPad   = L.x >= pad.x1 && L.x <= pad.x2;
+  const gentle  = Math.abs(L.vy) <= SAFE_VY && Math.abs(L.vx) <= SAFE_VX;
+  const upright = Math.abs(L.angle) <= SAFE_ANG;
+  state = (onPad && gentle && upright) ? "landed" : "crash";
+}` },
+
+ { title:"9. The loop that clamps dt", why:"A single requestAnimationFrame loop runs the entire game. On each frame it measures how many seconds passed since the last one and, importantly, clamps that value so it can never be too large. Without the clamp, a lag spike or switching away to another browser tab would hand the physics a huge dt and the lander would leap straight through the ground in one step. With it, the worst case is a small hop. The loop steps the physics, checks for a touchdown, redraws, and only asks for another frame while you are still flying — so it naturally stops the instant you land or crash.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">each frame<br><br>dt = min(0.05, elapsed)   ← clamp!<br>step(dt) → check ground → draw<br><br>keep going only while state = fly</div>`, code:`function loop(now){
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (state === "fly"){
+    step(dt);
+    if (L.y + LH/2 >= groundY(L.x)) land();
+  }
+  draw();
+  if (state === "fly") requestAnimationFrame(loop);
+}` },
+
+ { title:"10. Drawing through the lander's frame", why:"Drawing a rotating spaceship sounds hard until you flip the problem around: instead of rotating the ship, rotate the canvas. You translate the drawing origin to the lander's position, rotate the whole coordinate system by its angle, and then draw the body as if it were standing perfectly upright at the origin — the canvas handles the tilt for you. A flame is added below the body only while the thruster is lit. The heads-up display, meanwhile, only ever reads the state numbers to show altitude, speed, fuel and angle; it never writes them, so the display can never disagree with the physics.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">move the canvas, not the ship<br><br>translate(x, y) → rotate(angle)<br>then draw the body at (0,0) upright<br><br>HUD only READS the numbers</div>`, code:`function draw(){
+  ctx.fillStyle = "#020617"; ctx.fillRect(0,0,W,H);
+  drawTerrain();
+  ctx.save();
+  ctx.translate(L.x, L.y);   // move into the lander
+  ctx.rotate(L.angle);
+  if (L.thrusting) drawFlame();
+  drawBody();                // drawn upright at the origin
+  ctx.restore();
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>show(i); stepsEl.appendChild(bn); });
+function show(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>show(Math.max(0,curStep-1)); nextB.onclick=()=>show(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; show(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} show(curStep+1); },3000); };
+show(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
