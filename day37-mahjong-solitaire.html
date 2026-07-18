@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 37 — Mahjong Solitaire</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:28px; }
+
+  /* ---- the table ---- */
+  .board { background:radial-gradient(circle at 50% 15%, #1e6b47, #0b3b27 78%);
+           padding:16px; border-radius:20px; display:inline-block;
+           box-shadow:0 18px 40px rgba(0,0,0,.35); }
+  canvas#board { display:block; border-radius:12px; max-width:100%; height:auto; cursor:pointer;
+                 touch-action:manipulation; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .legend { color:#64748b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 37</div>
+      <h1 class="text-xl font-bold">🀄 Mahjong Solitaire — Clear the Layered Board by Matching Free Pairs of Identical Tiles</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Take the whole stack apart, two tiles at a time.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">Tiles are stacked into a little layered pyramid, and most of them are stuck — pinned under a tile above, or wedged between neighbours on both sides. A tile is <strong>free</strong> only when <strong>nothing sits on top of it</strong> <em>and</em> at least one of its <strong>left or right sides is open</strong>. Your only move is to click <strong>two free tiles that show the same face</strong>; they vanish as a pair, and whatever they were covering or blocking becomes reachable. Peel the board apart until every tile is gone. Choose badly and you can strand yourself with no matching free pair left — that is a <strong>deadlock</strong>, and the board tells you the moment it happens so you can hit <strong>🔀 Shuffle</strong> and get a fresh, still-solvable arrangement. There is no luck to the deal: every board is generated so a full solution exists.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Tiles left: <span id="hLeft" class="stat text-slate-700">—</span></div>
+        <div>Matches: <span id="hMatch" class="stat text-emerald-600">0</span></div>
+        <div>Free now: <span id="hFree" class="stat text-slate-700">—</span></div>
+        <div>Time: <span id="hTime" class="stat text-slate-700">00:00</span></div>
+      </div>
+
+      <div class="flex justify-center">
+        <div class="board">
+          <canvas id="board" width="520" height="300"></canvas>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-lg text-slate-600">Match two free tiles that show the same face.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn"    class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">🀄 New game</button>
+        <button id="shuffleBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">🔀 Shuffle</button>
+        <button id="hintBtn"    class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">💡 Hint</button>
+        <button id="undoBtn"    class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">↩ Undo</button>
+        <button id="freeBtn"    class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">👁 Highlight free</button>
+      </div>
+      <p class="text-xs legend mt-3">Click a <strong>free</strong> tile to pick it, then a matching free tile to clear the pair &nbsp;·&nbsp; <span class="keycap">N</span> new &nbsp; <span class="keycap">S</span> shuffle &nbsp; <span class="keycap">H</span> hint &nbsp; <span class="keycap">U</span> undo &nbsp; <span class="keycap">F</span> highlight free</p>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">Every tile in this game is nothing more than three numbers — a column, a row, and a layer — plus the face it is showing. The layered look you see is drawn from those numbers: higher layers are nudged up and to the left so the ones underneath peek out. Two rules run the whole game. First, the <strong>free</strong> test: a tile is playable only if no other tile overlaps its footprint from a higher layer, and either its left or its right side has no neighbour on the same layer. Second, the <strong>match</strong> test: two free tiles clear only if their faces are identical. The deal itself is built <em>backwards</em> — the code repeatedly removes free pairs from a full board and stamps each pair a face as it goes, so replaying that order is always a guaranteed win. After every move a quick scan asks whether any matchable free pair still exists; if none does, the board is deadlocked and offers a reshuffle that lays the remaining faces back down into a fresh, solvable pattern. All vanilla JavaScript on one canvas, offline, no images and no libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the board thinks</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A tile is three numbers and a face. One overlap test answers both "is anything on top of me?" and "who is beside me?". The free rule is that test spelled out; the match rule is one string comparison. The clever part is the deal — build it by tearing a full board apart into free pairs and stamping faces as you go, and replaying that order is a guaranteed win. Add a deadlock scan, a reshuffle that stays solvable, and an isometric draw that offsets each layer up and to the left. About 150 lines of vanilla JavaScript on one canvas — no images, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A tile is three numbers and a face</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no sprite and no grid array — the whole board is just a flat list of little objects. Each tile knows its <code>x</code> column and <code>y</code> row (measured in <em>half-tile units</em> so layers can straddle each other), its <code>z</code> layer, the <code>face</code> it shows, and whether it has been cleared. Everything the game does is a question asked of this list.</p>
+        <div class="relative"><pre>const FACES = ["🀄","🎋","🌸","🔥","💧","⭐","🌙","🍀","🔔"];  // 9 faces × 4 copies = 36 tiles
+
+function buildTiles(){
+  tiles = []; let id = 0;
+  const push = (x, y, z) =&gt; tiles.push({ x, y, z, id: id++, face: null, gone: false });
+  for (let r = 0; r &lt; 3; r++) for (let c = 0; c &lt; 8; c++) push(c*2, r*2, 0);   // base: 8×3
+  for (let r = 0; r &lt; 2; r++) for (let c = 0; c &lt; 6; c++) push(c*2+2, r*2+1, 1); // top: 6×2, offset
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">One overlap test does everything</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each tile covers a 2×2 square in those half-units. Because the unit is half a tile, two tiles overlap exactly when their columns differ by less than 2 <em>and</em> their rows differ by less than 2. This single line is reused for "is a tile sitting on top of me?" and, restricted to one axis, for "is a tile directly beside me?". Get this right and the rest is easy.</p>
+        <div class="relative"><pre>// footprints overlap when they are closer than a full tile on BOTH axes
+function overlapXY(a, b){
+  return Math.abs(a.x - b.x) &lt; 2 &amp;&amp; Math.abs(a.y - b.y) &lt; 2;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The free rule: uncovered AND a side open</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the heart of Mahjong Solitaire. A tile is <strong>free</strong> — and therefore clickable — only when two things are both true. Nothing may overlap it from a <em>higher</em> layer (nothing on top), and it must have <em>no neighbour on at least one side</em>, left or right, at its own layer. A tile pinned under another, or walled in on both sides, is locked until you remove what is trapping it.</p>
+        <div class="relative"><pre>function isFree(t, gone = u =&gt; u.gone){
+  if (gone(t)) return false;
+  // 1) nothing on top: no live tile on a higher layer overlaps my footprint
+  for (const u of tiles)
+    if (u !== t &amp;&amp; !gone(u) &amp;&amp; u.z &gt; t.z &amp;&amp; overlapXY(u, t)) return false;
+  // 2) a side is open: check for same-layer neighbours immediately left / right
+  let left = false, right = false;
+  for (const u of tiles){
+    if (u === t || gone(u) || u.z !== t.z) continue;
+    if (Math.abs(u.y - t.y) &lt; 2){
+      if (u.x === t.x - 2) left  = true;
+      if (u.x === t.x + 2) right = true;
+    }
+  }
+  return !left || !right;                     // free if either side is clear
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The match rule: same face, both free</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Clearing a pair is deliberately simple. Click one free tile to select it, click a second free tile, and if their faces are identical both disappear. Clicking the selected tile again cancels; clicking a different free tile just moves your selection. Every removal can only <em>free</em> more tiles, never trap them, which is why the board opens up as you play.</p>
+        <div class="relative"><pre>if (selected &amp;&amp; selected.face === t.face){   // two free tiles, identical face
+  selected.gone = t.gone = true;             // clear the pair
+  undoStack.push([selected, t]);
+  matches++; selected = null;
+} else {
+  selected = t;                              // pick / switch selection
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Deal a board that can actually be won</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Sprinkling faces at random makes boards that are often impossible. The trick is to build the deal <em>backwards</em>: pretend the board is full, repeatedly find the currently free tiles, remove two of them, and stamp that pair a face. Because every pair you stamp was free at the moment you removed it, replaying the removals in order is a guaranteed solution. Faces are drawn from a bag so each appears exactly four times.</p>
+        <div class="relative"><pre>function generateSolvable(activeIds, faceCounts){
+  const present = {}; activeIds.forEach(id =&gt; present[id] = true);
+  const gone = u =&gt; !present[u.id];
+  const bag = [];                                    // one entry per PAIR
+  for (const f in faceCounts) for (let i = 0; i &lt; faceCounts[f] / 2; i++) bag.push(f);
+  shuffle(bag);
+  const assign = {}, ids = activeIds.slice();
+  let left = ids.length;
+  while (left &gt; 0){
+    const free = ids.filter(id =&gt; present[id] &amp;&amp; isFree(tiles[id], gone));
+    if (free.length &lt; 2) return null;                // stuck → caller retries
+    shuffle(free);
+    const a = free[0], b = free[1], f = bag.pop();
+    assign[a] = assign[b] = f;                        // this pair matches
+    present[a] = present[b] = false; left -= 2;       // ...remove and continue
+  }
+  return assign;                                      // a provably solvable deal
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Detecting a deadlock after every move</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A guaranteed-solvable deal can still be <em>played</em> into a dead end, because with four copies of each face you can pair the wrong two. So after every match we ask one question: among the tiles that are free right now, does any face appear at least twice? Group the free tiles by face; the first face that reaches a count of two means a move exists. No such face means deadlock.</p>
+        <div class="relative"><pre>function freeTiles(){ return tiles.filter(t =&gt; !t.gone &amp;&amp; isFree(t)); }
+
+function hasMove(){
+  const count = {};
+  for (const t of freeTiles()){
+    count[t.face] = (count[t.face] || 0) + 1;
+    if (count[t.face] &gt;= 2) return true;      // two free tiles share a face
+  }
+  return false;                               // nothing matchable → deadlock
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Rescue: reshuffle, still solvable</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When you deadlock — or just want a way out — the shuffle does not scatter faces blindly. It takes the faces still on the board (each remaining count is always even, because you clear in pairs) and runs the very same backwards generator over just the tiles that are left. The result is a brand-new layout of those faces that is, once again, guaranteed to have a full solution.</p>
+        <div class="relative"><pre>function shuffleBoard(){
+  const active = tiles.filter(t =&gt; !t.gone).map(t =&gt; t.id);
+  const counts = {};
+  for (const id of active) counts[tiles[id].face] = (counts[tiles[id].face] || 0) + 1;
+  let deal = null, tries = 0;
+  while (!deal &amp;&amp; tries++ &lt; 300) deal = generateSolvable(active, counts);  // stay solvable
+  for (const id of active) tiles[id].face = deal[id];
+  selected = null; draw();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Draw the stack in fake 3D</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Half-unit columns and rows become pixels by scaling, and each higher layer is nudged up and to the left by a fixed amount so the tiles below peek out from under it. Draw the live tiles back-to-front — lowest layer first, then top to bottom — and the overlaps naturally look like a raised stack. Each tile is an ivory rounded rectangle with a darker edge and a big emoji face.</p>
+        <div class="relative"><pre>const TW = 46, TH = 60, EDGE = 6, LDX = -8, LDY = -10;   // tile size + per-layer offset
+function screenPos(t){ return { x: OX + (t.x/2)*TW + t.z*LDX, y: OY + (t.y/2)*TH + t.z*LDY }; }
+
+function draw(){
+  ctx.fillStyle = "#134e33"; ctx.fillRect(0, 0, cv.width, cv.height);
+  tiles.filter(t =&gt; !t.gone)
+       .sort((a, b) =&gt; a.z - b.z || a.y - b.y || a.x - b.x)   // back to front
+       .forEach(drawTile);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Click the top-most tile under the cursor</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Because higher layers overlap the ones below, a click can land on several stacked tiles. We map the mouse into canvas space (accounting for CSS scaling), then pick the live tile whose rectangle contains the point and that is <em>closest to the viewer</em> — highest layer, and within a layer the one drawn last. Then the free test decides whether that click does anything.</p>
+        <div class="relative"><pre>function tileAt(px, py){
+  let best = null;
+  for (const t of tiles){
+    if (t.gone) continue;
+    const p = screenPos(t);
+    if (px &gt;= p.x &amp;&amp; px &lt;= p.x+TW &amp;&amp; py &gt;= p.y &amp;&amp; py &lt;= p.y+TH)
+      if (!best || t.z &gt; best.z ||
+          (t.z === best.z &amp;&amp; (t.y &gt; best.y || (t.y === best.y &amp;&amp; t.x &gt; best.x))))
+        best = t;                                  // topmost / frontmost wins
+  }
+  return best;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">The move: match, then check the board</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One click handler ties it together. Ignore blocked tiles, start the timer on the first real move, clear a matching pair, then run the two questions in order: is the board empty (you win), or is there no move left (deadlock, offer a shuffle)? A light <code>requestAnimationFrame</code> only ticks the clock — the board itself is event-driven and redraws on demand.</p>
+        <div class="relative"><pre>function onClick(t){
+  if (!isFree(t)) return flash("That tile is blocked.");
+  if (!running){ running = true; startTime = Date.now(); tick(); }   // clock starts on move 1
+  if (selected === t) { selected = null; return draw(); }            // cancel
+  if (selected &amp;&amp; selected.face === t.face){
+    selected.gone = t.gone = true; matches++; selected = null;
+    if (tiles.every(x =&gt; x.gone))       win();                       // board cleared
+    else if (!hasMove())                msg("Deadlocked — hit Shuffle.");
+  } else selected = t;                                               // select / switch
+  hud(); draw();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 37 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Mahjong Solitaire end to end: tiles that are just a column, a row, a layer and a face; a single overlap test that answers both coverage and adjacency; the free rule as "nothing on top and a side open"; a one-line match; a backwards deal generator that guarantees a solvable board; a deadlock scan that groups free tiles by face; a reshuffle that stays solvable; an isometric draw that offsets each layer up and to the left; a top-most hit test; and one click handler that clears a pair and re-checks the board. Next: try bigger classic layouts like the turtle, a scoring combo for fast chains, or an auto-solver that watches the board clear itself. <strong>👉 Tomorrow — Day 38: Peg Solitaire — jump one peg over another to remove it, and whittle a full board down to a single survivor.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== MAHJONG SOLITAIRE ENGINE (vanilla) =====
+const cv  = document.getElementById("board");
+const ctx = cv.getContext("2d");
+
+const FACES = ["🀄","🎋","🌸","🔥","💧","⭐","🌙","🍀","🔔"];  // 9 faces × 4 copies = 36 tiles
+const TW = 46, TH = 60, EDGE = 6, LDX = -8, LDY = -10;         // tile size + per-layer offset
+
+let tiles = [], selected = null, hintTiles = null, showFree = false;
+let matches = 0, won = false, running = false, startTime = 0, elapsed = 0, timerRAF = 0;
+let undoStack = [], OX = 0, OY = 0;
+
+function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+// ----- layout: a small layered pyramid -----
+function buildTiles(){
+  tiles = []; let id = 0;
+  const push = (x, y, z) => tiles.push({ x, y, z, id: id++, face: null, gone: false });
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) push(c * 2, r * 2, 0);       // base 8×3
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 6; c++) push(c * 2 + 2, r * 2 + 1, 1); // top 6×2
+  computeOrigin();
+}
+function screenPos(t){ return { x: OX + (t.x / 2) * TW + t.z * LDX, y: OY + (t.y / 2) * TH + t.z * LDY }; }
+function computeOrigin(){
+  OX = 0; OY = 0;
+  let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+  for (const t of tiles){ const p = screenPos(t);
+    minx = Math.min(minx, p.x); miny = Math.min(miny, p.y);
+    maxx = Math.max(maxx, p.x + TW + EDGE); maxy = Math.max(maxy, p.y + TH + EDGE); }
+  const pad = 18;
+  OX = pad - minx; OY = pad - miny;
+  cv.width  = Math.ceil((maxx - minx) + pad * 2);
+  cv.height = Math.ceil((maxy - miny) + pad * 2);
+}
+
+// ----- the free rule -----
+function overlapXY(a, b){ return Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2; }
+function isFree(t, gone){
+  gone = gone || (u => u.gone);
+  if (gone(t)) return false;
+  for (const u of tiles)
+    if (u !== t && !gone(u) && u.z > t.z && overlapXY(u, t)) return false;   // covered on top
+  let left = false, right = false;
+  for (const u of tiles){
+    if (u === t || gone(u) || u.z !== t.z) continue;
+    if (Math.abs(u.y - t.y) < 2){
+      if (u.x === t.x - 2) left = true;
+      else if (u.x === t.x + 2) right = true;
+    }
+  }
+  return !left || !right;                                                     // a side is open
+}
+function freeTiles(){ return tiles.filter(t => !t.gone && isFree(t)); }
+function hasMove(){
+  const c = {};
+  for (const t of freeTiles()){ c[t.face] = (c[t.face] || 0) + 1; if (c[t.face] >= 2) return true; }
+  return false;
+}
+function findHint(){
+  const by = {};
+  for (const t of freeTiles()){ (by[t.face] = by[t.face] || []).push(t); if (by[t.face].length === 2) return by[t.face]; }
+  return null;
+}
+
+// ----- solvable deal (built backwards) -----
+function generateSolvable(activeIds, faceCounts){
+  const present = {}; activeIds.forEach(id => present[id] = true);
+  const gone = u => !present[u.id];
+  const bag = [];
+  for (const f in faceCounts) for (let i = 0; i < faceCounts[f] / 2; i++) bag.push(f);
+  shuffle(bag);
+  const assign = {}, ids = activeIds.slice();
+  let left = ids.length;
+  while (left > 0){
+    const free = ids.filter(id => present[id] && isFree(tiles[id], gone));
+    if (free.length < 2) return null;
+    shuffle(free);
+    const a = free[0], b = free[1], f = bag.pop();
+    assign[a] = f; assign[b] = f;
+    present[a] = false; present[b] = false; left -= 2;
+  }
+  return assign;
+}
+function fallbackPairs(ids, faceCounts){       // last resort — may not be solvable, shuffle rescues
+  const bag = [];
+  for (const f in faceCounts) for (let i = 0; i < faceCounts[f]; i++) bag.push(f);
+  shuffle(bag);
+  const a = {}; ids.forEach((id, i) => a[id] = bag[i]); return a;
+}
+
+function deal(){
+  buildTiles();
+  const ids = tiles.map(t => t.id);
+  const counts = {}; FACES.forEach(f => counts[f] = 4);
+  let assign = null, tries = 0;
+  while (!assign && tries++ < 300) assign = generateSolvable(ids, counts);
+  if (!assign) assign = fallbackPairs(ids, counts);
+  tiles.forEach(t => { t.face = assign[t.id]; t.gone = false; });
+  selected = null; hintTiles = null; matches = 0; won = false; undoStack = [];
+  running = false; elapsed = 0; cancelAnimationFrame(timerRAF);
+  document.getElementById("hTime").textContent = "00:00";
+  msg("Match two free tiles that show the same face.");
+  hud(); draw();
+}
+
+function shuffleBoard(){
+  if (won) return;
+  const active = tiles.filter(t => !t.gone).map(t => t.id);
+  if (!active.length) return;
+  const counts = {};
+  for (const id of active) counts[tiles[id].face] = (counts[tiles[id].face] || 0) + 1;
+  let assign = null, tries = 0;
+  while (!assign && tries++ < 300) assign = generateSolvable(active, counts);
+  if (!assign) assign = fallbackPairs(active, counts);
+  for (const id of active) tiles[id].face = assign[id];
+  selected = null; hintTiles = null;
+  msg("Board reshuffled into a fresh solvable arrangement.", "warn");
+  hud(); draw();
+}
+
+// ----- a move -----
+function onTile(t){
+  if (won || !t) return;
+  if (!isFree(t)){ msg("That tile is blocked — free a side or clear the tile on top first.", "warn"); return; }
+  if (!running){ running = true; startTime = Date.now() - elapsed; tick(); }
+
+  if (selected === t){ selected = null; draw(); return; }
+
+  if (selected && selected.face === t.face){
+    selected.gone = true; t.gone = true;
+    undoStack.push([selected, t]);
+    matches++; selected = null; hud();
+    if (tiles.every(x => x.gone)) return win();
+    if (!hasMove()) msg("No matching free pair left — hit 🔀 Shuffle to rescue the board.", "warn");
+    else            msg("Nice match — keep peeling the stack apart.");
+    draw(); return;
+  }
+
+  selected = t;
+  msg("Selected " + t.face + " — now click another free " + t.face + ".");
+  draw();
+}
+function undo(){
+  if (won || !undoStack.length) return;
+  const [a, b] = undoStack.pop();
+  a.gone = false; b.gone = false;
+  matches = Math.max(0, matches - 1); selected = null;
+  msg("Undid the last match."); hud(); draw();
+}
+function win(){
+  won = true; running = false; cancelAnimationFrame(timerRAF);
+  msg("🎉 Board cleared in " + fmt(elapsed) + " over " + matches + " matches. Hit New game to play again.", "win");
+  draw();
+}
+function showHint(){
+  if (won) return;
+  const pair = findHint();
+  if (!pair){ msg("No free pair available — try 🔀 Shuffle.", "warn"); return; }
+  hintTiles = pair; draw();
+  setTimeout(() => { hintTiles = null; draw(); }, 1200);
+}
+
+// ----- timer -----
+function fmt(ms){ const s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+function tick(){
+  if (!running) return;
+  elapsed = Date.now() - startTime;
+  document.getElementById("hTime").textContent = fmt(elapsed);
+  timerRAF = requestAnimationFrame(tick);
+}
+
+// ----- HUD -----
+function hud(){
+  document.getElementById("hLeft").textContent  = tiles.filter(t => !t.gone).length;
+  document.getElementById("hMatch").textContent = matches;
+  document.getElementById("hFree").textContent  = freeTiles().length;
+}
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : tone === "warn" ? "text-amber-600" : "text-slate-600");
+}
+
+// ----- drawing -----
+function roundRect(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+}
+function drawTile(t){
+  const p = screenPos(t);
+  const sel  = t === selected;
+  const hint = hintTiles && hintTiles.indexOf(t) !== -1;
+  const free = isFree(t);
+  // 3D bottom-right edge
+  ctx.fillStyle = "#b9a37a";
+  roundRect(p.x + EDGE, p.y + EDGE, TW, TH, 8); ctx.fill();
+  // top face
+  ctx.fillStyle = sel ? "#fde68a" : hint ? "#bbf7d0" : "#fbf6e9";
+  roundRect(p.x, p.y, TW, TH, 8); ctx.fill();
+  // border
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = sel ? "#d97706" : hint ? "#16a34a" : "#9aa8bd";
+  roundRect(p.x, p.y, TW, TH, 8); ctx.stroke();
+  // highlight free tiles when the toggle is on
+  if (showFree && free && !sel && !hint){
+    ctx.strokeStyle = "#22c55e"; ctx.lineWidth = 2.5;
+    roundRect(p.x - 1.5, p.y - 1.5, TW + 3, TH + 3, 9); ctx.stroke();
+  }
+  // face
+  ctx.font = Math.round(TH * 0.46) + 'px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.globalAlpha = free ? 1 : 0.55;
+  ctx.fillText(t.face, p.x + TW / 2, p.y + TH * 0.54);
+  ctx.globalAlpha = 1;
+}
+function draw(){
+  ctx.fillStyle = "#134e33"; ctx.fillRect(0, 0, cv.width, cv.height);
+  tiles.filter(t => !t.gone)
+       .slice()
+       .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x)
+       .forEach(drawTile);
+}
+
+// ----- input (only while the LOOK tab is visible) -----
+function looking(){ return !document.getElementById("look").classList.contains("hidden"); }
+function tileAt(px, py){
+  let best = null;
+  for (const t of tiles){
+    if (t.gone) continue;
+    const p = screenPos(t);
+    if (px >= p.x && px <= p.x + TW && py >= p.y && py <= p.y + TH){
+      if (!best || t.z > best.z ||
+          (t.z === best.z && (t.y > best.y || (t.y === best.y && t.x > best.x))))
+        best = t;
+    }
+  }
+  return best;
+}
+function toCanvas(e){
+  const r = cv.getBoundingClientRect();
+  const src = e.touches && e.touches[0] ? e.touches[0] : e;
+  return { px: (src.clientX - r.left) * (cv.width / r.width),
+           py: (src.clientY - r.top)  * (cv.height / r.height) };
+}
+function pointer(e){
+  if (!looking()) return;
+  e.preventDefault();
+  const { px, py } = toCanvas(e);
+  onTile(tileAt(px, py));
+}
+cv.addEventListener("mousedown", pointer);
+cv.addEventListener("touchstart", pointer, { passive: false });
+
+document.getElementById("newBtn").onclick     = deal;
+document.getElementById("shuffleBtn").onclick = shuffleBoard;
+document.getElementById("hintBtn").onclick    = showHint;
+document.getElementById("undoBtn").onclick    = undo;
+document.getElementById("freeBtn").onclick    = () => { showFree = !showFree; draw(); };
+
+document.addEventListener("keydown", e => {
+  if (!looking()) return;
+  const k = e.key.toLowerCase();
+  if (k === "n") deal();
+  else if (k === "s") shuffleBoard();
+  else if (k === "h") showHint();
+  else if (k === "u") undo();
+  else if (k === "f"){ showFree = !showFree; draw(); }
+});
+
+deal();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. A tile is three numbers and a face", why:"There is no board array and no image atlas doing the work — the entire game is a flat list of tiny objects. Each tile carries a column and a row measured in half-tile units, the layer it sits on, the face it is showing, and a flag for whether it has already been cleared. Half-tile units matter: because the unit is half a tile wide, an upper layer can be shoved half a tile across so it straddles the tiles beneath, which is exactly the classic mahjong look. Everything the game ever does is a question asked of this one list, so if you understand the four fields on a tile you understand the whole data model.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a tile = 4 facts<br><br>x, y &nbsp;→ column & row (half-tile units)<br>z &nbsp;&nbsp;&nbsp;→ which layer (0 = base)<br>face → the picture to match<br>gone → cleared yet?</div>`, code:`const FACES = ["🀄","🎋","🌸","🔥","💧","⭐","🌙","🍀","🔔"];
+
+function buildTiles(){
+  tiles = []; let id = 0;
+  const push = (x,y,z) => tiles.push({ x,y,z, id:id++, face:null, gone:false });
+  for (let r=0;r<3;r++) for (let c=0;c<8;c++) push(c*2, r*2, 0);     // base 8×3
+  for (let r=0;r<2;r++) for (let c=0;c<6;c++) push(c*2+2, r*2+1, 1); // top 6×2
+}` },
+
+ { title:"2. One overlap test does everything", why:"Almost every rule in the game reduces to a single geometric question: do two tiles cover overlapping ground? Each tile occupies a 2×2 square in half-units, so two footprints overlap precisely when their columns differ by less than two and their rows also differ by less than two. That one comparison is astonishingly reusable. Ask it about a tile on a higher layer and it tells you whether something is sitting on top. Ask it about the same layer, restricted to the horizontal axis, and it tells you whether a neighbour is pressed against your side. Nail this line and the free rule practically writes itself.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">footprints overlap?<br><br>|Δx| < 2 &nbsp;AND&nbsp; |Δy| < 2<br><br>same layer → beside me<br>higher layer → on top of me</div>`, code:`function overlapXY(a, b){
+  return Math.abs(a.x - b.x) < 2 &&
+         Math.abs(a.y - b.y) < 2;
+}` },
+
+ { title:"3. The free rule: uncovered AND a side open", why:"This is the single idea that makes Mahjong Solitaire a game rather than a pile. A tile can be picked up only when two conditions both hold. First, nothing may be resting on it — no live tile on a higher layer can overlap its footprint. Second, it must be reachable from the side — at least one of its immediate left or right neighbours on the same layer must be missing. A tile buried under another, or hemmed in with neighbours on both sides, is simply locked, and stays locked until whatever traps it is cleared. Notice the elegant consequence: removing tiles can only ever free more tiles, never trap them, so the board keeps opening up.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">FREE = not covered<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; AND (left open OR right open)<br><br>█▓█ &nbsp; middle ▓ is walled in → locked<br>&nbsp;▓█ &nbsp; an end tile has an open side → free</div>`, code:`function isFree(t, gone = u => u.gone){
+  if (gone(t)) return false;
+  for (const u of tiles)                         // nothing on top
+    if (u !== t && !gone(u) && u.z > t.z && overlapXY(u,t)) return false;
+  let left = false, right = false;               // a side open?
+  for (const u of tiles){
+    if (u === t || gone(u) || u.z !== t.z) continue;
+    if (Math.abs(u.y - t.y) < 2){
+      if (u.x === t.x - 2) left  = true;
+      if (u.x === t.x + 2) right = true;
+    }
+  }
+  return !left || !right;
+}` },
+
+ { title:"4. The match rule: same face, both free", why:"After the free rule, matching is refreshingly plain. You click one free tile to select it, then click a second free tile; if the two faces are identical, both vanish. Click the selected tile a second time and you simply cancel the selection, and clicking any other free tile moves the selection there instead of matching. There is no dragging and no scoring subtlety — the whole interaction is select, compare one string, remove. Because a removal only frees more tiles, each successful pair is pure progress toward an empty board.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">pick one free tile → 🌸<br>pick a second free tile → 🌸<br><br>same face? &nbsp;→ both disappear<br>tap the same tile → cancel</div>`, code:`if (selected && selected.face === t.face){
+  selected.gone = t.gone = true;   // clear the pair
+  matches++; selected = null;
+} else {
+  selected = t;                    // pick / switch selection
+}` },
+
+ { title:"5. Deal a board that can be won", why:"If you just scattered the faces at random, a large share of boards would be impossible to finish, and the player would have no way of knowing. The fix is a beautiful piece of backwards thinking. Pretend the board is completely full, then repeatedly find the tiles that are free right now, remove any two of them together, and stamp that pair whatever face comes next out of a shuffled bag. Every pair you stamp was genuinely free at the instant you removed it, so the exact sequence of removals you just performed is, by construction, a valid winning solution. The player sees a random-looking board; underneath, a guaranteed path home already exists.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">build the deal in REVERSE<br><br>full board → find free tiles<br>→ remove a pair, stamp it a face<br>→ repeat until empty<br><br>replay that order = guaranteed win</div>`, code:`function generateSolvable(activeIds, faceCounts){
+  const present = {}; activeIds.forEach(id => present[id] = true);
+  const gone = u => !present[u.id];
+  const bag = [];
+  for (const f in faceCounts)
+    for (let i=0;i<faceCounts[f]/2;i++) bag.push(f);
+  shuffle(bag);
+  const assign = {}; let left = activeIds.length;
+  while (left > 0){
+    const free = activeIds.filter(id => present[id] && isFree(tiles[id], gone));
+    if (free.length < 2) return null;         // retry
+    shuffle(free);
+    const [a,b] = free, f = bag.pop();
+    assign[a] = assign[b] = f;                 // this pair matches
+    present[a] = present[b] = false; left -= 2;
+  }
+  return assign;
+}` },
+
+ { title:"6. Detecting a deadlock", why:"A deal that is solvable in theory can still be played into a corner, because each face has four copies and you are free to pair the wrong two of them, quietly burying the tiles you would have needed later. So after every single match the game runs a tiny check: gather the tiles that are free at this moment and ask whether any face shows up at least twice among them. Group the free tiles by their face, and the first group that reaches two means a legal move still exists. If no face reaches two, there is nothing you can match and the board is deadlocked — at which point the game says so rather than letting you flail.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">after every move, ask:<br><br>among FREE tiles,<br>does any face appear ≥ 2 times?<br><br>yes → a move exists<br>no &nbsp;→ 💀 deadlock, offer shuffle</div>`, code:`function freeTiles(){ return tiles.filter(t => !t.gone && isFree(t)); }
+
+function hasMove(){
+  const count = {};
+  for (const t of freeTiles()){
+    count[t.face] = (count[t.face] || 0) + 1;
+    if (count[t.face] >= 2) return true;   // two free tiles share a face
+  }
+  return false;                            // deadlock
+}` },
+
+ { title:"7. Rescue with a solvable reshuffle", why:"When you hit a deadlock, or just paint yourself into a hard spot, the shuffle button is your way out — but a naive shuffle that scatters the remaining faces could easily hand you another dead board. Instead it does something smarter. It collects the faces still sitting on the table, and because you always clear tiles two at a time each face's remaining count is guaranteed to be even, then feeds exactly those tiles and counts back into the same backwards generator from step five. The outcome is a fresh arrangement of the very same faces that is, once more, provably completable from where you stand.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">stuck? reshuffle what's LEFT<br><br>remaining faces (each count even)<br>→ run the backwards generator again<br>→ new layout, still solvable</div>`, code:`function shuffleBoard(){
+  const active = tiles.filter(t => !t.gone).map(t => t.id);
+  const counts = {};
+  for (const id of active)
+    counts[tiles[id].face] = (counts[tiles[id].face] || 0) + 1;
+  let deal = null, tries = 0;
+  while (!deal && tries++ < 300)
+    deal = generateSolvable(active, counts);   // stay solvable
+  for (const id of active) tiles[id].face = deal[id];
+  draw();
+}` },
+
+ { title:"8. Drawing the stack in fake 3D", why:"The layered look is pure drawing, not data. Half-unit columns and rows are turned into pixels by scaling, and then every step up in layer nudges a tile a fixed amount up and to the left, so the tiles underneath peek out along their bottom-right. The only subtlety is order: draw the live tiles from back to front — lowest layer first, and within a layer from top to bottom — so each tile paints over the ones it should sit in front of. Each tile is just an ivory rounded rectangle with a slightly darker rectangle behind it for a raised edge, and a large emoji for its face.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">layer up ⇒ shift up-left<br><br>&nbsp;┌──┐<br>┌┴─┐│ &nbsp; upper tile offset<br>│&nbsp;&nbsp;│┘ &nbsp; lower peeks out bottom-right<br>└──┘<br><br>draw back → front</div>`, code:`const TW=46, TH=60, LDX=-8, LDY=-10;
+function screenPos(t){
+  return { x: OX + (t.x/2)*TW + t.z*LDX,
+           y: OY + (t.y/2)*TH + t.z*LDY };
+}
+function draw(){
+  ctx.fillStyle = "#134e33"; ctx.fillRect(0,0,cv.width,cv.height);
+  tiles.filter(t => !t.gone)
+       .sort((a,b) => a.z-b.z || a.y-b.y || a.x-b.x)   // back → front
+       .forEach(drawTile);
+}` },
+
+ { title:"9. Clicking the top-most tile", why:"Because higher layers overlap the ones beneath, a single click can fall on a little tower of stacked tiles, and you almost always mean the one on top. So the hit test first maps the mouse or finger into canvas coordinates — remembering that the canvas may be scaled down by CSS, so the click is multiplied back up by the ratio of internal size to displayed size — and then walks every live tile whose rectangle contains the point, keeping the one closest to the viewer: highest layer first, and within a layer the one that was drawn last. Only after that does the free rule get consulted to decide whether the click actually does anything.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a click can hit a stack<br><br>keep the tile that is<br>highest layer, then drawn-last<br><br>then ask: is THAT tile free?</div>`, code:`function tileAt(px, py){
+  let best = null;
+  for (const t of tiles){
+    if (t.gone) continue;
+    const p = screenPos(t);
+    if (px>=p.x && px<=p.x+TW && py>=p.y && py<=p.y+TH)
+      if (!best || t.z > best.z ||
+          (t.z === best.z && (t.y > best.y ||
+            (t.y === best.y && t.x > best.x))))
+        best = t;                     // topmost / frontmost
+  }
+  return best;
+}` },
+
+ { title:"10. The move, then re-check the board", why:"One handler ties every rule together. It ignores blocked tiles outright, starts the clock on your first real move, and on a valid pair clears both tiles and bumps the match counter. Then it asks the two questions that end a turn, in order: is the board completely empty, in which case you have won, or is there no matching free pair left, in which case the board is deadlocked and a reshuffle is offered. Meanwhile a featherweight animation-frame loop does nothing but advance the timer display — the board itself is entirely event-driven and only redraws when something actually changes, which keeps the whole thing calm and cheap.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every click:<br><br>blocked? → ignore<br>match a pair → clear + count<br>board empty? → 🎉 win<br>no move? → 💀 deadlock → shuffle</div>`, code:`function onTile(t){
+  if (!isFree(t)) return msg("That tile is blocked.");
+  if (!running){ running = true; startTime = Date.now(); tick(); }
+  if (selected === t){ selected = null; return draw(); }
+  if (selected && selected.face === t.face){
+    selected.gone = t.gone = true; matches++; selected = null;
+    if (tiles.every(x => x.gone))  return win();
+    if (!hasMove())  msg("Deadlocked — hit Shuffle.");
+  } else selected = t;
+  hud(); draw();
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3000); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>

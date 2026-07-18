@@ -43,6 +43,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 34 — Hangman](https://dev48v.infy.uk/game/day34-hangman.html) — `day34-hangman.html`
 - [GameFromZero · Day 35 — Klondike Solitaire](https://dev48v.infy.uk/game/day35-solitaire.html) — `day35-solitaire.html`
 - [GameFromZero · Day 36 — Lunar Lander](https://dev48v.infy.uk/game/day36-lunar-lander.html) — `day36-lunar-lander.html`
+- [GameFromZero · Day 37 — Mahjong Solitaire](https://dev48v.infy.uk/game/day37-mahjong-solitaire.html) — `day37-mahjong-solitaire.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
