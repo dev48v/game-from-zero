@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 39 — Chess</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:28px; }
+
+  /* ---- the board ---- */
+  .board-wrap { position:relative; display:inline-block; }
+  #board {
+    display:grid; grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(8,1fr);
+    width:min(90vw, 480px); aspect-ratio:1; border:7px solid #6b4423; border-radius:10px;
+    overflow:hidden; box-shadow:0 18px 40px rgba(0,0,0,.35); touch-action:manipulation;
+  }
+  .sq { position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .sq.light { background:#eed9b6; }
+  .sq.dark  { background:#b58863; }
+  .sq:hover { filter:brightness(1.06); }
+  .pc { font-size:min(9vw,40px); line-height:1; pointer-events:none; user-select:none; }
+  .pc.white { color:#fbfbfd; text-shadow:0 0 1px #0f172a, 1px 1px 1px #0f172a, -1px -1px 1px #0f172a, 1px -1px 1px #0f172a, -1px 1px 1px #0f172a; }
+  .pc.black { color:#232733; text-shadow:0 0 1px #cbd5e1, 0 1px 1px rgba(255,255,255,.4); }
+  .sq.sel   { box-shadow: inset 0 0 0 4px rgba(250,204,21,.95); }
+  .sq.check { box-shadow: inset 0 0 0 4px rgba(239,68,68,.95); }
+  .sq.last::after  { content:""; position:absolute; inset:0; background:rgba(250,204,21,.30); pointer-events:none; }
+  .sq.dot::before  { content:""; position:absolute; width:32%; height:32%; border-radius:50%; background:rgba(16,185,129,.6); pointer-events:none; }
+  .sq.cap::before  { content:""; position:absolute; inset:8%; border-radius:50%; border:5px solid rgba(16,185,129,.65); box-sizing:border-box; pointer-events:none; }
+  .coord { position:absolute; font-size:9px; font-weight:800; pointer-events:none; opacity:.75; }
+  .coord.rank { top:2px; left:3px; }
+  .coord.file { bottom:1px; right:3px; }
+  .sq.light .coord { color:#b58863; }
+  .sq.dark  .coord { color:#eed9b6; }
+
+  /* captured trays + move list */
+  #capW .pc, #capB .pc { font-size:20px; }
+  .ml-row { display:grid; grid-template-columns:34px 1fr 1fr; gap:4px; padding:2px 6px; font-size:13px; font-variant-numeric:tabular-nums; }
+  .ml-row:nth-child(odd) { background:#f8fafc; }
+  .ml-n { color:#94a3b8; }
+  .ml-w, .ml-b { font-family:ui-monospace,Menlo,monospace; color:#334155; }
+
+  /* promotion overlay */
+  .promo-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,.6); border-radius:10px; z-index:20; }
+  .promo-inner { background:#fff; border-radius:14px; padding:14px 16px; box-shadow:0 12px 30px rgba(0,0,0,.4); text-align:center; }
+  .promo-title { font-weight:700; font-size:13px; color:#334155; margin-bottom:8px; }
+  .promo-row { display:flex; gap:8px; }
+  .promo-row button { width:52px; height:52px; border-radius:10px; background:#f1f5f9; border:2px solid #cbd5e1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .promo-row button:hover { border-color:#10b981; background:#ecfdf5; }
+  .pgl.pc { font-size:34px; }
+
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .legend { color:#64748b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 39</div>
+      <h1 class="text-xl font-bold">♟️ Chess — Set Up the Full Board and Move Every Piece by the True Rules, Right Down to Check, Castling and En Passant</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-5xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">A full game of chess for two, with every rule enforced.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">The board starts in the standard position — sixteen pieces a side in unicode glyphs. <strong>Click one of your pieces</strong> and every square it may legally move to lights up: a green dot for a quiet move, a green ring around a piece you can capture. Click a highlighted square to move; the turn passes to your opponent. Every piece obeys its <strong>true movement rule</strong> — the pawn steps one square forward, may leap two on its first move, and captures only on the diagonal; the knight jumps its L; the bishop, rook and queen slide until something blocks them; the king shuffles one square at a time. The engine will never let you make an illegal move, and it will never let you leave your own king in <strong>check</strong> — those moves simply do not light up. Deliver check and the enemy king glows red; trap it with no legal reply and it is <strong>checkmate</strong>; leave the mover with no move but no check and it is <strong>stalemate</strong>. <strong>Castling</strong>, <strong>en passant</strong> and pawn <strong>promotion</strong> are all in. <strong>↩ Undo</strong> takes moves back and <strong>⟲ Flip</strong> spins the board to the other player's view.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap items-center">
+        <div>Turn: <span id="turnDot" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#f8fafc;border:1px solid #94a3b8;vertical-align:middle;margin-right:4px;"></span><span id="hTurn" class="stat text-slate-700">White</span></div>
+        <div>Move: <span id="hMove" class="stat text-emerald-600">1</span></div>
+        <div>Status: <span id="hStatus" class="stat text-slate-700">White to move</span></div>
+      </div>
+
+      <div class="flex justify-center gap-6 flex-wrap items-start">
+        <div class="board-wrap">
+          <div id="board"></div>
+          <div id="promo" class="promo-overlay hidden">
+            <div class="promo-inner">
+              <div class="promo-title">Promote pawn to:</div>
+              <div class="promo-row">
+                <button data-p="q" onclick="choosePromo('q')"><span class="pgl pc"></span></button>
+                <button data-p="r" onclick="choosePromo('r')"><span class="pgl pc"></span></button>
+                <button data-p="b" onclick="choosePromo('b')"><span class="pgl pc"></span></button>
+                <button data-p="n" onclick="choosePromo('n')"><span class="pgl pc"></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="text-left" style="width:230px;max-width:90vw;">
+          <div class="bg-white rounded-xl border border-slate-200 p-3 mb-3">
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mb-1">Captured by White</div>
+            <div id="capW" class="min-h-[26px]"></div>
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mt-2 mb-1">Captured by Black</div>
+            <div id="capB" class="min-h-[26px]"></div>
+          </div>
+          <div class="bg-white rounded-xl border border-slate-200 p-2">
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mb-1 px-1">Moves</div>
+            <div id="moveList" style="max-height:280px;overflow:auto;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-lg text-slate-600">White to move — click a piece to see its legal squares.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn"  class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">♟️ New game</button>
+        <button id="undoBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">↩ Undo</button>
+        <button id="flipBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">⟲ Flip board</button>
+      </div>
+      <p class="text-xs legend mt-3">Click a <strong>piece</strong> to pick it, then a <strong>green square</strong> to move &nbsp;·&nbsp; <span class="keycap">N</span> new &nbsp; <span class="keycap">U</span> undo &nbsp; <span class="keycap">F</span> flip</p>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">There are no images and no chess library here — the whole board is an 8&times;8 grid of single characters, upper-case for White and lower-case for Black, with a dot for an empty square. Each piece knows its own geometry: sliding pieces march down a ray until a friend or foe blocks them, the knight and king step to a small fixed set of offsets, and the pawn has its own special forward-versus-diagonal split. Generating a piece's <em>pseudo-legal</em> moves is just that geometry; turning them into truly <em>legal</em> moves is one extra filter — play each candidate on a throwaway copy of the board and keep it only if your own king is not left under attack. That same "is this square attacked?" test drives everything else: it decides check, it forbids castling through fire, and after every move it separates checkmate from stalemate by asking whether the side to move has any legal reply at all. All vanilla JavaScript, offline, one file.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the board thinks</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">The board is an 8&times;8 grid of single characters — upper-case for White, lower-case for Black, a dot for empty. Every piece contributes its own move geometry: sliders march along rays until blocked, the knight and king hop to fixed offsets, and the pawn splits forward moves from diagonal captures. One "is this square attacked?" routine, read outward from a square, powers check, castling safety and the legal-move filter. A legal move is any pseudo-legal move that does not leave your own king under attack. After each move, the side to move is checkmated if it is in check with no reply, and stalemated if it simply has no reply. About 180 lines of vanilla JavaScript, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The board is 64 characters</h3></div>
+        <p class="text-sm text-slate-600 mb-3">No sprites, no objects — the entire position is eight strings, split into an 8&times;8 array of characters. An upper-case letter is a White piece, a lower-case letter is Black, and a dot is an empty square. Row 0 is Black's back rank at the top and row 7 is White's at the bottom. Two one-line helpers decode any character into a colour.</p>
+        <div class="relative"><pre>const START = [
+  "rnbqkbnr",   // row 0 — black back rank
+  "pppppppp",   // row 1 — black pawns
+  "........",
+  "........",
+  "........",
+  "........",
+  "PPPPPPPP",   // row 6 — white pawns
+  "RNBQKBNR"    // row 7 — white back rank
+];
+const wht  = p =&gt; p !== "." &amp;&amp; p === p.toUpperCase();   // White?
+const side = p =&gt; p === "." ? null : (wht(p) ? "w" : "b");
+const opp  = s =&gt; s === "w" ? "b" : "w";
+let board = START.map(row =&gt; row.split(""));</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Directions and a safe bounds check</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Most of chess geometry lives in four little offset tables: the knight's eight L-jumps, the king's eight neighbours, the rook's four straight rays and the bishop's four diagonals (the queen is simply rook plus bishop). One <code>inB</code> helper keeps every coordinate on the 8&times;8 grid so nothing else has to think about the edges.</p>
+        <div class="relative"><pre>const inB    = (r,c) =&gt; r&gt;=0 &amp;&amp; r&lt;8 &amp;&amp; c&gt;=0 &amp;&amp; c&lt;8;
+const N_OFF  = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]; // knight
+const K_OFF  = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];  // king
+const ROOK_D = [[-1,0],[1,0],[0,-1],[0,1]];      // rook / queen
+const BISH_D = [[-1,-1],[-1,1],[1,-1],[1,1]];    // bishop / queen</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Sliding pieces march until blocked</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The rook, bishop and queen all share one behaviour: pick a direction and keep stepping. Every empty square along the ray is a legal destination; the first piece you meet stops you — you may capture it if it is an enemy, but you can never jump past it. That single loop, run over the right set of directions, covers three of the six pieces.</p>
+        <div class="relative"><pre>function slide(bd, r, c, dirs, me, out){
+  for (const [dr,dc] of dirs){
+    let tr = r+dr, tc = c+dc;
+    while (inB(tr,tc)){
+      const q = bd[tr][tc];
+      if (q === ".") out.push({fr:r,fc:c,tr,tc});             // empty — keep going
+      else { if (side(q) !== me) out.push({fr:r,fc:c,tr,tc}); break; } // capture, then stop
+      tr += dr; tc += dc;
+    }
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Knight and king jump to fixed offsets</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The knight and the king never slide — they land on a small, fixed set of squares around them, with no notion of blocking (the knight famously leaps over anything). So their move generator is trivial: try every offset, and keep the target if it is on the board and not occupied by one of your own pieces.</p>
+        <div class="relative"><pre>function jumps(bd, r, c, offs, me, out){
+  for (const [dr,dc] of offs){
+    const tr = r+dr, tc = c+dc;
+    if (inB(tr,tc) &amp;&amp; side(bd[tr][tc]) !== me)   // empty or enemy
+      out.push({fr:r,fc:c,tr,tc});
+  }
+}
+// knight: jumps(bd,r,c,N_OFF,me,out)   king: jumps(bd,r,c,K_OFF,me,out)</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The pawn is the fussy one</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The pawn is the only piece that moves and captures differently. It steps one square straight forward onto an empty square, may go two from its home rank, and captures only diagonally onto an enemy. Reaching the far rank flags a <em>promotion</em>; a diagonal onto the special <em>en passant</em> square captures a pawn that just slipped two squares past.</p>
+        <div class="relative"><pre>function pawnMoves(bd, r, c, me, ep, out){
+  const dr    = me === "w" ? -1 : 1;   // white marches up
+  const start = me === "w" ?  6 : 1;   // home rank
+  const last  = me === "w" ?  0 : 7;   // promotion rank
+  const add = (tr,tc,flag) =&gt; out.push({fr:r,fc:c,tr,tc,flag});
+  if (bd[r+dr][c] === "."){                          // one forward
+    add(r+dr, c, r+dr===last ? "promo" : null);
+    if (r === start &amp;&amp; bd[r+2*dr][c] === ".") add(r+2*dr, c, "double");
+  }
+  for (const dc of [-1,1]){                           // diagonal captures
+    const tr=r+dr, tc=c+dc; if (!inB(tr,tc)) continue;
+    const q = bd[tr][tc];
+    if (q !== "." &amp;&amp; side(q) !== me) add(tr,tc, tr===last ? "promo" : null);
+    else if (ep &amp;&amp; ep.r===tr &amp;&amp; ep.c===tc) add(tr,tc,"ep");   // en passant
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Castling has the most conditions</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Castling is the king's special two-square move toward a rook. It is legal only when neither piece has moved (tracked as <em>rights</em>), the squares between them are empty, the king is not currently in check, and it neither passes through nor lands on a square the enemy attacks. That last clause is why the attack test from the next step is needed right here.</p>
+        <div class="relative"><pre>function castleMoves(bd, me, castling, out){
+  const row = me==="w" ? 7 : 0, en = opp(me), R = me==="w" ? "R" : "r";
+  if (isAttacked(bd, row, 4, en)) return;             // can't castle out of check
+  if (castling[me+"K"] &amp;&amp; bd[row][5]==="." &amp;&amp; bd[row][6]==="." &amp;&amp; bd[row][7]===R
+      &amp;&amp; !isAttacked(bd,row,5,en) &amp;&amp; !isAttacked(bd,row,6,en))
+    out.push({fr:row,fc:4,tr:row,tc:6,flag:"castleK"});
+  if (castling[me+"Q"] &amp;&amp; bd[row][3]==="." &amp;&amp; bd[row][2]==="." &amp;&amp; bd[row][1]==="." &amp;&amp; bd[row][0]===R
+      &amp;&amp; !isAttacked(bd,row,3,en) &amp;&amp; !isAttacked(bd,row,2,en))
+    out.push({fr:row,fc:4,tr:row,tc:2,flag:"castleQ"});
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Is this square attacked?</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One routine underpins the whole rulebook: given a square, is any enemy piece hitting it? Rather than generate every enemy move, we look <em>outward</em> from the square — pawn diagonals, knight offsets, king neighbours, and rays for the sliders. This is what tells us the king is in check, whether castling is safe, and whether a move is legal.</p>
+        <div class="relative"><pre>function isAttacked(bd, r, c, by){
+  const pr = by==="w" ? r+1 : r-1;                 // pawns attack diagonally
+  for (const pc of [c-1,c+1])
+    if (inB(pr,pc) &amp;&amp; bd[pr][pc]===(by==="w"?"P":"p")) return true;
+  for (const [dr,dc] of N_OFF)                     // knights
+    if (inB(r+dr,c+dc) &amp;&amp; bd[r+dr][c+dc]===(by==="w"?"N":"n")) return true;
+  for (const [dr,dc] of K_OFF)                     // enemy king
+    if (inB(r+dr,c+dc) &amp;&amp; bd[r+dr][c+dc]===(by==="w"?"K":"k")) return true;
+  for (const [dr,dc] of ROOK_D) if (rayHits(bd,r,c,dr,dc,by,"rq")) return true;
+  for (const [dr,dc] of BISH_D) if (rayHits(bd,r,c,dr,dc,by,"bq")) return true;
+  return false;
+}
+function rayHits(bd,r,c,dr,dc,by,types){
+  let rr=r+dr, cc=c+dc;
+  while (inB(rr,cc)){
+    const q = bd[rr][cc];
+    if (q !== ".") return side(q)===by &amp;&amp; types.includes(q.toLowerCase());
+    rr+=dr; cc+=dc;
+  }
+  return false;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Pseudo-legal becomes legal</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The geometry above gives <em>pseudo-legal</em> moves — correct for the piece, but blind to your own king. The real rule of chess is that you may never leave your king in check. So we play each candidate on a throwaway copy of the board and keep it only if your king is safe afterwards. That one filter is the difference between a move generator and a legal chess engine.</p>
+        <div class="relative"><pre>function legalMoves(bd, r, c){
+  const me = side(bd[r][c]);
+  return pseudoMoves(bd, r, c).filter(m =&gt; {
+    const nb = applied(bd, m);                 // play it on a copy
+    const k  = findKing(nb, me);
+    return !isAttacked(nb, k.r, k.c, opp(me)); // king still safe?
+  });
+}
+function applied(bd, m){                        // new board with m played
+  const nb = bd.map(row =&gt; row.slice()), p = nb[m.fr][m.fc];
+  if (m.flag==="ep") nb[m.fr][m.tc] = ".";                  // remove passed pawn
+  nb[m.tr][m.tc] = p; nb[m.fr][m.fc] = ".";
+  if (m.flag==="castleK"){ nb[m.tr][5]=nb[m.tr][7]; nb[m.tr][7]="."; }
+  if (m.flag==="castleQ"){ nb[m.tr][3]=nb[m.tr][0]; nb[m.tr][0]="."; }
+  return nb;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Check, checkmate, stalemate</h3></div>
+        <p class="text-sm text-slate-600 mb-3">After a move, look at the side who must now reply. Two questions decide the game. Is their king attacked? And do they have any legal move at all? In check with no move is <strong>checkmate</strong>; not in check with no move is <strong>stalemate</strong> (a draw); in check with a move is simply <strong>check</strong>; otherwise play continues.</p>
+        <div class="relative"><pre>function gameState(bd, stm){                       // stm = side to move
+  const k = findKing(bd, stm);
+  const inCheck = isAttacked(bd, k.r, k.c, opp(stm));
+  let canMove = false;
+  for (let r=0; r&lt;8 &amp;&amp; !canMove; r++)
+    for (let c=0; c&lt;8; c++)
+      if (side(bd[r][c])===stm &amp;&amp; legalMoves(bd,r,c).length){ canMove=true; break; }
+  if (!canMove) return inCheck ? "checkmate" : "stalemate";
+  return inCheck ? "check" : "normal";
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Click to move, and paint the board</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One click handler ties it together. Click your own piece to select it and light up its legal squares; click a highlighted square to move. Rendering is a loop over 64 cells that drops a unicode glyph on each occupied square, rings the selection, dots the quiet targets and rings the captures — no images anywhere.</p>
+        <div class="relative"><pre>boardEl.addEventListener("click", e =&gt; {
+  const cell = e.target.closest(".sq"); if (!cell) return;
+  const r = +cell.dataset.r, c = +cell.dataset.c;
+  if (selected){
+    const m = targets.find(x =&gt; x.tr===r &amp;&amp; x.tc===c);   // a highlighted square?
+    if (m){ doMove(m); return; }                          // make the move
+  }
+  if (side(board[r][c]) === turn){                         // pick your own piece
+    selected = {r,c};
+    targets  = legalMoves(board, r, c);                    // light its legal squares
+  } else { selected = null; targets = []; }
+  render();
+});
+// GLYPH = { k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" }  — coloured by CSS class</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 39 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built a full, rule-enforcing chess board end to end: the position as 64 characters; offset tables and a bounds check; sliders that march until blocked; the knight and king as fixed jumps; the pawn's forward-versus-diagonal split with promotion and en passant; castling with all its conditions; a single "is this square attacked?" routine; the pseudo-legal-to-legal filter that never lets you expose your own king; the check / checkmate / stalemate decision; and one click handler over a glyph-painted grid. Next: add a search-based opponent with minimax and alpha-beta, full SAN notation with move disambiguation, or a threefold-repetition and fifty-move draw tracker. <strong>👉 Tomorrow — Day 40: Gomoku — drop stones on a grid and race to make five in a row.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== CHESS ENGINE (vanilla) =====
+const START = [
+  "rnbqkbnr",
+  "pppppppp",
+  "........",
+  "........",
+  "........",
+  "........",
+  "PPPPPPPP",
+  "RNBQKBNR"
+];
+const GLYPH  = { k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" };
+const N_OFF  = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+const K_OFF  = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+const ROOK_D = [[-1,0],[1,0],[0,-1],[0,1]];
+const BISH_D = [[-1,-1],[-1,1],[1,-1],[1,1]];
+
+const inB  = (r,c) => r>=0 && r<8 && c>=0 && c<8;
+const wht  = p => p !== "." && p === p.toUpperCase();
+const side = p => p === "." ? null : (wht(p) ? "w" : "b");
+const opp  = s => s === "w" ? "b" : "w";
+
+let board, turn, castling, ep, selected, targets, history, undoStack, gameOver, statusText, lastMove, flipped, captured, pendingMove;
+
+function newBoard(){
+  board = START.map(row => row.split(""));
+  turn = "w";
+  castling = { wK:true, wQ:true, bK:true, bQ:true };
+  ep = null; selected = null; targets = []; history = []; undoStack = [];
+  gameOver = false; lastMove = null; captured = { w:[], b:[] }; pendingMove = null;
+  statusText = "White to move";
+}
+
+// ----- pseudo-legal move generation -----
+function pseudoMoves(bd, r, c){
+  const p = bd[r][c];
+  if (p === ".") return [];
+  const me = side(p), t = p.toLowerCase(), out = [];
+  const push = (tr,tc,flag) => out.push({ fr:r, fc:c, tr, tc, flag: flag || null });
+
+  if (t === "p"){
+    const dr = me === "w" ? -1 : 1;
+    const start = me === "w" ? 6 : 1;
+    const last  = me === "w" ? 0 : 7;
+    if (inB(r+dr,c) && bd[r+dr][c] === "."){
+      push(r+dr, c, r+dr === last ? "promo" : null);
+      if (r === start && bd[r+2*dr][c] === ".") push(r+2*dr, c, "double");
+    }
+    for (const dc of [-1,1]){
+      const tr = r+dr, tc = c+dc;
+      if (!inB(tr,tc)) continue;
+      const q = bd[tr][tc];
+      if (q !== "." && side(q) !== me) push(tr, tc, tr === last ? "promo" : null);
+      else if (ep && ep.r === tr && ep.c === tc) push(tr, tc, "ep");
+    }
+  } else if (t === "n"){
+    for (const [dr,dc] of N_OFF){ const tr=r+dr, tc=c+dc; if (inB(tr,tc) && side(bd[tr][tc]) !== me) push(tr,tc); }
+  } else if (t === "k"){
+    for (const [dr,dc] of K_OFF){ const tr=r+dr, tc=c+dc; if (inB(tr,tc) && side(bd[tr][tc]) !== me) push(tr,tc); }
+    const row = me === "w" ? 7 : 0, en = opp(me), R = me === "w" ? "R" : "r";
+    if (r === row && c === 4 && !isAttacked(bd,row,4,en)){
+      if (castling[me+"K"] && bd[row][5]==="." && bd[row][6]==="." && bd[row][7]===R
+          && !isAttacked(bd,row,5,en) && !isAttacked(bd,row,6,en)) push(row,6,"castleK");
+      if (castling[me+"Q"] && bd[row][3]==="." && bd[row][2]==="." && bd[row][1]==="." && bd[row][0]===R
+          && !isAttacked(bd,row,3,en) && !isAttacked(bd,row,2,en)) push(row,2,"castleQ");
+    }
+  } else {
+    const dirs = t === "r" ? ROOK_D : t === "b" ? BISH_D : ROOK_D.concat(BISH_D);
+    for (const [dr,dc] of dirs){
+      let tr=r+dr, tc=c+dc;
+      while (inB(tr,tc)){
+        const q = bd[tr][tc];
+        if (q === ".") push(tr,tc);
+        else { if (side(q) !== me) push(tr,tc); break; }
+        tr += dr; tc += dc;
+      }
+    }
+  }
+  return out;
+}
+
+// ----- is (r,c) attacked by colour `by`? -----
+function isAttacked(bd, r, c, by){
+  const pr = by === "w" ? r+1 : r-1;
+  for (const pc of [c-1,c+1])
+    if (inB(pr,pc) && bd[pr][pc] === (by === "w" ? "P" : "p")) return true;
+  for (const [dr,dc] of N_OFF)
+    if (inB(r+dr,c+dc) && bd[r+dr][c+dc] === (by === "w" ? "N" : "n")) return true;
+  for (const [dr,dc] of K_OFF)
+    if (inB(r+dr,c+dc) && bd[r+dr][c+dc] === (by === "w" ? "K" : "k")) return true;
+  for (const [dr,dc] of ROOK_D) if (rayHits(bd,r,c,dr,dc,by,"rq")) return true;
+  for (const [dr,dc] of BISH_D) if (rayHits(bd,r,c,dr,dc,by,"bq")) return true;
+  return false;
+}
+function rayHits(bd,r,c,dr,dc,by,types){
+  let rr=r+dr, cc=c+dc;
+  while (inB(rr,cc)){
+    const q = bd[rr][cc];
+    if (q !== ".") return side(q) === by && types.includes(q.toLowerCase());
+    rr += dr; cc += dc;
+  }
+  return false;
+}
+
+// ----- play a move on a copy (geometry only) -----
+function applied(bd, m){
+  const nb = bd.map(row => row.slice());
+  const p = nb[m.fr][m.fc];
+  if (m.flag === "ep") nb[m.fr][m.tc] = ".";
+  nb[m.tr][m.tc] = p; nb[m.fr][m.fc] = ".";
+  if (m.flag === "castleK"){ nb[m.tr][5] = nb[m.tr][7]; nb[m.tr][7] = "."; }
+  if (m.flag === "castleQ"){ nb[m.tr][3] = nb[m.tr][0]; nb[m.tr][0] = "."; }
+  if (m.flag === "promo"){ const pr = m.promo || "q"; nb[m.tr][m.tc] = side(p) === "w" ? pr.toUpperCase() : pr; }
+  return nb;
+}
+
+function findKing(bd, me){
+  const k = me === "w" ? "K" : "k";
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++) if (bd[r][c] === k) return { r, c };
+  return { r:-1, c:-1 };
+}
+function kingAttacked(bd, me){ const k = findKing(bd, me); return k.r >= 0 && isAttacked(bd, k.r, k.c, opp(me)); }
+
+// ----- pseudo-legal filtered by king safety -----
+function legalMoves(bd, r, c){
+  const p = bd[r][c]; if (p === ".") return [];
+  const me = side(p);
+  return pseudoMoves(bd, r, c).filter(m => !kingAttacked(applied(bd, m), me));
+}
+function hasLegalMoves(bd, me){
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++)
+    if (side(bd[r][c]) === me && legalMoves(bd, r, c).length) return true;
+  return false;
+}
+
+// ----- commit a move to the real board -----
+function makeMove(m){
+  const p = board[m.fr][m.fc], me = side(p), en = opp(me);
+  let cap = board[m.tr][m.tc];
+  if (m.flag === "ep") cap = board[m.fr][m.tc];
+  if (cap !== ".") captured[me].push(cap);
+
+  board = applied(board, m);
+
+  if (p.toLowerCase() === "k"){ castling[me+"K"] = false; castling[me+"Q"] = false; }
+  if (p.toLowerCase() === "r"){
+    const hr = me === "w" ? 7 : 0;
+    if (m.fr === hr && m.fc === 0) castling[me+"Q"] = false;
+    if (m.fr === hr && m.fc === 7) castling[me+"K"] = false;
+  }
+  const ehr = en === "w" ? 7 : 0;
+  if (m.tr === ehr && m.tc === 0) castling[en+"Q"] = false;
+  if (m.tr === ehr && m.tc === 7) castling[en+"K"] = false;
+
+  ep = (p.toLowerCase() === "p" && Math.abs(m.tr - m.fr) === 2) ? { r:(m.tr+m.fr)/2, c:m.fc } : null;
+  turn = en;
+}
+
+// ----- notation (long algebraic) -----
+function sqName(r,c){ return "abcdefgh"[c] + (8 - r); }
+function notate(m, piece, cap, suffix){
+  if (m.flag === "castleK") return "O-O" + suffix;
+  if (m.flag === "castleQ") return "O-O-O" + suffix;
+  const t = piece.toLowerCase();
+  const L = t === "p" ? "" : t.toUpperCase();
+  let s = L + sqName(m.fr,m.fc) + (cap ? "x" : "-") + sqName(m.tr,m.tc);
+  if (m.flag === "promo") s += "=" + (m.promo || "q").toUpperCase();
+  if (m.flag === "ep") s += " e.p.";
+  return s + suffix;
+}
+
+// ----- perform a move from the UI -----
+function doMove(m){
+  if (m.flag === "promo" && !m.promo){ askPromotion(m); return; }
+  undoStack.push(snapshot());
+  const movingPiece = board[m.fr][m.fc];
+  const wasCapture = board[m.tr][m.tc] !== "." || m.flag === "ep";
+  makeMove(m);
+  lastMove = m; selected = null; targets = [];
+
+  const stm = turn;
+  const chk = kingAttacked(board, stm);
+  const any = hasLegalMoves(board, stm);
+  const suffix = (chk && !any) ? "#" : (chk ? "+" : "");
+  history.push(notate(m, movingPiece, wasCapture, suffix));
+
+  if (!any){
+    gameOver = true;
+    statusText = chk ? ((stm === "w" ? "Black" : "White") + " wins by checkmate 🏆") : "Stalemate — draw 🤝";
+  } else if (chk){
+    statusText = (stm === "w" ? "White" : "Black") + " is in check!";
+  } else {
+    statusText = (stm === "w" ? "White" : "Black") + " to move";
+  }
+  updateHUD(); render();
+}
+
+// ----- promotion picker -----
+function askPromotion(m){
+  pendingMove = m;
+  const box = document.getElementById("promo");
+  const col = turn; // the mover (turn not switched yet)
+  box.querySelectorAll("button").forEach(b => {
+    const g = b.querySelector(".pgl");
+    g.textContent = GLYPH[b.dataset.p];
+    g.className = "pgl pc " + (col === "w" ? "white" : "black");
+  });
+  box.classList.remove("hidden");
+}
+function choosePromo(pc){
+  document.getElementById("promo").classList.add("hidden");
+  if (!pendingMove) return;
+  const m = pendingMove; m.promo = pc; pendingMove = null;
+  doMove(m);
+}
+
+// ----- undo -----
+function snapshot(){
+  return {
+    board: board.map(r => r.slice()), turn, castling: { ...castling }, ep: ep ? { ...ep } : null,
+    captured: { w: captured.w.slice(), b: captured.b.slice() }, history: history.slice(),
+    lastMove: lastMove ? { ...lastMove } : null, gameOver, statusText
+  };
+}
+function undo(){
+  if (!undoStack.length) return;
+  const s = undoStack.pop();
+  board = s.board.map(r => r.slice()); turn = s.turn; castling = { ...s.castling }; ep = s.ep ? { ...s.ep } : null;
+  captured = { w: s.captured.w.slice(), b: s.captured.b.slice() }; history = s.history.slice();
+  lastMove = s.lastMove ? { ...s.lastMove } : null; gameOver = s.gameOver; statusText = s.statusText;
+  selected = null; targets = []; document.getElementById("promo").classList.add("hidden");
+  updateHUD(); render();
+}
+
+// ----- HUD -----
+function updateHUD(){
+  document.getElementById("hTurn").textContent = turn === "w" ? "White" : "Black";
+  document.getElementById("turnDot").style.background = turn === "w" ? "#f8fafc" : "#1e293b";
+  document.getElementById("hMove").textContent = Math.floor(history.length / 2) + 1;
+  document.getElementById("hStatus").textContent = statusText;
+  msg(statusText, gameOver ? "win" : (statusText.indexOf("check") >= 0 ? "warn" : ""));
+
+  document.getElementById("capW").innerHTML = captured.w.map(p => '<span class="pc black">' + GLYPH[p.toLowerCase()] + '</span>').join("");
+  document.getElementById("capB").innerHTML = captured.b.map(p => '<span class="pc white">' + GLYPH[p.toLowerCase()] + '</span>').join("");
+
+  const ml = document.getElementById("moveList"); ml.innerHTML = "";
+  for (let i=0;i<history.length;i+=2){
+    const row = document.createElement("div"); row.className = "ml-row";
+    row.innerHTML = '<span class="ml-n">' + (i/2 + 1) + '.</span><span class="ml-w">' + history[i] + '</span><span class="ml-b">' + (history[i+1] || "") + '</span>';
+    ml.appendChild(row);
+  }
+  ml.scrollTop = ml.scrollHeight;
+}
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : tone === "warn" ? "text-rose-600" : "text-slate-600");
+}
+
+// ----- rendering -----
+function render(){
+  const el = document.getElementById("board"); el.innerHTML = "";
+  const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  const tset = new Set(targets.map(m => m.tr + "," + m.tc));
+  const checkSq = kingAttacked(board, turn) ? findKing(board, turn) : null;
+
+  rows.forEach((r, ri) => {
+    cols.forEach((c, ci) => {
+      const sq = document.createElement("div");
+      sq.className = "sq " + ((r + c) % 2 === 0 ? "light" : "dark");
+      sq.dataset.r = r; sq.dataset.c = c;
+      const p = board[r][c];
+      if (p !== "."){
+        const s = document.createElement("span");
+        s.className = "pc " + (wht(p) ? "white" : "black");
+        s.textContent = GLYPH[p.toLowerCase()];
+        sq.appendChild(s);
+      }
+      if (selected && selected.r === r && selected.c === c) sq.classList.add("sel");
+      if (lastMove && ((lastMove.fr === r && lastMove.fc === c) || (lastMove.tr === r && lastMove.tc === c))) sq.classList.add("last");
+      if (tset.has(r + "," + c)) sq.classList.add(p === "." ? "dot" : "cap");
+      if (checkSq && checkSq.r === r && checkSq.c === c) sq.classList.add("check");
+      if (ci === 0){ const rk = document.createElement("span"); rk.className = "coord rank"; rk.textContent = 8 - r; sq.appendChild(rk); }
+      if (ri === 7){ const fl = document.createElement("span"); fl.className = "coord file"; fl.textContent = "abcdefgh"[c]; sq.appendChild(fl); }
+      el.appendChild(sq);
+    });
+  });
+}
+
+// ----- input -----
+function onClick(e){
+  if (gameOver) return;
+  const cell = e.target.closest(".sq"); if (!cell) return;
+  const r = +cell.dataset.r, c = +cell.dataset.c, p = board[r][c];
+  if (selected){
+    const m = targets.find(x => x.tr === r && x.tc === c);
+    if (m){ doMove(m); return; }
+  }
+  if (p !== "." && side(p) === turn){
+    selected = { r, c }; targets = legalMoves(board, r, c); render(); return;
+  }
+  selected = null; targets = []; render();
+}
+
+function newGame(){ newBoard(); document.getElementById("promo").classList.add("hidden"); updateHUD(); render(); }
+function flip(){ flipped = !flipped; render(); }
+
+document.getElementById("board").addEventListener("click", onClick);
+document.getElementById("newBtn").onclick  = newGame;
+document.getElementById("undoBtn").onclick = undo;
+document.getElementById("flipBtn").onclick = flip;
+document.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  const k = e.key.toLowerCase();
+  if (k === "n") newGame();
+  else if (k === "u") undo();
+  else if (k === "f") flip();
+});
+
+flipped = false;
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is 64 characters", why:"There are no piece objects and no images doing the work — the whole position is eight short strings split into an 8×8 grid of single characters. An upper-case letter is a White piece and a lower-case letter is Black, so K is the white king and k the black king; a dot is an empty square. Row 0 is Black's back rank across the top of the screen and row 7 is White's along the bottom, which is exactly how the board looks to White. From this one representation, two tiny helpers decode any character into a colour, and every rule in the game reads from this same grid. Understand these characters and you understand the entire data model.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">standard start (row 0 = top)<br><br>r n b q k b n r &nbsp;← black<br>p p p p p p p p<br>. . . . . . . .<br>. . . . . . . .<br>. . . . . . . .<br>. . . . . . . .<br>P P P P P P P P<br>R N B Q K B N R &nbsp;← white<br><br>UPPER = white · lower = black</div>`, code:`const START = [
+  "rnbqkbnr", "pppppppp",
+  "........", "........",
+  "........", "........",
+  "PPPPPPPP", "RNBQKBNR"
+];
+const wht  = p => p !== "." && p === p.toUpperCase();
+const side = p => p === "." ? null : (wht(p) ? "w" : "b");
+let board = START.map(row => row.split(""));` },
+
+ { title:"2. Directions and a bounds check", why:"Almost all of chess geometry is captured by four small offset tables. The knight has its eight famous L-jumps; the king has its eight surrounding squares; the rook slides along four straight directions and the bishop along four diagonals — and the queen needs no table of her own because she is simply a rook and a bishop combined. Alongside these sits one humble helper, inB, that answers whether a coordinate is still on the 8×8 board. Because every generator funnels its coordinates through inB, none of the interesting move logic below ever has to write an edge check, which keeps it clean and readable.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">four movement families<br><br>rook ┼ &nbsp; bishop ✕<br>knight ⯄ (L-jumps)<br>king ▣ (8 neighbours)<br>queen = rook + bishop</div>`, code:`const inB    = (r,c) => r>=0 && r<8 && c>=0 && c<8;
+const N_OFF  = [[-2,-1],[-2,1],[-1,-2],[-1,2],
+                [1,-2],[1,2],[2,-1],[2,1]];
+const K_OFF  = [[-1,-1],[-1,0],[-1,1],[0,-1],
+                [0,1],[1,-1],[1,0],[1,1]];
+const ROOK_D = [[-1,0],[1,0],[0,-1],[0,1]];
+const BISH_D = [[-1,-1],[-1,1],[1,-1],[1,1]];` },
+
+ { title:"3. Sliders march until blocked", why:"The rook, bishop and queen share one behaviour so completely that a single function covers all three: choose a direction and keep stepping. Every empty square you pass is a legal destination, and you keep going until you meet a piece. That piece stops the ray — if it is an enemy you may capture it and add that square, but if it is your own you simply stop short, and either way you can never leap over it. This 'stop at the first obstruction' rule is the whole idea of a sliding piece, and running the loop over the rook directions, the bishop directions, or both together gives you all three pieces from one place.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">rook slides right →<br><br>R . . . x . o<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↑<br>. = go · x = enemy (capture, stop)<br>o = never reached (blocked)</div>`, code:`function slide(bd, r, c, dirs, me, out){
+  for (const [dr,dc] of dirs){
+    let tr = r+dr, tc = c+dc;
+    while (inB(tr,tc)){
+      const q = bd[tr][tc];
+      if (q === ".") out.push({fr:r,fc:c,tr,tc});
+      else { if (side(q) !== me) out.push({fr:r,fc:c,tr,tc}); break; }
+      tr += dr; tc += dc;
+    }
+  }
+}` },
+
+ { title:"4. Knight and king jump", why:"The knight and the king are the opposite of sliders: they do not travel along a line at all, they simply appear on a fixed set of squares around themselves. The knight leaps to its eight L-shaped offsets and, uniquely, is completely unbothered by anything in between — it jumps clean over other pieces. The king steps to any of its eight neighbours. Because there is no ray to trace, their generator is the simplest of all: walk the offset list, and accept every target that lands on the board and is not occupied by one of your own pieces. Empty squares and enemy pieces are both fine; only your own men block you.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">knight's 8 jumps<br><br>. x . x .<br>x . . . x<br>. . N . .<br>x . . . x<br>. x . x .<br><br>lands on x — leaps over everything</div>`, code:`function jumps(bd, r, c, offs, me, out){
+  for (const [dr,dc] of offs){
+    const tr = r+dr, tc = c+dc;
+    if (inB(tr,tc) && side(bd[tr][tc]) !== me)
+      out.push({fr:r,fc:c,tr,tc});
+  }
+}
+// knight → N_OFF, king → K_OFF` },
+
+ { title:"5. The pawn is the fussy one", why:"The pawn is the only piece whose way of moving differs from its way of capturing, which is why it needs its own routine. It advances one square straight ahead onto an empty square, and from its starting rank it may advance two — but it can never capture straight ahead. Capturing happens only on the two forward diagonals, and only onto an enemy. Two special cases round it out: reaching the far rank raises a promotion flag so the pawn can become a queen or another piece, and a diagonal step onto the marked en passant square captures an enemy pawn that just used its own two-square dash to slip alongside. White marches up the board and Black marches down, which is the only thing the direction sign encodes.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">white pawn options<br><br>x . x &nbsp;&nbsp; x = diagonal capture only<br>. ↑ . &nbsp;&nbsp; ↑ = step forward (1, or 2 from home)<br>. P . &nbsp;&nbsp; straight ahead never captures</div>`, code:`function pawnMoves(bd, r, c, me, ep, out){
+  const dr = me==="w" ? -1 : 1;
+  const start = me==="w" ? 6 : 1;
+  const last  = me==="w" ? 0 : 7;
+  const add = (tr,tc,f)=>out.push({fr:r,fc:c,tr,tc,flag:f});
+  if (bd[r+dr][c] === "."){
+    add(r+dr, c, r+dr===last ? "promo" : null);
+    if (r===start && bd[r+2*dr][c]===".") add(r+2*dr,c,"double");
+  }
+  for (const dc of [-1,1]){
+    const tr=r+dr, tc=c+dc; if (!inB(tr,tc)) continue;
+    const q = bd[tr][tc];
+    if (q!=="." && side(q)!==me) add(tr,tc, tr===last?"promo":null);
+    else if (ep && ep.r===tr && ep.c===tc) add(tr,tc,"ep");
+  }
+}` },
+
+ { title:"6. Castling's many conditions", why:"Castling is the game's most conditional move — the king slides two squares toward a rook and the rook hops to the king's other side, in a single turn. It is permitted only when a whole checklist passes: neither the king nor that rook has moved before (tracked as castling rights that switch off the moment either piece leaves home), every square between them is empty, the king is not currently in check, and the king neither passes over nor finishes on any square the enemy attacks. That final rule — you may not castle out of, through, or into check — is exactly why castling depends on the attack test from the next step, calling it for the king's path.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">white king-side (O-O)<br><br>before &nbsp; . . . . K . . R<br>after &nbsp;&nbsp; . . . . . R K .<br><br>empty between · rights intact<br>king not through / into check</div>`, code:`function castleMoves(bd, me, castling, out){
+  const row = me==="w"?7:0, en = opp(me), R = me==="w"?"R":"r";
+  if (isAttacked(bd, row, 4, en)) return;   // not out of check
+  if (castling[me+"K"] && bd[row][5]==="." && bd[row][6]==="."
+      && bd[row][7]===R && !isAttacked(bd,row,5,en) && !isAttacked(bd,row,6,en))
+    out.push({fr:row,fc:4,tr:row,tc:6,flag:"castleK"});
+  if (castling[me+"Q"] && bd[row][3]==="." && bd[row][2]==="."
+      && bd[row][1]==="." && bd[row][0]===R
+      && !isAttacked(bd,row,3,en) && !isAttacked(bd,row,2,en))
+    out.push({fr:row,fc:4,tr:row,tc:2,flag:"castleQ"});
+}` },
+
+ { title:"7. Is this square attacked?", why:"A single question sits underneath the entire rulebook: is a given square under attack by a given colour? Instead of generating every enemy move and checking whether any lands here, we look outward from the square itself, which is far cheaper. We test the two diagonal squares a pawn would attack from, the eight knight offsets, the eight king neighbours, and then trace rays outward for the sliders — a straight ray meeting an enemy rook or queen, or a diagonal ray meeting an enemy bishop or queen, means attack. This one routine decides whether a king is in check, guards the squares a castling king crosses, and is the heart of the legal-move filter.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">look OUT from the square<br><br>? &nbsp;knight offsets?<br>? &nbsp;pawn diagonals?<br>? &nbsp;king neighbours?<br>? &nbsp;rays → rook/bishop/queen?<br><br>any hit → attacked</div>`, code:`function isAttacked(bd, r, c, by){
+  const pr = by==="w" ? r+1 : r-1;
+  for (const pc of [c-1,c+1])
+    if (inB(pr,pc) && bd[pr][pc]===(by==="w"?"P":"p")) return true;
+  for (const [dr,dc] of N_OFF)
+    if (inB(r+dr,c+dc) && bd[r+dr][c+dc]===(by==="w"?"N":"n")) return true;
+  for (const [dr,dc] of K_OFF)
+    if (inB(r+dr,c+dc) && bd[r+dr][c+dc]===(by==="w"?"K":"k")) return true;
+  for (const [dr,dc] of ROOK_D) if (rayHits(bd,r,c,dr,dc,by,"rq")) return true;
+  for (const [dr,dc] of BISH_D) if (rayHits(bd,r,c,dr,dc,by,"bq")) return true;
+  return false;
+}` },
+
+ { title:"8. Pseudo-legal becomes legal", why:"The generators above produce pseudo-legal moves: correct for the shape of the piece, but blind to the safety of your own king. The defining rule of chess, though, is that you may never make a move that leaves your king in check — a pinned piece cannot step aside to expose it, and while in check you must get out. The elegant fix is to test each candidate by consequence: play it on a throwaway copy of the board, find your king, and ask whether it is attacked afterwards. Keep only the moves where it is safe. This single filter is precisely what turns a pile of piece geometry into a lawful chess engine, and it handles pins, blocks and check-escapes without any special code for them.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each pseudo-legal move:<br><br>play it on a COPY<br>→ is my own king attacked?<br>&nbsp;&nbsp;&nbsp;yes → illegal, drop it<br>&nbsp;&nbsp;&nbsp;no &nbsp;→ legal, keep it</div>`, code:`function legalMoves(bd, r, c){
+  const me = side(bd[r][c]);
+  return pseudoMoves(bd, r, c).filter(m => {
+    const nb = applied(bd, m);          // play on a copy
+    const k  = findKing(nb, me);
+    return !isAttacked(nb, k.r, k.c, opp(me));
+  });
+}` },
+
+ { title:"9. Check, mate, or stalemate", why:"Every rule so far converges on one decision made after each move: what is the state of the side who must now reply? Two questions settle it. Is that side's king currently attacked? And, scanning all of its pieces, does it have even one legal move? If it has no legal move and its king is attacked, it has been checkmated and the game is over. If it has no legal move but its king is safe, it is stalemate — a draw, and one of the most heartbreaking ways to spoil a winning position. If it is in check but can still move, that is ordinary check and play continues; and if neither is true, the game simply goes on.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">after a move, ask the side to move:<br><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;in check? &nbsp; not in check?<br>no move &nbsp;checkmate &nbsp; stalemate<br>has move &nbsp; check &nbsp;&nbsp;&nbsp;&nbsp; normal</div>`, code:`function gameState(bd, stm){
+  const k = findKing(bd, stm);
+  const inCheck = isAttacked(bd, k.r, k.c, opp(stm));
+  let canMove = false;
+  for (let r=0;r<8 && !canMove;r++)
+    for (let c=0;c<8;c++)
+      if (side(bd[r][c])===stm && legalMoves(bd,r,c).length){ canMove=true; break; }
+  if (!canMove) return inCheck ? "checkmate" : "stalemate";
+  return inCheck ? "check" : "normal";
+}` },
+
+ { title:"10. Click to move, paint the board", why:"One click handler ties the whole thing into a game. A click on your own piece selects it and asks legalMoves for its lawful destinations, which the board then lights up. A second click on one of those highlighted squares performs the move: it snapshots the position for undo, commits the move, switches the turn and runs the check-or-mate test. The drawing side is just as plain — a loop over the sixty-four cells drops a unicode glyph on each occupied square, coloured white or black by a CSS class, then rings the selection, dots the quiet targets and rings the captures. No sprites, no canvas, no images — the pieces are literally text characters.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click flow<br><br>own piece → select + light legal squares<br>green square → move + re-check<br>anything else → deselect<br><br>glyphs: ♚ ♛ ♜ ♝ ♞ ♟</div>`, code:`boardEl.addEventListener("click", e => {
+  const cell = e.target.closest(".sq"); if (!cell) return;
+  const r = +cell.dataset.r, c = +cell.dataset.c;
+  if (selected){
+    const m = targets.find(x => x.tr===r && x.tc===c);
+    if (m){ doMove(m); return; }
+  }
+  if (side(board[r][c]) === turn){
+    selected = {r,c};
+    targets  = legalMoves(board, r, c);
+  } else { selected = null; targets = []; }
+  render();
+});` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3000); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
