@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 38 — Peg Solitaire</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:28px; }
+
+  /* ---- the board ---- */
+  .board { background:radial-gradient(circle at 50% 15%, #1e6b47, #0b3b27 78%);
+           padding:16px; border-radius:20px; display:inline-block;
+           box-shadow:0 18px 40px rgba(0,0,0,.35); }
+  canvas#board { display:block; border-radius:12px; max-width:100%; height:auto; cursor:pointer;
+                 touch-action:manipulation; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .legend { color:#64748b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 38</div>
+      <h1 class="text-xl font-bold">🔘 Peg Solitaire — Jump One Peg Over Another Into an Empty Hole and Whittle the Board Down to a Single Survivor</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Thirty-two pegs, one empty hole — leap your way down to a single survivor.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">This is the classic <strong>English cross</strong> board: a 7&times;7 grid with the four corners cut away, leaving 33 holes in a plus shape. Every hole holds a peg except the one dead in the <strong>centre</strong>. Your only move is a <strong>jump</strong>: pick a peg that has an <em>adjacent</em> peg straight beside it and an <em>empty</em> hole straight beyond that peg, and hop over — the jumped peg is lifted off the board. Every jump therefore removes exactly one peg, so you must go from 32 pegs down toward 1. Click a peg to select it and its legal landing holes light up green; click a lit hole to make the leap. The perfect finish is <strong>one lone peg sitting in the centre hole</strong> — but any single survivor is a win. Jump carelessly and you can strand yourself with pegs scattered and <strong>no legal jump left</strong>; the board tells you the instant that happens and counts how many you left behind. <strong>↩ Undo</strong> walks moves back, and 💡 <strong>Hint</strong> shows you one jump that still works.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap">
+        <div>Pegs left: <span id="hPegs" class="stat text-slate-700">32</span></div>
+        <div>Moves: <span id="hMoves" class="stat text-emerald-600">0</span></div>
+        <div>Movable now: <span id="hMovable" class="stat text-slate-700">—</span></div>
+        <div>Best (fewest left): <span id="hBest" class="stat text-slate-700">—</span></div>
+      </div>
+
+      <div class="flex justify-center">
+        <div class="board">
+          <canvas id="board" width="460" height="460"></canvas>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-lg text-slate-600">Click a peg, then a highlighted hole two cells away to jump it.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn"     class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">🔘 New game</button>
+        <button id="undoBtn"    class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">↩ Undo</button>
+        <button id="hintBtn"    class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">💡 Hint</button>
+        <button id="moveBtn"    class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">👁 Show movable</button>
+      </div>
+      <p class="text-xs legend mt-3">Click a <strong>peg</strong> to pick it, then a <strong>green hole</strong> to jump &nbsp;·&nbsp; <span class="keycap">N</span> new &nbsp; <span class="keycap">U</span> undo &nbsp; <span class="keycap">H</span> hint &nbsp; <span class="keycap">M</span> show movable</p>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">There are no sprites and no physics here — the whole game is a 7&times;7 grid of three possible states: a wall (the cut-off corners), an empty hole, or a peg. One rule runs everything. A jump is legal exactly when a peg has, in one of the four straight directions, an adjacent peg and then an empty hole immediately beyond it; making the jump sets the starting cell and the jumped cell to empty and the landing cell to a peg, so the count drops by one every time. Legal-move generation is just that same test asked of every peg in all four directions, and a highlight is nothing more than the subset of those moves that start from the peg you clicked. After each jump the board asks two questions in order: is only one peg left — you win, and if it is on the centre it is the textbook solution — or is there no legal jump anywhere, in which case the remaining pegs are stranded and the game is over. An undo stack keeps a snapshot before each leap so you can back out of a bad line. All vanilla JavaScript on one canvas, offline, no images and no libraries.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the board thinks</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">The board is a 7&times;7 grid holding three states — wall, empty, peg — with the four corners walled off to make the cross. One test answers everything: a jump is legal when a peg has an adjacent peg and then an empty hole two cells away in a straight line. Legal-move generation is that test over every peg in four directions; a highlight is the moves that start from your selected peg; a move flips three cells and drops the peg count by one. Add a win-versus-stuck check after every jump, an undo snapshot stack, and a plain canvas draw of holes and pegs. About 140 lines of vanilla JavaScript on one canvas — no images, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The board is a cross carved out of a 7×7 grid</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no clever shape data — just a 7&times;7 grid where each cell is one of three numbers: a <code>WALL</code> (the four cut-off corners), an <code>EMPTY</code> hole, or a <code>PEG</code>. A cell is off-board precisely when it sits in a corner block, which is true when its row is outside the middle three <em>and</em> its column is outside the middle three. Every hole starts with a peg except the very centre, which starts empty.</p>
+        <div class="relative"><pre>const WALL = -1, EMPTY = 0, PEG = 1;
+
+// a cell is on the cross unless it is in one of the four 2×2 corners
+function onBoard(r, c){
+  if (r &lt; 0 || r &gt; 6 || c &lt; 0 || c &gt; 6) return false;
+  return !((r &lt; 2 || r &gt; 4) &amp;&amp; (c &lt; 2 || c &gt; 4));   // corner = row AND col both outside the middle 3
+}
+
+function newBoard(){
+  board = [];
+  for (let r = 0; r &lt; 7; r++){
+    const row = [];
+    for (let c = 0; c &lt; 7; c++)
+      row.push(!onBoard(r, c) ? WALL : (r === 3 &amp;&amp; c === 3 ? EMPTY : PEG));   // centre empty
+    board.push(row);
+  }
+  pegs = 32;                                    // 33 holes − 1 empty centre
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Four directions, and a safe read of any cell</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A jump only ever goes straight — up, down, left, or right. A tiny <code>at()</code> helper reads any coordinate and returns <code>WALL</code> for anything off the grid, so the rest of the code never has to guard array bounds. Because empties and pegs only ever exist on valid cells, one clean read of <code>at()</code> is all the geometry we need.</p>
+        <div class="relative"><pre>const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];   // up, down, left, right
+
+function at(r, c){
+  return (r &gt;= 0 &amp;&amp; r &lt; 7 &amp;&amp; c &gt;= 0 &amp;&amp; c &lt; 7) ? board[r][c] : WALL;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The jump rule: peg, peg, empty — in a line</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the whole game in one function. From a peg at <code>(r,c)</code>, step one cell in a direction to the <strong>over</strong> cell and two cells to the <strong>to</strong> cell. The jump is legal only when the over cell holds a peg and the to cell is empty. <code>movesFrom</code> collects every legal jump that starts at one peg — that is exactly the set of holes we light up when you select it.</p>
+        <div class="relative"><pre>function movesFrom(r, c){
+  const moves = [];
+  if (at(r, c) !== PEG) return moves;
+  for (const [dr, dc] of DIRS){
+    const mr = r + dr,   mc = c + dc;       // the peg we jump OVER
+    const tr = r + 2*dr, tc = c + 2*dc;     // the empty hole we land IN
+    if (at(mr, mc) === PEG &amp;&amp; at(tr, tc) === EMPTY)
+      moves.push({ r, c, mr, mc, tr, tc }); // a legal jump
+  }
+  return moves;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Every legal move on the whole board</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Ask <code>movesFrom</code> of every peg and concatenate the answers, and you have every jump available right now. This one list powers three different things: the hint button picks one from it, the "movable" highlight is the set of pegs that appear as a starting cell, and the stuck check is simply whether this list is empty.</p>
+        <div class="relative"><pre>function legalMoves(){
+  const all = [];
+  for (let r = 0; r &lt; 7; r++)
+    for (let c = 0; c &lt; 7; c++)
+      if (board[r][c] === PEG)
+        for (const m of movesFrom(r, c)) all.push(m);
+  return all;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Select a peg, and its landing holes light up</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Clicking a peg selects it and, from <code>movesFrom</code>, we know exactly which empty holes are legal targets. We stash those target coordinates in a set so the drawing code can ring them in green. Clicking the same peg again clears the selection; clicking a different peg moves it.</p>
+        <div class="relative"><pre>function selectPeg(r, c){
+  if (selected &amp;&amp; selected.r === r &amp;&amp; selected.c === c){ selected = null; return; }
+  selected = { r, c };
+  const targets = movesFrom(r, c);          // the holes this peg may leap into
+  if (targets.length === 0) msg("That peg has no jump — pick another.", "warn");
+  else                      msg("Now click a highlighted hole to jump.");
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Making the leap flips exactly three cells</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A jump is pure bookkeeping. The starting cell becomes empty (the peg left), the jumped-over cell becomes empty (that peg is removed), and the landing cell becomes a peg (where it arrived). The peg count falls by one and the move counter ticks up. Because a jump always deletes one peg, the number left is <code>32 − moves</code> — you can watch yourself closing in on a single survivor.</p>
+        <div class="relative"><pre>function doJump(m){
+  board[m.r][m.c]   = EMPTY;    // peg leaves its hole
+  board[m.mr][m.mc] = EMPTY;    // jumped peg is removed
+  board[m.tr][m.tc] = PEG;      // peg lands two cells over
+  pegs--; moveCount++;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Win or stuck: two questions after every jump</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The end of every turn asks two things in order. If only one peg remains you have won — and if that last peg is sitting on the centre hole it is the textbook solution, the goal of the classic puzzle. Otherwise, if <code>legalMoves()</code> comes back empty, the remaining pegs are stranded with no jump possible, so the game is over and we report how many you left behind.</p>
+        <div class="relative"><pre>function afterMove(){
+  if (pegs === 1){
+    won = true;
+    const centred = board[3][3] === PEG;
+    msg(centred ? "🎯 Perfect — one peg, dead centre!" : "🎉 Solved to a single peg!", "win");
+    recordBest();
+  } else if (legalMoves().length === 0){
+    won = true;
+    msg("No jumps left — " + pegs + " pegs stranded. New game or undo.", "warn");
+    recordBest();
+  } else {
+    msg("Nice jump — keep hunting for pairs.");
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Undo is just a stack of snapshots</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Peg solitaire is unforgiving, so undo matters. Before every jump we push a deep copy of the board plus the two counters onto a stack. Undo pops the last snapshot, restores it, and clears the game-over flag — letting you back out of the move that painted you into a corner and try a different line.</p>
+        <div class="relative"><pre>function pushUndo(){
+  undoStack.push({ b: board.map(row =&gt; row.slice()), pegs, moveCount });
+}
+
+function undo(){
+  if (!undoStack.length) return;
+  const s = undoStack.pop();
+  board = s.b.map(row =&gt; row.slice());
+  pegs = s.pegs; moveCount = s.moveCount;
+  won = false; selected = null;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Draw holes and pegs on one canvas</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each grid cell maps to a pixel centre by simple multiplication. For every on-board cell we sink a dark recessed hole; if it holds a peg we draw a domed disc with a radial gradient. The selected peg gets a white ring, the legal landing holes get a green ring, and — when the toggle is on — every peg that can still jump is outlined. No sprites, all shapes.</p>
+        <div class="relative"><pre>const CELL = 60, PAD = 20;
+function centre(r, c){ return { x: PAD + c*CELL + CELL/2, y: PAD + r*CELL + CELL/2 }; }
+
+function drawPeg(x, y){
+  const rad = CELL * 0.30;
+  const g = ctx.createRadialGradient(x - rad*0.3, y - rad*0.4, rad*0.2, x, y, rad);
+  g.addColorStop(0, "#fcd34d"); g.addColorStop(1, "#c2620a");   // domed amber peg
+  ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.fillStyle = g; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = "#7c3d06"; ctx.stroke();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">One click handler ties it together</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A click maps to a grid cell. Land on a peg and you select it; land on an empty hole while a peg is selected and we look up whether that hole is a legal target for it — if so we snapshot, jump, and run the win-or-stuck check. Everything else is a gentle nudge in the message line. The board is entirely event-driven and only redraws when something changes.</p>
+        <div class="relative"><pre>function onCell(r, c){
+  if (won || !onBoard(r, c)) return;
+  if (board[r][c] === PEG) return selectPeg(r, c);          // pick a peg
+  if (board[r][c] === EMPTY &amp;&amp; selected){
+    const m = movesFrom(selected.r, selected.c)
+                .find(x =&gt; x.tr === r &amp;&amp; x.tc === c);        // is this a legal landing?
+    if (m){ pushUndo(); doJump(m); selected = null; afterMove(); }
+    else   msg("Not a legal landing — jump straight over one peg.", "warn");
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 38 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Peg Solitaire end to end: a 7&times;7 grid carved into a cross with a one-line corner test; a safe cell reader and the four straight directions; the jump rule as "peg, peg, empty in a line"; legal-move generation as that test over every peg; a selection that lights up landing holes; a jump that flips exactly three cells and drops the count by one; a win-versus-stuck check that spots the single centre survivor or the stranded dead end; an undo stack of board snapshots; a canvas that draws recessed holes and domed pegs; and one click handler that turns taps into leaps. Next: try the triangular 15-hole board and its solution counts, a solver that searches for a centre finish, or a move-history replay. <strong>👉 Tomorrow — Day 39: Chess board — set up the pieces and move each one by the true rules of chess.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== PEG SOLITAIRE ENGINE (vanilla) =====
+const cv  = document.getElementById("board");
+const ctx = cv.getContext("2d");
+
+const WALL = -1, EMPTY = 0, PEG = 1;
+const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];   // up, down, left, right
+const CELL = 60, PAD = 20;
+
+let board = [], pegs = 0, moveCount = 0;
+let selected = null, won = false, showMovable = false, hint = null;
+let undoStack = [], best = null;
+
+try { const v = localStorage.getItem("pegBest"); best = v === null ? null : +v; } catch (e) { best = null; }
+
+// ----- the cross board -----
+function onBoard(r, c){
+  if (r < 0 || r > 6 || c < 0 || c > 6) return false;
+  return !((r < 2 || r > 4) && (c < 2 || c > 4));   // corner = row AND col both outside middle 3
+}
+function at(r, c){ return (r >= 0 && r < 7 && c >= 0 && c < 7) ? board[r][c] : WALL; }
+
+function newBoard(){
+  board = [];
+  for (let r = 0; r < 7; r++){
+    const row = [];
+    for (let c = 0; c < 7; c++)
+      row.push(!onBoard(r, c) ? WALL : (r === 3 && c === 3 ? EMPTY : PEG));
+    board.push(row);
+  }
+  pegs = 32;
+}
+
+// ----- the jump rule -----
+function movesFrom(r, c){
+  const moves = [];
+  if (at(r, c) !== PEG) return moves;
+  for (const [dr, dc] of DIRS){
+    const mr = r + dr, mc = c + dc, tr = r + 2 * dr, tc = c + 2 * dc;
+    if (at(mr, mc) === PEG && at(tr, tc) === EMPTY)
+      moves.push({ r, c, mr, mc, tr, tc });
+  }
+  return moves;
+}
+function legalMoves(){
+  const all = [];
+  for (let r = 0; r < 7; r++)
+    for (let c = 0; c < 7; c++)
+      if (board[r][c] === PEG)
+        for (const m of movesFrom(r, c)) all.push(m);
+  return all;
+}
+function movableCount(){
+  const set = new Set();
+  for (const m of legalMoves()) set.add(m.r + "," + m.c);
+  return set.size;
+}
+
+// ----- a move -----
+function doJump(m){
+  board[m.r][m.c]   = EMPTY;
+  board[m.mr][m.mc] = EMPTY;
+  board[m.tr][m.tc] = PEG;
+  pegs--; moveCount++;
+}
+function pushUndo(){ undoStack.push({ b: board.map(row => row.slice()), pegs, moveCount }); }
+
+function selectPeg(r, c){
+  if (selected && selected.r === r && selected.c === c){ selected = null; msg("Selection cleared — pick a peg."); draw(); return; }
+  selected = { r, c };
+  const targets = movesFrom(r, c);
+  if (targets.length === 0) msg("That peg has no jump — pick another.", "warn");
+  else                      msg("Now click a highlighted hole to jump.");
+  draw();
+}
+
+function onCell(r, c){
+  if (won || !onBoard(r, c)) return;
+  const v = board[r][c];
+  if (v === PEG){ selectPeg(r, c); return; }
+  if (v === EMPTY && selected){
+    const m = movesFrom(selected.r, selected.c).find(x => x.tr === r && x.tc === c);
+    if (m){
+      pushUndo(); doJump(m); selected = null;
+      hud(); afterMove(); draw(); return;
+    }
+    msg("Not a legal landing — jump straight over one peg into an empty hole.", "warn");
+    return;
+  }
+  msg("Click one of your pegs first.");
+}
+
+function afterMove(){
+  if (pegs === 1){
+    won = true;
+    const centred = board[3][3] === PEG;
+    msg(centred ? "🎯 Perfect — one peg, dead centre! Hit New game to play again."
+               : "🎉 Solved to a single peg! Try again for the centre finish.", "win");
+    recordBest();
+  } else if (legalMoves().length === 0){
+    won = true;
+    msg("No jumps left — " + pegs + " pegs stranded. Undo a move or start a New game.", "warn");
+    recordBest();
+  } else {
+    msg("Nice jump — " + pegs + " pegs left. Keep hunting for pairs.");
+  }
+  hud();
+}
+
+function undo(){
+  if (!undoStack.length) return;
+  const s = undoStack.pop();
+  board = s.b.map(row => row.slice());
+  pegs = s.pegs; moveCount = s.moveCount;
+  won = false; selected = null; hint = null;
+  msg("Undid the last jump."); hud(); draw();
+}
+
+function newGame(){
+  newBoard();
+  moveCount = 0; selected = null; won = false; hint = null; undoStack = [];
+  msg("Click a peg, then a highlighted hole two cells away to jump it.");
+  hud(); draw();
+}
+
+function showHint(){
+  if (won) return;
+  const mv = legalMoves();
+  if (!mv.length){ msg("No jumps left anywhere.", "warn"); return; }
+  hint = mv[Math.random() * mv.length | 0];
+  selected = null; draw();
+  setTimeout(() => { hint = null; draw(); }, 1300);
+}
+
+// ----- best (fewest pegs ever left) -----
+function recordBest(){
+  if (best === null || pegs < best){
+    best = pegs;
+    try { localStorage.setItem("pegBest", best); } catch (e) {}
+  }
+  hud();
+}
+
+// ----- HUD -----
+function hud(){
+  document.getElementById("hPegs").textContent    = pegs;
+  document.getElementById("hMoves").textContent   = moveCount;
+  document.getElementById("hMovable").textContent = won ? 0 : movableCount();
+  document.getElementById("hBest").textContent    = best === null ? "—" : best;
+}
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : tone === "warn" ? "text-amber-600" : "text-slate-600");
+}
+
+// ----- drawing -----
+function centre(r, c){ return { x: PAD + c * CELL + CELL / 2, y: PAD + r * CELL + CELL / 2 }; }
+function ring(x, y, rad, color, w){
+  ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2);
+  ctx.lineWidth = w; ctx.strokeStyle = color; ctx.stroke();
+}
+function drawHole(x, y){
+  ctx.beginPath(); ctx.arc(x, y, CELL * 0.34, 0, Math.PI * 2);
+  ctx.fillStyle = "#0a3421"; ctx.fill();
+  ring(x, y, CELL * 0.34, "rgba(0,0,0,.28)", 2);
+}
+function drawLanding(x, y){
+  ctx.beginPath(); ctx.arc(x, y, CELL * 0.30, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(34,197,94,.22)"; ctx.fill();
+  ring(x, y, CELL * 0.30, "#22c55e", 3);
+}
+function drawPeg(x, y, sel, movable, hinted){
+  const rad = CELL * 0.30;
+  const g = ctx.createRadialGradient(x - rad * 0.3, y - rad * 0.4, rad * 0.2, x, y, rad);
+  g.addColorStop(0, hinted ? "#fde68a" : "#fcd34d");
+  g.addColorStop(1, hinted ? "#d97706" : "#c2620a");
+  ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+  ring(x, y, rad, "#7c3d06", 2);
+  if (sel)          ring(x, y, rad + 4, "#ffffff", 3);
+  else if (hinted)  ring(x, y, rad + 4, "#16a34a", 3);
+  else if (movable) ring(x, y, rad + 3, "#22c55e", 2.5);
+}
+function draw(){
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = "#124a30"; ctx.fillRect(0, 0, cv.width, cv.height);
+
+  const targets = selected ? movesFrom(selected.r, selected.c) : [];
+  const landSet = new Set(targets.map(m => m.tr + "," + m.tc));
+
+  for (let r = 0; r < 7; r++){
+    for (let c = 0; c < 7; c++){
+      if (!onBoard(r, c)) continue;
+      const p = centre(r, c);
+      drawHole(p.x, p.y);
+      const isLand = landSet.has(r + "," + c) || (hint && hint.tr === r && hint.tc === c);
+      if (isLand) drawLanding(p.x, p.y);
+      if (board[r][c] === PEG){
+        const sel     = selected && selected.r === r && selected.c === c;
+        const movable = showMovable && movesFrom(r, c).length > 0;
+        const hinted  = hint && hint.r === r && hint.c === c;
+        drawPeg(p.x, p.y, sel, movable, hinted);
+      }
+    }
+  }
+}
+
+// ----- input (only while the LOOK tab is visible) -----
+function looking(){ return !document.getElementById("look").classList.contains("hidden"); }
+function toCell(e){
+  const rect = cv.getBoundingClientRect();
+  const src  = e.touches && e.touches[0] ? e.touches[0] : e;
+  const px = (src.clientX - rect.left) * (cv.width  / rect.width);
+  const py = (src.clientY - rect.top)  * (cv.height / rect.height);
+  return { r: Math.floor((py - PAD) / CELL), c: Math.floor((px - PAD) / CELL) };
+}
+function pointer(e){
+  if (!looking()) return;
+  e.preventDefault();
+  const { r, c } = toCell(e);
+  onCell(r, c);
+}
+cv.addEventListener("mousedown", pointer);
+cv.addEventListener("touchstart", pointer, { passive: false });
+
+document.getElementById("newBtn").onclick  = newGame;
+document.getElementById("undoBtn").onclick = undo;
+document.getElementById("hintBtn").onclick = showHint;
+document.getElementById("moveBtn").onclick = () => { showMovable = !showMovable; draw(); };
+
+document.addEventListener("keydown", e => {
+  if (!looking()) return;
+  const k = e.key.toLowerCase();
+  if (k === "n") newGame();
+  else if (k === "u") undo();
+  else if (k === "h") showHint();
+  else if (k === "m"){ showMovable = !showMovable; draw(); }
+});
+
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is a cross in a 7×7 grid", why:"There is no fancy geometry doing the work — the entire board is a 7×7 grid where every cell holds one of three numbers: a wall for the four corners that are cut away, an empty hole, or a peg. The English cross is what is left after you delete four 2×2 corner blocks, and there is a lovely one-line way to say which cells survive: a cell is a corner precisely when its row is outside the middle three rows and its column is also outside the middle three columns, so the board is every cell where that is NOT true. Thirty-two of the thirty-three holes begin with a peg; the single exception is the centre, which begins empty and is exactly the hole your first jump will fill. Understand these three states and the corner test and you understand the whole data model.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">33 holes, cross shape<br><br>· · ●&nbsp;●&nbsp;● · ·<br>· · ●&nbsp;●&nbsp;● · ·<br>●&nbsp;●&nbsp;●&nbsp;●&nbsp;●&nbsp;●&nbsp;●<br>●&nbsp;●&nbsp;●&nbsp;○&nbsp;●&nbsp;●&nbsp;●<br>●&nbsp;●&nbsp;●&nbsp;●&nbsp;●&nbsp;●&nbsp;●<br>· · ●&nbsp;●&nbsp;● · ·<br>· · ●&nbsp;●&nbsp;● · ·<br><br>○ = the one empty centre</div>`, code:`const WALL = -1, EMPTY = 0, PEG = 1;
+
+function onBoard(r, c){
+  if (r < 0 || r > 6 || c < 0 || c > 6) return false;
+  return !((r < 2 || r > 4) && (c < 2 || c > 4));
+}
+function newBoard(){
+  board = [];
+  for (let r = 0; r < 7; r++){
+    const row = [];
+    for (let c = 0; c < 7; c++)
+      row.push(!onBoard(r,c) ? WALL : (r===3 && c===3 ? EMPTY : PEG));
+    board.push(row);
+  }
+  pegs = 32;
+}` },
+
+ { title:"2. Four directions and a safe cell read", why:"Every jump in peg solitaire travels in a straight orthogonal line, never diagonally, so the whole world of movement is captured by four direction vectors: up, down, left, and right. The other small but crucial tool is a reader that lets you ask for the contents of any coordinate without ever tripping over the edge of the grid. The at() helper returns the cell's value when the coordinate is inside the 7×7 grid and a wall otherwise, which means the rest of the code can treat 'off the grid' and 'a walled corner' identically and never has to write a bounds check again. Small helpers like this are what keep the interesting logic clean.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">four straight directions<br><br>&nbsp;&nbsp;&nbsp;↑<br>← ● →<br>&nbsp;&nbsp;&nbsp;↓<br><br>at(r,c) → value, or WALL if off-grid</div>`, code:`const DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
+
+function at(r, c){
+  return (r >= 0 && r < 7 && c >= 0 && c < 7)
+    ? board[r][c] : WALL;
+}` },
+
+ { title:"3. The jump rule: peg, peg, empty", why:"This single function is the entire heart of the game. Standing on a peg, look one cell away in a direction — the 'over' cell — and two cells away — the 'to' cell. The jump is legal only when the over cell also holds a peg and the to cell is an empty hole; you are hopping over a neighbour and landing in the gap beyond it. movesFrom gathers every legal jump that begins at one particular peg, which is precisely the little set of holes we will light up in green the moment you select that peg. Notice how the safe at() reader makes this read like plain English, with no edge cases cluttering it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a legal jump<br><br>●&nbsp;●&nbsp;○ &nbsp;→&nbsp; ○&nbsp;○&nbsp;●<br>you over empty &nbsp;&nbsp; land here<br><br>peg + adjacent peg + empty beyond</div>`, code:`function movesFrom(r, c){
+  const moves = [];
+  if (at(r, c) !== PEG) return moves;
+  for (const [dr, dc] of DIRS){
+    const mr = r+dr,   mc = c+dc;     // jump OVER
+    const tr = r+2*dr, tc = c+2*dc;   // land IN
+    if (at(mr,mc) === PEG && at(tr,tc) === EMPTY)
+      moves.push({ r, c, mr, mc, tr, tc });
+  }
+  return moves;
+}` },
+
+ { title:"4. Every legal move on the board", why:"Once one peg can report its own jumps, the whole board's options are just that same question asked of every peg and the answers strung together. This one flat list is quietly the workhorse of the game. The hint button reaches into it and pulls out a single move to show you. The 'movable' highlight is the set of distinct starting cells that appear in it. And the most important use of all is the dead-end test: if this list ever comes back empty while more than one peg remains, there is nothing left to do and the game is over. Generating it is cheap — at most a few hundred tiny checks — so we can afford to recompute it after every move.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">ask every peg for its jumps<br>then concat the answers<br><br>legalMoves() powers:<br>💡 hint · 👁 movable · 💀 stuck-check</div>`, code:`function legalMoves(){
+  const all = [];
+  for (let r = 0; r < 7; r++)
+    for (let c = 0; c < 7; c++)
+      if (board[r][c] === PEG)
+        for (const m of movesFrom(r, c)) all.push(m);
+  return all;
+}` },
+
+ { title:"5. Select a peg, light its landing holes", why:"Interaction begins with a click on a peg. Because movesFrom already hands back every legal jump for that peg, we immediately know which empty holes are valid destinations, and we keep their coordinates so the drawing code can circle them in green. The rules of selection are gentle and forgiving: clicking the very same peg again simply clears your choice, clicking a different peg switches to it, and if you happen to pick a peg that is completely boxed in with no jump at all, the game says so rather than leaving you guessing. Selection changes nothing about the board — it only decides what the next click can do.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click a peg → it is selected<br><br>its legal targets glow green<br>click green → jump<br>click it again → deselect</div>`, code:`function selectPeg(r, c){
+  if (selected && selected.r === r && selected.c === c){
+    selected = null; return;               // click again = deselect
+  }
+  selected = { r, c };
+  const targets = movesFrom(r, c);
+  if (targets.length === 0) msg("That peg has no jump.");
+  else                      msg("Click a highlighted hole to jump.");
+}` },
+
+ { title:"6. The leap flips exactly three cells", why:"For all the strategy it creates, a jump is almost trivial to perform: three cells change and nothing else. The cell the peg started on becomes empty, the neighbour it hopped over becomes empty because that peg has been captured and removed, and the hole it landed in becomes a peg. The peg count drops by one and the move counter rises by one — and because every single jump removes exactly one peg, the number remaining is always thirty-two minus the moves you have made. That invariant is why the whole game is a countdown: from thirty-two pegs toward the dream of one, and you can read your progress straight off the counter.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">before &nbsp; ●&nbsp;●&nbsp;○<br>after &nbsp;&nbsp; ○&nbsp;○&nbsp;●<br><br>3 cells flip · pegs − 1 · moves + 1<br>pegs left = 32 − moves</div>`, code:`function doJump(m){
+  board[m.r][m.c]   = EMPTY;   // peg leaves
+  board[m.mr][m.mc] = EMPTY;   // jumped peg removed
+  board[m.tr][m.tc] = PEG;     // peg lands
+  pegs--; moveCount++;
+}` },
+
+ { title:"7. Win or stuck, checked every turn", why:"The end of a turn always asks two questions, and their order matters. First: is there only one peg left? If so you have won the game, and if that final peg happens to be resting on the very centre hole, you have found the textbook solution that the classic puzzle is built around. If more than one peg survives, the second question is whether legalMoves() is empty — whether, anywhere on the board, any jump at all is still possible. When it is not, the remaining pegs are stranded forever and the game reports how many you left behind. This tiny two-question check after every move is the entire difference between a satisfying finish and quietly playing into a corner.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">after every jump, ask:<br><br>1 peg? → 🎉 win (centre = 🎯 perfect)<br>no legal move? → 💀 stuck<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(count what's stranded)</div>`, code:`function afterMove(){
+  if (pegs === 1){
+    won = true;
+    const centred = board[3][3] === PEG;
+    msg(centred ? "Perfect — one peg, dead centre!"
+                : "Solved to a single peg!");
+  } else if (legalMoves().length === 0){
+    won = true;
+    msg("No jumps left — " + pegs + " pegs stranded.");
+  }
+}` },
+
+ { title:"8. Undo is a stack of snapshots", why:"Peg solitaire punishes a single careless jump, so being able to walk moves back is what makes it feel fair rather than frustrating. The mechanism is refreshingly simple: right before we commit any jump, we push onto a stack a deep copy of the whole board together with the two counters. Undo pops the most recent snapshot, restores the board and the counters exactly as they were, and clears the game-over flag so play can resume — which means you can back straight out of the move that stranded you and explore a different line entirely. Because each snapshot copies the grid row by row, the saved states are fully independent and can never be corrupted by later play.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">before each jump:<br>push a copy of the board<br><br>undo → pop → restore<br>back out of a bad line</div>`, code:`function pushUndo(){
+  undoStack.push({
+    b: board.map(row => row.slice()),
+    pegs, moveCount
+  });
+}
+function undo(){
+  if (!undoStack.length) return;
+  const s = undoStack.pop();
+  board = s.b.map(row => row.slice());
+  pegs = s.pegs; moveCount = s.moveCount;
+  won = false; selected = null;
+}` },
+
+ { title:"9. Draw holes and pegs on one canvas", why:"The look of the board is pure drawing, done with plain shapes and no images at all. Each grid coordinate turns into a pixel centre by simple multiplication — column times cell width, row times cell height, plus a margin. For every on-board cell we first sink a dark recessed circle to read as an empty hole, and if that cell holds a peg we lay a domed disc over it, using a radial gradient that is bright near the top-left and dark near the bottom so it looks lit from above. Then come the accents: the peg you have selected wears a white ring, every legal landing hole wears a green one, and when the highlight toggle is on, each peg that can still jump is outlined so you can see your options at a glance.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">cell → pixel by multiplication<br><br>dark recess = hole<br>amber dome = peg<br>white ring = selected<br>green ring = legal landing</div>`, code:`const CELL = 60, PAD = 20;
+function centre(r, c){
+  return { x: PAD + c*CELL + CELL/2,
+           y: PAD + r*CELL + CELL/2 };
+}
+function drawPeg(x, y){
+  const rad = CELL * 0.30;
+  const g = ctx.createRadialGradient(
+    x-rad*0.3, y-rad*0.4, rad*0.2, x, y, rad);
+  g.addColorStop(0, "#fcd34d");
+  g.addColorStop(1, "#c2620a");
+  ctx.beginPath(); ctx.arc(x, y, rad, 0, 7);
+  ctx.fillStyle = g; ctx.fill();
+}` },
+
+ { title:"10. One click handler ties it together", why:"A single handler turns every tap into the right action. It first maps the mouse or finger into a grid cell, remembering that the canvas may be scaled down by CSS so the point is multiplied back up by the ratio of internal size to displayed size. If the cell holds a peg, you have selected it. If it is an empty hole and you already have a peg selected, we look through that peg's legal jumps for one whose landing cell is exactly where you clicked; find it and we snapshot for undo, perform the jump, and run the win-or-stuck check, and anything else gets a gentle hint in the message line. The board never runs a game loop — it is entirely event-driven and only repaints when something has actually changed, which keeps the whole thing calm and cheap.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every click → a cell<br><br>on a peg → select it<br>on a green hole → jump + re-check<br>anything else → a nudge</div>`, code:`function onCell(r, c){
+  if (won || !onBoard(r, c)) return;
+  if (board[r][c] === PEG) return selectPeg(r, c);
+  if (board[r][c] === EMPTY && selected){
+    const m = movesFrom(selected.r, selected.c)
+                .find(x => x.tr === r && x.tc === c);
+    if (m){ pushUndo(); doJump(m); selected = null; afterMove(); }
+    else   msg("Not a legal landing.");
+  }
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3000); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
