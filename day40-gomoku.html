@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 40 — Gomoku</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:28px; }
+
+  /* ---- the board ---- */
+  .board-wrap { position:relative; display:inline-block; }
+  #board {
+    display:grid; grid-template-columns:repeat(15,1fr); grid-template-rows:repeat(15,1fr);
+    width:min(92vw, 560px); aspect-ratio:1; border:8px solid #6b4423; border-radius:10px;
+    background:#e3b466; overflow:hidden; box-shadow:0 18px 40px rgba(0,0,0,.35); touch-action:manipulation;
+  }
+  .cell { position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  /* grid lines drawn through the centre of every cell → continuous grid of intersections */
+  .cell::before, .cell::after { content:""; position:absolute; background:rgba(70,45,12,.55); z-index:0; }
+  .cell::before { left:0; right:0; top:50%; height:2px; transform:translateY(-1px); }
+  .cell::after  { top:0; bottom:0; left:50%; width:2px; transform:translateX(-1px); }
+  .cell:hover { filter:brightness(1.04); }
+  .cell .star { position:absolute; width:26%; height:26%; border-radius:50%; background:rgba(60,38,10,.7); z-index:1; pointer-events:none; }
+  .cell .ghost { position:absolute; width:66%; height:66%; border-radius:50%; opacity:0; z-index:1; pointer-events:none; transition:opacity .1s; }
+  #board[data-turn="b"] .cell:hover .ghost { opacity:.32; background:#111827; }
+  #board[data-turn="w"] .cell:hover .ghost { opacity:.42; background:#f8fafc; }
+  .stone { position:absolute; width:76%; height:76%; border-radius:50%; z-index:2; pointer-events:none; }
+  .stone.b { background:radial-gradient(circle at 34% 30%, #6b7280, #0b1220 72%); box-shadow:0 2px 4px rgba(0,0,0,.55); }
+  .stone.w { background:radial-gradient(circle at 34% 30%, #ffffff, #c3ccd8 78%); box-shadow:0 2px 4px rgba(0,0,0,.35); }
+  .cell.last .stone { box-shadow:0 0 0 3px rgba(244,63,94,.95), 0 2px 4px rgba(0,0,0,.5); }
+  .cell.win::after, .cell.win::before { background:transparent; }
+  .cell.win { background:rgba(16,185,129,.42); }
+  .cell.win .stone { box-shadow:0 0 0 3px rgba(16,185,129,.95), 0 0 14px rgba(16,185,129,.8); }
+  .coord { position:absolute; font-size:9px; font-weight:800; pointer-events:none; opacity:.75; color:#5a3a12; z-index:3; }
+  .coord.rank { top:1px; left:2px; }
+  .coord.file { bottom:0px; right:3px; }
+
+  /* side panel */
+  .cnt-dot { display:inline-block; width:16px; height:16px; border-radius:50%; vertical-align:middle; margin-right:6px; }
+  .ml-row { display:grid; grid-template-columns:34px 1fr 1fr; gap:4px; padding:2px 6px; font-size:13px; font-variant-numeric:tabular-nums; }
+  .ml-row:nth-child(odd) { background:#f8fafc; }
+  .ml-n { color:#94a3b8; }
+  .ml-w, .ml-b { font-family:ui-monospace,Menlo,monospace; color:#334155; }
+
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .legend { color:#64748b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 40</div>
+      <h1 class="text-xl font-bold">⚫ Gomoku — Drop Stones on a 15&times;15 Board and Race to Line Up Five in a Row, in Any Direction, Then Let a Greedy Computer Block and Extend</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-5xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Five in a row wins — the oldest chase there is.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">Gomoku is played on the crossings of a 15&times;15 board. Two players take turns dropping a stone on any empty point — <strong>Black moves first</strong> — each trying to line up <strong>five of their own colour in an unbroken row</strong>. <strong>Click an empty intersection</strong> to place your stone and the turn passes to your opponent. A winning line counts in any of the <strong>four directions</strong> — horizontal, vertical, or either diagonal — and the instant one side completes five, that line lights up green and the game is over; no move lands after that. Flip to <strong>🤖 vs Computer</strong> and the white stones are played by a small <strong>greedy AI</strong> that scores every empty point for how strong a line it would build and how badly it needs to block yours, then plays the best of the two. <strong>↩ Undo</strong> lifts the last stone (and the computer's reply), and <strong>⚫ New game</strong> clears the board.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap items-center">
+        <div>Turn: <span id="turnDot" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#0b1220;border:1px solid #94a3b8;vertical-align:middle;margin-right:4px;"></span><span id="hTurn" class="stat text-slate-700">Black</span></div>
+        <div>Move: <span id="hMove" class="stat text-emerald-600">1</span></div>
+        <div>Status: <span id="hStatus" class="stat text-slate-700">Black to move</span></div>
+      </div>
+
+      <div class="flex justify-center gap-6 flex-wrap items-start">
+        <div class="board-wrap">
+          <div id="board"></div>
+        </div>
+        <div class="text-left" style="width:230px;max-width:90vw;">
+          <div class="bg-white rounded-xl border border-slate-200 p-3 mb-3">
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mb-2">Stones on board</div>
+            <div class="text-sm font-bold text-slate-700 mb-1"><span class="cnt-dot" style="background:radial-gradient(circle at 34% 30%,#6b7280,#0b1220 72%);"></span>Black: <span id="cntB" class="stat">0</span></div>
+            <div class="text-sm font-bold text-slate-700"><span class="cnt-dot" style="background:radial-gradient(circle at 34% 30%,#fff,#c3ccd8 78%);border:1px solid #cbd5e1;"></span>White: <span id="cntW" class="stat">0</span></div>
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mt-3 mb-1">Mode</div>
+            <div id="modeLbl" class="text-sm font-bold text-emerald-600">🤝 2 Players</div>
+          </div>
+          <div class="bg-white rounded-xl border border-slate-200 p-2">
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mb-1 px-1">Moves</div>
+            <div id="moveList" style="max-height:300px;overflow:auto;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-lg text-slate-600">Black to move — click any empty point to drop a stone.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="newBtn"  class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">⚫ New game</button>
+        <button id="undoBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">↩ Undo</button>
+        <button id="modeBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">🤖 Play vs Computer</button>
+      </div>
+      <p class="text-xs legend mt-3">Click an empty <strong>intersection</strong> to place a stone &nbsp;·&nbsp; <span class="keycap">N</span> new &nbsp; <span class="keycap">U</span> undo &nbsp; <span class="keycap">A</span> toggle AI</p>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">There are no images and no game library here — the board is a 15&times;15 grid of single characters, a dot for an empty point and <code>b</code> or <code>w</code> for a stone. Detecting a win never rescans the whole board: from the one point that just changed, it counts identical stones outward along each of the four directions, adds the two arms to the stone itself, and declares a win the moment any of those lines reaches five. That same outward count — scored for how long a run it forms and how many open ends it still has — is all the &ldquo;intelligence&rdquo; the optional opponent needs: it values every empty point twice, once as its own attack and once as the block it denies you, and simply plays the highest total. All vanilla JavaScript, offline, one file.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the board thinks</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">The board is a 15&times;15 grid of single characters — a dot for empty, <code>b</code> or <code>w</code> for a stone. Two players alternate, Black first. The whole game turns on one idea: after each stone lands, look <em>outward from that one point</em> along the four directions, count the identical stones on both sides, and if the stone plus its two arms reach five, that colour has won — collect the line and freeze the board. The optional opponent reuses the very same outward count as a score: every empty point is worth what it builds for the AI plus what it denies you, and it plays the best total. About 120 lines of vanilla JavaScript, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The board is 225 characters</h3></div>
+        <p class="text-sm text-slate-600 mb-3">No sprites, no objects — the whole position is fifteen strings, split into a 15&times;15 array of characters. A dot is an empty point, <code>b</code> is a Black stone and <code>w</code> is White. Black always plays first. One tiny helper swaps the colour whose turn it is, and every rule below reads from this same grid.</p>
+        <div class="relative"><pre>const SIZE  = 15;
+const START = Array.from({ length: SIZE }, () =&gt; ".".repeat(SIZE));
+const other = c =&gt; c === "b" ? "w" : "b";       // swap the side to move
+let board = START.map(row =&gt; row.split(""));     // 15×15 of "." / "b" / "w"
+let turn  = "b";                                 // Black moves first
+let moves = [];                                  // history: {r,c,col}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Four directions and a bounds check</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A line can run four ways: across, down, and the two diagonals. We do <em>not</em> list all eight compass directions — each of the four already covers both of its ends when we walk it forwards and backwards. One <code>inB</code> helper keeps every coordinate on the 15&times;15 grid so nothing else has to think about the edges.</p>
+        <div class="relative"><pre>const inB  = (r,c) =&gt; r&gt;=0 &amp;&amp; r&lt;SIZE &amp;&amp; c&gt;=0 &amp;&amp; c&lt;SIZE;
+const DIRS = [
+  [0, 1],   // →  horizontal
+  [1, 0],   // ↓  vertical
+  [1, 1],   // ↘  main diagonal
+  [1,-1]    // ↙  anti-diagonal
+];</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Drop a stone</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Placing a stone is the only way the board ever changes. Reject the click if the point is already taken or the game is finished; otherwise write the colour, remember the move for undo and the move list, and mark it as the last move so the board can ring it. The win / draw / turn-switch decision follows in the next steps.</p>
+        <div class="relative"><pre>function commit(r, c){
+  if (gameOver || board[r][c] !== ".") return;   // finished or occupied
+  board[r][c] = turn;                             // drop the stone
+  moves.push({ r, c, col: turn });                // for undo + move list
+  lastMove = { r, c };                            // ring the newest stone
+  finish(r, c);                                   // win? draw? else switch turn
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Count outward from the last stone</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the heart of Gomoku. You never rescan the whole board — only the point that just changed can complete a line. From it, step one direction and keep counting while the stones stay the same colour; that gives the length of one arm. A full line through the point is the stone itself, plus the arm going one way, plus the arm going the other way.</p>
+        <div class="relative"><pre>function runLength(bd, r, c, dr, dc, col){
+  let n = 0, rr = r + dr, cc = c + dc;
+  while (inB(rr,cc) &amp;&amp; bd[rr][cc] === col){ n++; rr += dr; cc += dc; }
+  return n;                                        // same-colour stones one way
+}
+// line through (r,c) in a direction =
+//   1  +  runLength(+dr,+dc)  +  runLength(-dr,-dc)</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The four-direction win scan</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Now run that outward count once per direction. Walk forward collecting matching stones, then walk backward collecting the rest, and you have the whole unbroken line through the point. If any of the four lines is five stones or longer, that colour has won — and because we kept the coordinates, we return the exact line to light up on the board.</p>
+        <div class="relative"><pre>function winLineFrom(bd, r, c){
+  const col = bd[r][c]; if (col === ".") return null;
+  for (const [dr,dc] of DIRS){
+    const line = [[r,c]];
+    let rr=r+dr, cc=c+dc;                                     // walk forward
+    while (inB(rr,cc) &amp;&amp; bd[rr][cc]===col){ line.push([rr,cc]);    rr+=dr; cc+=dc; }
+    rr=r-dr; cc=c-dc;                                         // walk backward
+    while (inB(rr,cc) &amp;&amp; bd[rr][cc]===col){ line.unshift([rr,cc]); rr-=dr; cc-=dc; }
+    if (line.length &gt;= 5) return line;                        // five (or more) — win!
+  }
+  return null;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Win, draw, or play on</h3></div>
+        <p class="text-sm text-slate-600 mb-3">After each stone, three outcomes are possible. If the win scan finds a line, freeze the board, store the line to highlight it, and stop accepting moves. If not but all 225 points are full, it is a draw. Otherwise swap the side to move and continue. This is the whole game loop.</p>
+        <div class="relative"><pre>function finish(r, c){
+  const line = winLineFrom(board, r, c);
+  if (line){                                       // five in a row
+    gameOver = true; winLine = line;
+    status = (turn === "b" ? "Black" : "White") + " wins — five in a row!";
+    return;
+  }
+  if (board.every(row =&gt; row.every(x =&gt; x !== "."))){
+    gameOver = true; status = "Board full — draw"; return;
+  }
+  turn = other(turn);                              // nobody won — keep playing
+  status = (turn === "b" ? "Black" : "White") + " to move";
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Undo lifts the last stone</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Because every move was pushed onto <code>moves</code>, undo is just a pop: take the last move off the list and clear that point back to a dot. Playing the computer, one human move triggered one machine reply, so undo lifts <em>both</em> — leaving it your turn again. Re-derive whose turn it is straight from how many stones remain.</p>
+        <div class="relative"><pre>function undo(){
+  if (!moves.length) return;
+  const m = moves.pop(); board[m.r][m.c] = ".";        // lift the newest stone
+  if (vsAI &amp;&amp; moves.length % 2 === 1){                  // also lift the AI reply
+    const a = moves.pop(); board[a.r][a.c] = ".";
+  }
+  gameOver = false; winLine = null;
+  lastMove = moves.length ? moves[moves.length-1] : null;
+  turn = moves.length % 2 === 0 ? "b" : "w";           // Black on even counts
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Score one empty point</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The optional AI reuses the outward count as a valuation. For a colour played at a point, measure the run it would join in each direction and how many <em>open ends</em> that run still has — an open end is what lets a line grow to five. A tiny table turns (length, open-ends) into a score: a completed five is enormous, an open four is nearly as good, an open three is a real threat.</p>
+        <div class="relative"><pre>function patternScore(count, open){
+  if (count &gt;= 5)  return 1e7;                              // makes five
+  if (count === 4) return open === 2 ? 1e6 : open ? 1e4 : 0; // open four vs four
+  if (count === 3) return open === 2 ? 1e3 : open ? 1e2 : 0; // open three
+  if (count === 2) return open === 2 ? 1e2 : open ? 10  : 0;
+  return open ? 1 : 0;
+}
+function scorePoint(bd, r, c, col){               // value of col playing at (r,c)
+  let total = 0;
+  for (const [dr,dc] of DIRS){
+    let f=0, rr=r+dr, cc=c+dc;                     // run forward
+    while (inB(rr,cc) &amp;&amp; bd[rr][cc]===col){ f++; rr+=dr; cc+=dc; }
+    const fOpen = inB(rr,cc) &amp;&amp; bd[rr][cc]===".";  // is that end still open?
+    let b=0; rr=r-dr; cc=c-dc;                     // run backward
+    while (inB(rr,cc) &amp;&amp; bd[rr][cc]===col){ b++; rr-=dr; cc-=dc; }
+    const bOpen = inB(rr,cc) &amp;&amp; bd[rr][cc]===".";
+    total += patternScore(1 + f + b, (fOpen?1:0) + (bOpen?1:0));
+  }
+  return total;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">The greedy AI: block and extend at once</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Now the opponent is one line. Look only at empty points near existing stones (an empty board just takes the centre), and value each one <em>twice</em>: what it builds for the AI, and what it denies you if the AI takes it first. Adding the two — with a hair more weight on attack — means a point that both extends the AI's threat and blocks yours rises to the top. Its own winning five outscores everything, so it takes a win when it sees one.</p>
+        <div class="relative"><pre>function candidates(bd){                            // empty points within 2 of a stone
+  const seen = new Set(), out = []; let any = false;
+  for (let r=0;r&lt;SIZE;r++) for (let c=0;c&lt;SIZE;c++) if (bd[r][c] !== "."){
+    any = true;
+    for (let dr=-2;dr&lt;=2;dr++) for (let dc=-2;dc&lt;=2;dc++){
+      const rr=r+dr, cc=c+dc, k=rr+","+cc;
+      if (inB(rr,cc) &amp;&amp; bd[rr][cc]==="." &amp;&amp; !seen.has(k)){ seen.add(k); out.push([rr,cc]); }
+    }
+  }
+  return any ? out : [[7,7]];                       // first move → centre
+}
+function aiMove(){
+  let best = null, bestScore = -Infinity;
+  for (const [r,c] of candidates(board)){
+    const s = scorePoint(board,r,c,ai) * 1.05       // my own threat (slight bias)
+            + scorePoint(board,r,c,human);          // + the block I deny you
+    if (s &gt; bestScore){ bestScore = s; best = [r,c]; }
+  }
+  if (best) commit(best[0], best[1]);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Click to place, and paint the board</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One click handler ties it together. Ignore clicks on taken points or after the game ends, and — playing the computer — ignore them when it is not your turn. Otherwise place the stone, redraw, and if the machine is on and the game is still live, let it reply after a short beat. Rendering is a loop over 225 cells that drops a black or white disc on each stone, rings the last move, and glows every cell of the winning line.</p>
+        <div class="relative"><pre>boardEl.addEventListener("click", e =&gt; {
+  const cell = e.target.closest(".cell"); if (!cell || gameOver) return;
+  const r = +cell.dataset.r, c = +cell.dataset.c;
+  if (board[r][c] !== ".") return;                  // occupied
+  if (vsAI &amp;&amp; turn !== human) return;               // not your turn
+  commit(r, c); render();
+  if (vsAI &amp;&amp; !gameOver) setTimeout(() =&gt; { aiMove(); render(); }, 250);
+});
+// render() loops 225 cells: draw .stone.b / .stone.w on each occupied point,
+// ring the last move, and add .win to every cell in winLine.</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 40 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built a full two-player Gomoku end to end: the position as 225 characters; the four line directions and a bounds check; dropping a stone into the grid; the outward count from the last move; the four-direction win scan that returns the exact winning line; the win / draw / play-on decision; undo as a simple pop (that lifts the computer's reply too); a point-scoring function built from that same outward count; a greedy AI that values every empty point as attack-plus-block; and one click handler over a disc-painted grid. Next: add a real search with minimax and alpha-beta, teach it the classic threat patterns (double-threes, four-three forks), or enforce the pro &ldquo;renju&rdquo; opening rules. <strong>👉 Tomorrow — Day 41: Reaction Time — wait for the screen to flash green, then tap as fast as you can and measure your reflexes in milliseconds.</strong></p></div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== GOMOKU ENGINE (vanilla) =====
+const SIZE = 15;
+const COLS = "ABCDEFGHIJKLMNO";                       // 15 column labels
+const DIRS = [[0,1],[1,0],[1,1],[1,-1]];              // →  ↓  ↘  ↙
+const STARS = new Set(["3,3","3,11","11,3","11,11","7,7"]);
+const human = "b", ai = "w";                          // vs-computer colours
+
+const inB   = (r,c) => r>=0 && r<SIZE && c>=0 && c<SIZE;
+const other = c => c === "b" ? "w" : "b";
+const colName = c => c === "b" ? "Black" : "White";
+
+let board, turn, moves, gameOver, winner, winLine, lastMove, vsAI, thinking, statusText;
+
+function newBoard(){
+  board = Array.from({ length: SIZE }, () => Array(SIZE).fill("."));
+  turn = "b"; moves = []; gameOver = false; winner = null; winLine = null;
+  lastMove = null; thinking = false; statusText = "Black to move";
+}
+
+// ----- count same-colour stones one way from (r,c) -----
+function runLength(bd, r, c, dr, dc, col){
+  let n = 0, rr = r + dr, cc = c + dc;
+  while (inB(rr,cc) && bd[rr][cc] === col){ n++; rr += dr; cc += dc; }
+  return n;
+}
+
+// ----- four-direction win scan → the winning line (or null) -----
+function winLineFrom(bd, r, c){
+  const col = bd[r][c]; if (col === ".") return null;
+  for (const [dr,dc] of DIRS){
+    const line = [[r,c]];
+    let rr=r+dr, cc=c+dc;
+    while (inB(rr,cc) && bd[rr][cc]===col){ line.push([rr,cc]); rr+=dr; cc+=dc; }
+    rr=r-dr; cc=c-dc;
+    while (inB(rr,cc) && bd[rr][cc]===col){ line.unshift([rr,cc]); rr-=dr; cc-=dc; }
+    if (line.length >= 5) return line;
+  }
+  return null;
+}
+function isFull(bd){ return bd.every(row => row.every(x => x !== ".")); }
+
+// ----- commit a stone to the real board -----
+function commit(r, c){
+  if (gameOver || board[r][c] !== ".") return;
+  board[r][c] = turn;
+  moves.push({ r, c, col: turn });
+  lastMove = { r, c };
+  const line = winLineFrom(board, r, c);
+  if (line){
+    gameOver = true; winner = turn; winLine = line;
+    statusText = colName(turn) + " wins — five in a row! 🏆";
+  } else if (isFull(board)){
+    gameOver = true; winner = null; statusText = "Board full — draw 🤝";
+  } else {
+    turn = other(turn);
+    statusText = colName(turn) + " to move";
+  }
+}
+
+// ----- greedy AI: score every empty point as attack + block -----
+function patternScore(count, open){
+  if (count >= 5)  return 1e7;
+  if (count === 4) return open === 2 ? 1e6 : open ? 1e4 : 0;
+  if (count === 3) return open === 2 ? 1e3 : open ? 1e2 : 0;
+  if (count === 2) return open === 2 ? 1e2 : open ? 10  : 0;
+  return open ? 1 : 0;
+}
+function scorePoint(bd, r, c, col){
+  let total = 0;
+  for (const [dr,dc] of DIRS){
+    let f=0, rr=r+dr, cc=c+dc;
+    while (inB(rr,cc) && bd[rr][cc]===col){ f++; rr+=dr; cc+=dc; }
+    const fOpen = inB(rr,cc) && bd[rr][cc]===".";
+    let b=0; rr=r-dr; cc=c-dc;
+    while (inB(rr,cc) && bd[rr][cc]===col){ b++; rr-=dr; cc-=dc; }
+    const bOpen = inB(rr,cc) && bd[rr][cc]===".";
+    total += patternScore(1 + f + b, (fOpen?1:0) + (bOpen?1:0));
+  }
+  return total;
+}
+function candidates(bd){
+  const seen = new Set(), out = []; let any = false;
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) if (bd[r][c] !== "."){
+    any = true;
+    for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++){
+      const rr=r+dr, cc=c+dc, k=rr+","+cc;
+      if (inB(rr,cc) && bd[rr][cc]==="." && !seen.has(k)){ seen.add(k); out.push([rr,cc]); }
+    }
+  }
+  return any ? out : [[7,7]];
+}
+function aiMove(){
+  if (gameOver) return;
+  let best = null, bestScore = -Infinity;
+  for (const [r,c] of candidates(board)){
+    const s = scorePoint(board,r,c,ai) * 1.05 + scorePoint(board,r,c,human);
+    if (s > bestScore){ bestScore = s; best = [r,c]; }
+  }
+  if (best) commit(best[0], best[1]);
+}
+
+// ----- undo -----
+function undo(){
+  if (!moves.length) return;
+  let m = moves.pop(); board[m.r][m.c] = ".";
+  if (vsAI && moves.length % 2 === 1){ m = moves.pop(); board[m.r][m.c] = "."; }
+  gameOver = false; winner = null; winLine = null; thinking = false;
+  lastMove = moves.length ? { r: moves[moves.length-1].r, c: moves[moves.length-1].c } : null;
+  turn = moves.length % 2 === 0 ? "b" : "w";
+  statusText = colName(turn) + " to move";
+  updateHUD(); render();
+}
+
+// ----- notation -----
+function sqName(r,c){ return COLS[c] + (SIZE - r); }
+
+// ----- HUD -----
+function updateHUD(){
+  document.getElementById("hTurn").textContent = colName(turn);
+  document.getElementById("turnDot").style.background = turn === "b"
+    ? "radial-gradient(circle at 34% 30%,#6b7280,#0b1220 72%)"
+    : "radial-gradient(circle at 34% 30%,#fff,#c3ccd8 78%)";
+  document.getElementById("hMove").textContent = Math.floor(moves.length / 2) + 1;
+  document.getElementById("hStatus").textContent = statusText;
+  let cb = 0, cw = 0;
+  for (const m of moves){ if (m.col === "b") cb++; else cw++; }
+  document.getElementById("cntB").textContent = cb;
+  document.getElementById("cntW").textContent = cw;
+  document.getElementById("modeLbl").textContent = vsAI ? "🤖 vs Computer (you are Black)" : "🤝 2 Players";
+  msg(statusText, gameOver ? (winner ? "win" : "") : (statusText.indexOf("wins") >= 0 ? "win" : ""));
+
+  const ml = document.getElementById("moveList"); ml.innerHTML = "";
+  for (let i=0;i<moves.length;i+=2){
+    const row = document.createElement("div"); row.className = "ml-row";
+    const w = moves[i]   ? sqName(moves[i].r,   moves[i].c)   : "";
+    const b = moves[i+1] ? sqName(moves[i+1].r, moves[i+1].c) : "";
+    row.innerHTML = '<span class="ml-n">' + (i/2 + 1) + '.</span><span class="ml-w">' + w + '</span><span class="ml-b">' + b + '</span>';
+    ml.appendChild(row);
+  }
+  ml.scrollTop = ml.scrollHeight;
+}
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : tone === "warn" ? "text-rose-600" : "text-slate-600");
+}
+
+// ----- rendering -----
+function render(){
+  const el = document.getElementById("board"); el.innerHTML = "";
+  el.dataset.turn = gameOver ? "" : turn;
+  const winSet = new Set((winLine || []).map(p => p[0] + "," + p[1]));
+  for (let r=0;r<SIZE;r++){
+    for (let c=0;c<SIZE;c++){
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      cell.dataset.r = r; cell.dataset.c = c;
+      if (STARS.has(r + "," + c) && board[r][c] === "."){
+        const st = document.createElement("span"); st.className = "star"; cell.appendChild(st);
+      }
+      const p = board[r][c];
+      if (p !== "."){
+        const s = document.createElement("span");
+        s.className = "stone " + p;
+        cell.appendChild(s);
+        if (lastMove && lastMove.r === r && lastMove.c === c) cell.classList.add("last");
+        if (winSet.has(r + "," + c)) cell.classList.add("win");
+      } else {
+        const g = document.createElement("span"); g.className = "ghost"; cell.appendChild(g);
+      }
+      if (c === 0){ const rk = document.createElement("span"); rk.className = "coord rank"; rk.textContent = SIZE - r; cell.appendChild(rk); }
+      if (r === SIZE-1){ const fl = document.createElement("span"); fl.className = "coord file"; fl.textContent = COLS[c]; cell.appendChild(fl); }
+      el.appendChild(cell);
+    }
+  }
+}
+
+// ----- input -----
+function onClick(e){
+  if (gameOver || thinking) return;
+  const cell = e.target.closest(".cell"); if (!cell) return;
+  const r = +cell.dataset.r, c = +cell.dataset.c;
+  if (board[r][c] !== ".") return;
+  if (vsAI && turn !== human) return;
+  commit(r, c); updateHUD(); render();
+  if (vsAI && !gameOver && turn === ai){
+    thinking = true;
+    setTimeout(() => { aiMove(); thinking = false; updateHUD(); render(); }, 260);
+  }
+}
+
+function newGame(){ newBoard(); updateHUD(); render(); }
+function toggleMode(){
+  vsAI = !vsAI;
+  document.getElementById("modeBtn").textContent = vsAI ? "🤝 Play 2 Players" : "🤖 Play vs Computer";
+  updateHUD(); render();
+  if (vsAI && !gameOver && turn === ai){
+    thinking = true;
+    setTimeout(() => { aiMove(); thinking = false; updateHUD(); render(); }, 260);
+  }
+}
+
+document.getElementById("board").addEventListener("click", onClick);
+document.getElementById("newBtn").onclick  = newGame;
+document.getElementById("undoBtn").onclick = undo;
+document.getElementById("modeBtn").onclick = toggleMode;
+document.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  const k = e.key.toLowerCase();
+  if (k === "n") newGame();
+  else if (k === "u") undo();
+  else if (k === "a") toggleMode();
+});
+
+vsAI = false;
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is 225 characters", why:"There are no stone objects and no images doing the work — the whole position is fifteen short strings split into a 15×15 grid of single characters. A dot is an empty point, the letter b is a Black stone and w is a White one, and Black always plays the first move. Because it is just characters, reading and writing the board is trivial, and every rule in the game — placing, winning, even the computer opponent — works from this one grid and nothing else. Understand these characters and you understand the whole data model.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">15 × 15 grid of points<br><br>. . . . . . . . . . . . . . .<br>. . . . . . . . . . . . . . .<br>. . . b . . . . . . . . . . .<br>. . . . w . . . . . . . . . .<br>. . . . . b . . . . . . . . .<br>. . . . . . . . . . . . . . .<br><br>"." empty · "b" black · "w" white</div>`, code:`const SIZE  = 15;
+const START = Array.from({ length: SIZE },
+                () => ".".repeat(SIZE));
+const other = c => c === "b" ? "w" : "b";
+let board = START.map(row => row.split(""));
+let turn  = "b";       // Black moves first
+let moves = [];        // history: {r, c, col}` },
+
+ { title:"2. Four directions + a bounds check", why:"A row of five can run four ways: across, down, or along either diagonal. We deliberately list only four directions, not eight, because when we later walk a line we go both forwards and backwards along the same axis — so [0,1] alone covers left and right, and [1,1] covers both diagonal ends. Alongside them sits one humble helper, inB, that answers whether a coordinate is still on the 15×15 board. Every count below funnels through inB, so none of the interesting logic ever has to write an edge check.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">four line axes<br><br>→  horizontal &nbsp;[0, 1]<br>↓  vertical &nbsp;&nbsp;&nbsp;[1, 0]<br>↘  diagonal &nbsp;&nbsp;[1, 1]<br>↙  anti-diag &nbsp;[1,-1]<br><br>walk each one BOTH ways</div>`, code:`const inB  = (r,c) =>
+  r>=0 && r<SIZE && c>=0 && c<SIZE;
+
+const DIRS = [
+  [0, 1],   // →  horizontal
+  [1, 0],   // ↓  vertical
+  [1, 1],   // ↘  main diagonal
+  [1,-1]    // ↙  anti-diagonal
+];` },
+
+ { title:"3. Drop a stone", why:"Placing a stone is the only thing that ever changes the board, so all the game's bookkeeping lives in one small function. First it refuses the move if the point is already taken or the game has ended. Otherwise it writes the current colour into the grid, pushes the move onto a history list so undo and the move list have something to read, and records it as the last move so the board can ring the newest stone. Everything after — did this win, is it a draw, whose turn now — is decided by the next steps.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">commit(7, 7)<br><br>occupied or over? → ignore<br>write board[7][7] = turn<br>push {r,c,col} to history<br>mark as last move<br>→ check win / draw / switch</div>`, code:`function commit(r, c){
+  if (gameOver || board[r][c] !== ".") return;
+  board[r][c] = turn;               // drop stone
+  moves.push({ r, c, col: turn });  // for undo
+  lastMove = { r, c };              // ring it
+  finish(r, c);                     // win/draw/turn
+}` },
+
+ { title:"4. Count outward from the last stone", why:"This is the single most important idea in Gomoku. After a stone lands, only lines that pass through that exact point could possibly have changed — so you never rescan the board, you scan outward from one square. Pick a direction, step off the stone, and keep counting while the colour stays the same; the moment it changes or you leave the board, that arm ends. A full line through the point is then just the stone itself plus the arm running one way plus the arm running the other. Fast, and it is the same count the AI will reuse.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">horizontal line through ●<br><br>. b b ● b b .<br>&nbsp;&nbsp;&nbsp;←2─┘ └─2→<br><br>total = 1 + left(2) + right(2) = 5</div>`, code:`function runLength(bd, r, c, dr, dc, col){
+  let n = 0, rr = r+dr, cc = c+dc;
+  while (inB(rr,cc) && bd[rr][cc] === col){
+    n++; rr += dr; cc += dc;
+  }
+  return n;   // same-colour stones this way
+}
+// line = 1 + runLength(+dir) + runLength(-dir)` },
+
+ { title:"5. The four-direction win scan", why:"Now run that outward count once for each of the four axes. Walking forward you collect every matching stone into a list, then walking backward you prepend the rest — and you end up holding the entire unbroken line of one colour through the point, in order. If any of those four lines is five stones or longer, that colour has just won. Because we kept the actual coordinates rather than only a count, the function can hand back the exact line, which is what the board lights up in green.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">check all four, keep the cells<br><br>→ . w w w w w .  ← length 5, WIN<br>↓ length 2<br>↘ length 1<br>↙ length 3<br><br>return the winning line's coordinates</div>`, code:`function winLineFrom(bd, r, c){
+  const col = bd[r][c];
+  if (col === ".") return null;
+  for (const [dr,dc] of DIRS){
+    const line = [[r,c]];
+    let rr=r+dr, cc=c+dc;                       // forward
+    while (inB(rr,cc) && bd[rr][cc]===col){
+      line.push([rr,cc]); rr+=dr; cc+=dc; }
+    rr=r-dr; cc=c-dc;                           // backward
+    while (inB(rr,cc) && bd[rr][cc]===col){
+      line.unshift([rr,cc]); rr-=dr; cc-=dc; }
+    if (line.length >= 5) return line;          // WIN
+  }
+  return null;
+}` },
+
+ { title:"6. Win, draw, or play on", why:"Every stone leads to exactly one of three outcomes, decided right after it lands. If the win scan returns a line, the game is over: freeze the board so no more stones can be placed, and store the line so it can be highlighted. If nobody won but all 225 points are now filled, it is a draw — rare, but possible. Otherwise the game simply continues, so we swap the side to move and wait for the next click. That short branch is the entire turn loop of Gomoku.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">after every stone<br><br>win scan hit? &nbsp;→ freeze + highlight + stop<br>board full? &nbsp;&nbsp;→ draw + stop<br>otherwise &nbsp;&nbsp;&nbsp;&nbsp;→ swap turn, play on</div>`, code:`function finish(r, c){
+  const line = winLineFrom(board, r, c);
+  if (line){
+    gameOver = true; winLine = line;
+    status = colName(turn) + " wins!";
+    return;
+  }
+  if (isFull(board)){
+    gameOver = true; status = "Draw";
+    return;
+  }
+  turn = other(turn);           // keep playing
+}` },
+
+ { title:"7. Undo lifts the last stone", why:"Because every move was pushed onto the history list as it happened, taking one back needs no clever reversal — you pop the last move and clear its point back to a dot. There is one nice wrinkle when playing the computer: a single human move triggered a single machine reply, so a natural undo should lift both stones and hand the turn back to you. Since Black plays on even move counts, whose turn it is can be recomputed from the length of the history alone, with no separate flag to keep in sync.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">pop the history<br><br>2-player &nbsp; → lift 1 stone<br>vs computer → lift 2 (yours + its reply)<br><br>turn = even count ? Black : White</div>`, code:`function undo(){
+  if (!moves.length) return;
+  let m = moves.pop();
+  board[m.r][m.c] = ".";            // lift newest
+  if (vsAI && moves.length % 2 === 1){
+    m = moves.pop();                // + AI reply
+    board[m.r][m.c] = ".";
+  }
+  gameOver = false; winLine = null;
+  turn = moves.length % 2 === 0 ? "b" : "w";
+}` },
+
+ { title:"8. Score one empty point", why:"The optional opponent needs a way to say how good a point is, and it reuses the very same outward count. For a given colour played at a point, it measures the run that point would join in each direction and, crucially, how many open ends that run still has — an end that is empty is what lets a line keep growing toward five, while a blocked end is a dead stop. A tiny lookup turns the pair (run length, open ends) into a number: a completed five is astronomical, an open four almost as good, an open three a genuine threat, and so on down.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">length + open ends → score<br><br>five &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 10,000,000<br>open four &nbsp;→ 1,000,000<br>four &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 10,000<br>open three → 1,000<br>. _ x x x _ .  ← both ends open</div>`, code:`function patternScore(count, open){
+  if (count >= 5)  return 1e7;
+  if (count === 4) return open===2?1e6:open?1e4:0;
+  if (count === 3) return open===2?1e3:open?1e2:0;
+  if (count === 2) return open===2?1e2:open?10:0;
+  return open ? 1 : 0;
+}
+// scorePoint(bd,r,c,col) sums patternScore
+// over all 4 directions (run length + open ends)` },
+
+ { title:"9. The greedy AI: block and extend", why:"With scoring in hand, the whole opponent is one loop. It looks only at empty points near existing stones — an empty board just plays the centre — and it values each candidate twice: once as its own attack, the line it would build, and once as defence, the line it denies you by taking that point first. Adding the two, with a shade more weight on attack, is what makes a single move that both extends the machine's threat and blocks yours float to the top. And because its own completed five scores highest of all, it will always grab a win the instant it can see one.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">value each empty point twice<br><br>attack = my line if I play here<br>block &nbsp;= your line I deny<br><br>score = attack × 1.05 + block<br>→ play the highest total</div>`, code:`function aiMove(){
+  let best = null, bestScore = -Infinity;
+  for (const [r,c] of candidates(board)){
+    const s = scorePoint(board,r,c,ai) * 1.05
+            + scorePoint(board,r,c,human);
+    if (s > bestScore){ bestScore = s; best=[r,c]; }
+  }
+  if (best) commit(best[0], best[1]);
+}` },
+
+ { title:"10. Click to place, paint the board", why:"One click handler turns all of this into a game. A click is ignored on an occupied point or once the game is over, and — when you are playing the computer — while it is not your turn. Otherwise the stone is placed, the board is redrawn, and if the machine is switched on and the game is still live it replies after a brief pause so you can see your own move first. Drawing is just as plain: a loop over the 225 cells drops a black or white disc on each occupied point, rings the most recent stone, and glows every cell of the winning line. No sprites, no canvas — just discs on a grid.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click flow<br><br>occupied / over / not your turn → ignore<br>empty point → place + redraw<br>vs computer → it replies after 250ms<br><br>render: 225 cells → discs + rings + glow</div>`, code:`boardEl.addEventListener("click", e => {
+  const cell = e.target.closest(".cell");
+  if (!cell || gameOver) return;
+  const r = +cell.dataset.r, c = +cell.dataset.c;
+  if (board[r][c] !== ".") return;      // taken
+  if (vsAI && turn !== human) return;   // wait
+  commit(r, c); render();
+  if (vsAI && !gameOver)
+    setTimeout(() => { aiMove(); render(); }, 250);
+});` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3000); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
