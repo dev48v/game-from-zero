@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 41 — Reaction Time</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #msg { min-height:28px; }
+
+  /* ---- the click pad ---- */
+  .pad {
+    width:min(92vw, 620px); height:340px; border-radius:22px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none; color:#fff; text-align:center; padding:20px;
+    box-shadow:0 18px 40px rgba(0,0,0,.28); transition:background-color .08s ease;
+    touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+  }
+  .pad.idle     { background:#1e293b; }
+  .pad.wait     { background:#ef4444; }   /* RED   — do not tap yet */
+  .pad.go       { background:#22c55e; }   /* GREEN — tap now!       */
+  .pad.result   { background:#3b82f6; }   /* BLUE  — round result   */
+  .pad.tooearly { background:#f59e0b; }   /* AMBER — false start    */
+  .pad.done     { background:#4f46e5; }   /* INDIGO— series summary */
+  .pad-big { font-size:clamp(30px, 6.5vw, 60px); font-weight:800; line-height:1.05; letter-spacing:-.01em; }
+  .pad-sub { font-size:15px; opacity:.92; margin-top:10px; font-weight:600; max-width:520px; }
+
+  /* side panel */
+  .rt-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; }
+  .rt-stat-row { display:flex; justify-content:space-between; align-items:baseline; padding:5px 0; font-size:14px; }
+  .rt-stat-row .k { color:#64748b; font-weight:600; }
+  .rt-stat-row .v { font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums; }
+
+  /* histogram of attempts */
+  .histo { display:flex; flex-direction:column; gap:7px; }
+  .hbar-row { display:flex; align-items:center; gap:8px; font-size:12px; }
+  .hbar-lbl { width:22px; color:#94a3b8; font-weight:800; font-family:ui-monospace,Menlo,monospace; }
+  .hbar-track { flex:1; background:#f1f5f9; border-radius:6px; height:20px; overflow:hidden; }
+  .hbar-fill { height:100%; border-radius:6px; transition:width .35s ease; min-width:0; }
+  .hbar-val { width:52px; text-align:right; font-weight:700; color:#334155; font-variant-numeric:tabular-nums; }
+
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .legend { color:#64748b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 41</div>
+      <h1 class="text-xl font-bold">⚡ Reaction Time — Wait for the Screen to Flash Green, Then Tap as Fast as You Can; Measure Your Reflex in Milliseconds Across Five Rounds With a Running Average, Your Best Time, and a Penalty for Jumping the Gun</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-5xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">How fast is a thought? Tap the instant it turns green.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">Reaction time is the oldest lab test there is — the gap between a signal appearing and your body responding. <strong>Click the pad to start a round</strong> and it turns <strong style="color:#ef4444;">red</strong> with &ldquo;wait for green.&rdquo; After a <strong>random hidden delay of 1.5&ndash;4.5 seconds</strong> — random so you can&rsquo;t learn the timing and pre-tap — the pad flashes <strong style="color:#16a34a;">green</strong>. The moment it does, a high-resolution stopwatch starts; <strong>tap as fast as you can</strong> and the game measures the milliseconds between the flip and your click. Do it across <strong>five rounds</strong> and it tracks every time, your <strong>best</strong>, and a <strong>running average</strong>, plus a little bar chart of all your attempts. Tap <em>during</em> the red phase and it&rsquo;s a <strong>false start</strong> — it doesn&rsquo;t count, and you retry that round, exactly like an athletics track. A typical human sits around <strong>200&ndash;270&nbsp;ms</strong>; break 250 and you&rsquo;re quick. There are no images and no game library here — just a coloured <code>div</code>, one random timer, and <code>performance.now()</code>.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap items-center">
+        <div>Round: <span id="hRound" class="stat text-emerald-600">0 / 5</span></div>
+        <div>Last: <span id="hLast" class="stat text-slate-700">—</span></div>
+        <div>Best: <span id="hBest" class="stat text-slate-700">—</span></div>
+        <div>Average: <span id="hAvg" class="stat text-slate-700">—</span></div>
+        <div>False starts: <span id="hFalse" class="stat text-rose-600">0</span></div>
+      </div>
+
+      <div class="flex justify-center gap-6 flex-wrap items-start">
+        <div>
+          <div id="pad" class="pad idle">
+            <div id="padBig" class="pad-big">Click to start</div>
+            <div id="padSub" class="pad-sub">Round 1 of 5 — wait for GREEN, then tap</div>
+          </div>
+        </div>
+        <div class="text-left" style="width:250px;max-width:90vw;">
+          <div class="rt-card p-4 mb-3">
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mb-2">This series</div>
+            <div class="rt-stat-row"><span class="k">Rounds done</span><span class="v" id="sRound">0 / 5</span></div>
+            <div class="rt-stat-row"><span class="k">Best</span><span class="v" id="sBest">—</span></div>
+            <div class="rt-stat-row"><span class="k">Average</span><span class="v" id="sAvg">—</span></div>
+            <div class="rt-stat-row"><span class="k">False starts</span><span class="v" id="sFalse">0</span></div>
+          </div>
+          <div class="rt-card p-4">
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mb-3">Attempts (ms)</div>
+            <div id="histo" class="histo"></div>
+            <div class="text-[10px] text-slate-400 mt-3 leading-snug">Shorter bar = faster. <span style="color:#22c55e;font-weight:700;">green</span> &lt;250 · <span style="color:#84cc16;font-weight:700;">lime</span> &lt;350 · <span style="color:#f59e0b;font-weight:700;">amber</span> &lt;450 · <span style="color:#ef4444;font-weight:700;">red</span> slower.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="msg" class="mt-5 font-bold text-lg text-slate-600">Wait for the pad to flash green, then tap as fast as you can.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="restartBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">⚡ Restart series</button>
+      </div>
+      <p class="text-xs legend mt-3">Click the big pad to start / tap &nbsp;·&nbsp; <span class="keycap">Space</span> or <span class="keycap">Enter</span> also taps &nbsp; <span class="keycap">R</span> restart</p>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">The whole game is a tiny five-state machine — <em>idle → wait → go → result</em>, looping five times to <em>done</em> — and a single stopwatch. Timing uses <code>performance.now()</code>, not <code>Date.now()</code>: it is a <strong>monotonic</strong> clock measured in fractions of a millisecond that never jumps backward when the system clock is adjusted, so the difference between two readings is a trustworthy elapsed time. The red delay is <code>Math.random()</code> between 1.5 and 4.5&nbsp;seconds so the flip is genuinely unpredictable, and a guard on the red phase turns any early click into a no-count false start. All vanilla JavaScript, offline, one file.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the stopwatch thinks</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">There is no sprite sheet and no game engine — the whole thing is one coloured <code>div</code>, one random timer, and a high-resolution stopwatch. The game is a five-state machine: <em>idle</em> until you click, <em>wait</em> while the pad is red, <em>go</em> the instant it turns green, <em>result</em> after your tap, and <em>done</em> once five rounds are in. Two ideas carry the whole thing: <code>performance.now()</code> gives a monotonic, sub-millisecond stopwatch so a simple subtraction is a trustworthy reaction time, and a random 1.5&ndash;4.5&nbsp;s delay before green makes the flip impossible to anticipate — with a guard that turns any early tap into a no-count false start. About 90 lines of vanilla JavaScript, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The whole game is five states</h3></div>
+        <p class="text-sm text-slate-600 mb-3">No objects, no scene graph — the entire game is one string that says which of five moments we are in, plus a handful of numbers. <code>idle</code> waits for your first click, <code>wait</code> is the red pause, <code>go</code> is the green flash, <code>result</code> shows a round&rsquo;s time, and <code>done</code> is the final summary. Everything below just moves between these five states.</p>
+        <div class="relative"><pre>const TOTAL    = 5;      // rounds in one series
+const MIN_WAIT = 1500;   // shortest red delay (ms)
+const MAX_WAIT = 4500;   // longest  red delay (ms)
+
+let phase;        // "idle" | "wait" | "go" | "result" | "done"
+let times = [];   // reaction time of each round (ms)
+let falseStarts;  // count of too-early taps
+let startTime;    // performance.now() at the green flip
+let timer;        // setTimeout handle for red -&gt; green</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">performance.now(), not Date — a real stopwatch</h3></div>
+        <p class="text-sm text-slate-600 mb-3">You could subtract two <code>Date.now()</code> readings, but you shouldn&rsquo;t. <code>Date.now()</code> tracks wall-clock time, which the OS can nudge forward or back (NTP sync, daylight saving) and only ticks in whole milliseconds. <code>performance.now()</code> is a <strong>monotonic</strong> clock — it only ever counts up, from page load, in fractions of a millisecond — so the difference between two readings is a clean, trustworthy elapsed time. Perfect for a reflex measured in a few hundred ms.</p>
+        <div class="relative"><pre>// Date.now()  → wall clock, whole ms, can jump backward  ✗
+// performance.now() → monotonic, sub-ms, never jumps      ✓
+
+const t0 = performance.now();
+// ... something happens ...
+const elapsedMs = performance.now() - t0;   // trustworthy</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Arm a round with a random hidden delay</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Starting a round paints the pad red and schedules the green flip for some point in the future. The delay is <em>random</em> — a uniform pick between 1.5 and 4.5 seconds — and that randomness is the whole point: if it were fixed, you would learn the rhythm and tap on a count instead of on the signal. We keep the <code>setTimeout</code> handle so an early tap can cancel it.</p>
+        <div class="relative"><pre>function arm(){
+  phase = "wait";
+  setPad("wait", "Wait for green…",
+         "Round " + (times.length + 1) + " of " + TOTAL);
+  const delay = MIN_WAIT + Math.random() * (MAX_WAIT - MIN_WAIT);
+  timer = setTimeout(goGreen, delay);   // flip, someday soon
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Flip to green and stamp the start</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When the timer fires, the pad turns green, the state becomes <code>go</code>, and — in the very same instant — we read the stopwatch into <code>startTime</code>. This single reading is the anchor the whole measurement hangs on: it is <em>time zero</em>, the exact moment the signal appeared on screen. Everything the player does is measured relative to it.</p>
+        <div class="relative"><pre>function goGreen(){
+  phase = "go";
+  startTime = performance.now();      // ← time zero: the flip
+  setPad("go", "TAP!", "as fast as you can");
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Measure the reaction — one subtraction</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Here is the measurement, and it is gloriously simple: read the stopwatch again the instant the player taps, subtract <code>startTime</code>, round to a whole millisecond, and that is the reaction time. Push it onto the list of round times. If five rounds are complete the series is done; otherwise show the result and wait for a click to start the next round.</p>
+        <div class="relative"><pre>function tap(){
+  const ms = Math.round(performance.now() - startTime);  // reaction!
+  times.push(ms);
+  if (times.length &gt;= TOTAL){
+    phase = "done"; finish();
+  } else {
+    phase = "result";
+    setPad("result", ms + " ms", "click for round " + (times.length + 1));
+  }
+  updateHUD();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Punish the early tap</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Without a guard you could just hammer the pad and &ldquo;win.&rdquo; So a tap during the red <code>wait</code> phase is a <strong>false start</strong>: cancel the pending green flip so it can&rsquo;t fire late, count the false start, and drop back to idle so the player retries the <em>same</em> round — it never counts as a time. This is exactly the jump-the-gun rule from an athletics track.</p>
+        <div class="relative"><pre>function tooSoon(){
+  clearTimeout(timer);         // kill the pending green flip
+  falseStarts++;
+  phase = "idle";              // retry this round — nothing recorded
+  setPad("tooearly", "Too soon!",
+         "you tapped before green — click to retry this round");
+  updateHUD();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Best and running average</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Because every round time lives in one array, the summary stats are one-liners. The <strong>best</strong> is <code>Math.min</code> over the list; the <strong>average</strong> is the sum divided by the count. A small rating turns a number into words — under 250&nbsp;ms is quick, 200&ndash;270&nbsp;ms is the normal human range. The final screen just reports the average and the best.</p>
+        <div class="relative"><pre>function finish(){
+  const best = Math.min(...times);
+  const avg  = Math.round(times.reduce((a,b) =&gt; a + b, 0) / times.length);
+  setPad("done", avg + " ms",
+         "average · best " + best + " ms · click to play again");
+}
+function rate(ms){                     // number → words
+  if (ms &lt; 200) return "Superhuman";
+  if (ms &lt; 250) return "Lightning";
+  if (ms &lt; 300) return "Sharp";
+  if (ms &lt; 400) return "Average";
+  return "Sluggish";
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">One click handler routes every state</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The same tap means something different in each phase, so one router reads <code>phase</code> and dispatches. Idle → arm a round. Wait (red) → too soon. Go (green) → measure. Result → arm the next round. Done → reset for a fresh series. That five-way switch <em>is</em> the game loop; there is nothing else driving it.</p>
+        <div class="relative"><pre>function handleTap(){
+  if      (phase === "idle")   arm();      // start a round
+  else if (phase === "wait")   tooSoon();  // red → false start
+  else if (phase === "go")     tap();      // green → measure
+  else if (phase === "result") arm();      // next round
+  else if (phase === "done")   reset();    // new series
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">The click zone and keyboard</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Wiring is tiny. The big coloured pad listens for a click and calls the router; <code>setPad</code> swaps a CSS class to change its colour and writes the two lines of text. For serious speed the keyboard beats the mouse, so <kbd>Space</kbd> and <kbd>Enter</kbd> also tap (we call <code>preventDefault</code> so the page doesn&rsquo;t scroll), and <kbd>R</kbd> restarts.</p>
+        <div class="relative"><pre>function setPad(state, big, sub){
+  pad.className = "pad " + state;     // .idle/.wait/.go/.result/.done → colour
+  padBig.textContent = big;
+  padSub.textContent = sub;
+}
+pad.addEventListener("click", handleTap);
+document.addEventListener("keydown", e =&gt; {
+  if (e.code === "Space" || e.key === "Enter"){ e.preventDefault(); handleTap(); }
+  else if (e.key.toLowerCase() === "r") reset();
+});</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Draw the histogram of attempts</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A column of numbers is dull; five bars tell the story at a glance. Map each time onto a fixed 600&nbsp;ms scale to get a bar width, colour it by how fast it was — green for a flyer, red for a slow one — and lay the five rows out. Empty rounds show a stub. That is the whole &ldquo;chart&rdquo;: no library, just <code>div</code>s with a width and a background colour.</p>
+        <div class="relative"><pre>function speedColor(ms){                 // fast = green, slow = red
+  if (ms &lt; 250) return "#22c55e";
+  if (ms &lt; 350) return "#84cc16";
+  if (ms &lt; 450) return "#f59e0b";
+  return "#ef4444";
+}
+function renderHisto(){
+  histoEl.innerHTML = "";
+  for (let i = 0; i &lt; TOTAL; i++){
+    const ms  = times[i];                              // may be undefined
+    const pct = ms != null ? Math.min(100, ms / 600 * 100) : 0;
+    histoEl.insertAdjacentHTML("beforeend",
+      '&lt;div class="hbar-row"&gt;&lt;span class="hbar-lbl"&gt;R' + (i+1) + '&lt;/span&gt;' +
+      '&lt;span class="hbar-track"&gt;&lt;span class="hbar-fill" style="width:' + pct +
+      '%;background:' + (ms!=null?speedColor(ms):'transparent') + '"&gt;&lt;/span&gt;&lt;/span&gt;' +
+      '&lt;span class="hbar-val"&gt;' + (ms!=null?ms+' ms':'—') + '&lt;/span&gt;&lt;/div&gt;');
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 41 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built a full reaction-time tester end to end: the five-state machine (idle → wait → go → result → done); why <code>performance.now()</code> is the right stopwatch and <code>Date.now()</code> is not; arming a round behind a random 1.5&ndash;4.5&nbsp;s delay so the flip can&rsquo;t be anticipated; stamping time-zero the instant the pad turns green; measuring the reflex with a single subtraction; the false-start guard that cancels the timer and refuses to count an early tap; best and running-average stats from one array; the one click handler that routes every phase; the pad plus <kbd>Space</kbd>/<kbd>Enter</kbd> wiring; and a five-bar histogram drawn from plain divs. Next: add a light/sound go-signal option, a go/no-go variant (don&rsquo;t tap on the odd colour), or store a personal best in <code>localStorage</code>. <strong>👉 Tomorrow — Day 42: Typing Test — race a passage against the clock and measure your words-per-minute and accuracy live.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== REACTION TIME ENGINE (vanilla) =====
+const TOTAL    = 5;         // rounds in one series
+const MIN_WAIT = 1500;      // shortest red delay (ms)
+const MAX_WAIT = 4500;      // longest  red delay (ms)
+const SCALE    = 600;       // ms mapped to a full histogram bar
+
+let phase;        // "idle" | "wait" | "go" | "result" | "done"
+let times;        // reaction time of each round (ms)
+let falseStarts;  // count of too-early taps
+let startTime;    // performance.now() at the green flip
+let timer;        // setTimeout handle for red -> green
+
+const pad    = document.getElementById("pad");
+const padBig = document.getElementById("padBig");
+const padSub = document.getElementById("padSub");
+
+function setPad(state, big, sub){
+  pad.className = "pad " + state;      // swap colour via CSS class
+  padBig.textContent = big;
+  padSub.textContent = sub;
+}
+
+function reset(){
+  clearTimeout(timer);
+  phase = "idle"; times = []; falseStarts = 0; startTime = 0;
+  setPad("idle", "Click to start", "Round 1 of " + TOTAL + " — wait for GREEN, then tap");
+  msg("Wait for the pad to flash green, then tap as fast as you can.", "");
+  updateHUD();
+}
+
+function arm(){
+  phase = "wait";
+  setPad("wait", "Wait for green…", "Round " + (times.length + 1) + " of " + TOTAL);
+  msg("Steady… do NOT tap until it turns green.", "warn");
+  const delay = MIN_WAIT + Math.random() * (MAX_WAIT - MIN_WAIT);   // random, unlearnable
+  timer = setTimeout(goGreen, delay);
+}
+
+function goGreen(){
+  phase = "go";
+  startTime = performance.now();       // time zero: the exact flip
+  setPad("go", "TAP!", "as fast as you can");
+  msg("GO — tap now!", "win");
+}
+
+function tap(){
+  const ms = Math.round(performance.now() - startTime);   // the reaction time
+  times.push(ms);
+  if (times.length >= TOTAL){
+    phase = "done"; finish();
+  } else {
+    phase = "result";
+    setPad("result", ms + " ms", "click for round " + (times.length + 1));
+    msg(rate(ms) + " — " + ms + " ms. Click the pad for the next round.", ms < 300 ? "win" : "");
+  }
+  updateHUD();
+}
+
+function tooSoon(){
+  clearTimeout(timer);                 // cancel the pending green flip
+  falseStarts++;
+  phase = "idle";                      // retry the SAME round; nothing recorded
+  setPad("tooearly", "Too soon!", "you tapped before green — click to retry this round");
+  msg("False start! Early taps don't count. Click to retry this round.", "warn");
+  updateHUD();
+}
+
+function finish(){
+  const best = Math.min(...times);
+  const avg  = Math.round(times.reduce((a,b) => a + b, 0) / times.length);
+  setPad("done", avg + " ms", "average · best " + best + " ms · click to play again");
+  msg("Series done! Average " + avg + " ms, best " + best + " ms (" + rate(avg) + "). Click the pad to go again.", "win");
+}
+
+function handleTap(){
+  if      (phase === "idle")   arm();       // start a round
+  else if (phase === "wait")   tooSoon();   // red  → false start
+  else if (phase === "go")     tap();       // green → measure
+  else if (phase === "result") arm();       // next round
+  else if (phase === "done")   reset();     // fresh series
+}
+
+function rate(ms){
+  if (ms < 200) return "Superhuman";
+  if (ms < 250) return "Lightning";
+  if (ms < 300) return "Sharp";
+  if (ms < 400) return "Average";
+  return "Sluggish";
+}
+function speedColor(ms){
+  if (ms < 250) return "#22c55e";
+  if (ms < 350) return "#84cc16";
+  if (ms < 450) return "#f59e0b";
+  return "#ef4444";
+}
+
+function updateHUD(){
+  const n = times.length;
+  const best = n ? Math.min(...times) + " ms" : "—";
+  const avg  = n ? Math.round(times.reduce((a,b) => a + b, 0) / n) + " ms" : "—";
+  const last = n ? times[n-1] + " ms" : "—";
+  document.getElementById("hRound").textContent = n + " / " + TOTAL;
+  document.getElementById("hLast").textContent  = last;
+  document.getElementById("hBest").textContent  = best;
+  document.getElementById("hAvg").textContent   = avg;
+  document.getElementById("hFalse").textContent = falseStarts;
+  document.getElementById("sRound").textContent = n + " / " + TOTAL;
+  document.getElementById("sBest").textContent  = best;
+  document.getElementById("sAvg").textContent   = avg;
+  document.getElementById("sFalse").textContent = falseStarts;
+  renderHisto();
+}
+
+function renderHisto(){
+  const el = document.getElementById("histo"); el.innerHTML = "";
+  for (let i = 0; i < TOTAL; i++){
+    const ms  = times[i];
+    const pct = ms != null ? Math.max(4, Math.min(100, (ms / SCALE) * 100)) : 0;
+    const row = document.createElement("div"); row.className = "hbar-row";
+    row.innerHTML =
+      '<span class="hbar-lbl">R' + (i+1) + '</span>' +
+      '<span class="hbar-track"><span class="hbar-fill" style="width:' + pct + '%;background:' + (ms != null ? speedColor(ms) : "transparent") + ';"></span></span>' +
+      '<span class="hbar-val">' + (ms != null ? ms + " ms" : "—") + '</span>';
+    el.appendChild(row);
+  }
+}
+
+function msg(text, tone){
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : tone === "warn" ? "text-rose-600" : "text-slate-600");
+}
+
+pad.addEventListener("click", handleTap);
+document.getElementById("restartBtn").onclick = reset;
+document.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  if (e.code === "Space" || e.key === "Enter"){ e.preventDefault(); handleTap(); }
+  else if (e.key.toLowerCase() === "r"){ reset(); }
+});
+
+reset();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The whole game is five states", why:"There are no sprites, no physics and no clock ticking every frame — the entire game is a single string naming which of five moments we are in, plus a few numbers. idle waits for your first click; wait is the red pause before the signal; go is the green flash you react to; result reports one round's time; and done is the summary after five rounds. Every function below simply carries the game from one of these five states to the next, and reading the current state is all any of them needs to know what to do.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the five-state loop<br><br>idle ──click──▶ wait (red)<br>wait ──timer──▶ go (green)<br>go &nbsp;──tap──▶ result<br>result ─click─▶ wait &nbsp;(×5)<br>after 5 &nbsp;──▶ done ─click─▶ idle</div>`, code:`const TOTAL    = 5;      // rounds per series
+const MIN_WAIT = 1500;   // shortest red delay (ms)
+const MAX_WAIT = 4500;   // longest  red delay (ms)
+
+let phase;        // idle | wait | go | result | done
+let times = [];   // reaction time of each round (ms)
+let falseStarts;  // too-early taps
+let startTime;    // performance.now() at the flip
+let timer;        // setTimeout handle (red → green)` },
+
+ { title:"2. performance.now(), not Date", why:"The instinct is to subtract two Date.now() readings, but that clock is wrong for this job. Date.now() reports wall-clock time, which the operating system can quietly shift forward or backward when it syncs to a network time server or crosses a daylight-saving boundary, and it only resolves to whole milliseconds. performance.now() is different: it is a monotonic clock that starts at page load and only ever counts up, in fractions of a millisecond, immune to any clock adjustment. The gap between two of its readings is therefore a clean, trustworthy elapsed time — exactly what you want when the whole answer is a couple of hundred milliseconds.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">two clocks<br><br>Date.now() &nbsp;→ wall time, whole ms<br>&nbsp;&nbsp;can jump ± when the OS resyncs &nbsp;✗<br><br>performance.now() → monotonic, sub-ms<br>&nbsp;&nbsp;only ever counts up &nbsp;✓<br><br>elapsed = now() − t0</div>`, code:`// Date.now()        → wall clock, may jump backward  ✗
+// performance.now() → monotonic stopwatch, sub-ms    ✓
+
+const t0 = performance.now();
+// ... something happens ...
+const elapsedMs = performance.now() - t0;` },
+
+ { title:"3. Arm a round with a random delay", why:"Starting a round paints the pad red and schedules the green flip for some moment in the near future. The delay is not fixed — it is Math.random() spread between 1.5 and 4.5 seconds — and that unpredictability is the entire reason the test works. If the pause were always, say, two seconds, you would stop reacting to the colour and start counting in your head, tapping on a rhythm rather than a signal; the random window makes anticipation useless. We stash the setTimeout handle so that if you tap too early we can cancel the flip before it happens.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">random hidden delay<br><br>|■■■■■■■■| red for 1.5–4.5 s<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓ random point<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;GREEN<br><br>unlearnable ⇒ you must react, not count</div>`, code:`function arm(){
+  phase = "wait";
+  setPad("wait", "Wait for green…",
+         "Round " + (times.length + 1) + " of " + TOTAL);
+  const delay = MIN_WAIT + Math.random() * (MAX_WAIT - MIN_WAIT);
+  timer = setTimeout(goGreen, delay);   // flip, someday soon
+}` },
+
+ { title:"4. Flip to green and stamp the start", why:"When the timer finally fires, three things happen at once: the pad turns green, the state moves to go, and we read the stopwatch into startTime. That reading is the single most important number in the game — it is time zero, the precise instant the signal became visible. Nothing is measured in absolute terms; every reaction time is just how far past this moment the player's tap lands. Taking the reading here, in the same callback that flips the colour, keeps it honest: the clock starts the moment the eye could first see green.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the flip = time zero<br><br>timer fires<br>&nbsp;&nbsp;pad → GREEN<br>&nbsp;&nbsp;startTime = performance.now()  ⏱ 0<br><br>every tap is measured from here</div>`, code:`function goGreen(){
+  phase = "go";
+  startTime = performance.now();   // ← time zero
+  setPad("go", "TAP!", "as fast as you can");
+}` },
+
+ { title:"5. Measure the reaction — one subtraction", why:"This is the payoff, and it is a single line. The instant the player taps, read the stopwatch again, subtract the startTime you stored at the flip, and round to a whole millisecond — that difference is the reaction time. Push it onto the times array and the round is recorded. Then a tiny fork: if five rounds are now complete the series is finished, otherwise show this round's number and wait for a click to arm the next. All the earlier machinery existed just to make this subtraction meaningful.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">reaction = tap − flip<br><br>startTime ⏱ 0<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;… you see green, you tap …<br>tapTime &nbsp;⏱ 243.7<br><br>ms = round(tapTime − startTime) = 244</div>`, code:`function tap(){
+  const ms = Math.round(performance.now() - startTime);
+  times.push(ms);                       // record the round
+  if (times.length >= TOTAL){
+    phase = "done"; finish();
+  } else {
+    phase = "result";
+    setPad("result", ms + " ms",
+           "click for round " + (times.length + 1));
+  }
+  updateHUD();
+}` },
+
+ { title:"6. Punish the early tap", why:"Without a guard the game is trivial to cheat: mash the pad and one of your taps lands on green. So a tap that arrives during the red wait phase is treated as a false start. First we clearTimeout to kill the scheduled green flip — otherwise it would fire later and confuse the state — then we bump the false-start counter and drop back to idle so the player replays the very same round. Crucially, nothing is pushed to the times array: an early tap is never recorded as a fast time. It is the same jump-the-gun rule an athletics starter enforces.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">tap while RED = false start<br><br>clearTimeout(timer) ← cancel the flip<br>falseStarts++<br>phase = "idle" &nbsp;← redo this round<br><br>no time recorded · you can't cheat</div>`, code:`function tooSoon(){
+  clearTimeout(timer);      // kill the pending green flip
+  falseStarts++;
+  phase = "idle";           // retry — nothing recorded
+  setPad("tooearly", "Too soon!",
+         "you tapped before green — click to retry");
+  updateHUD();
+}` },
+
+ { title:"7. Best and running average", why:"Keeping every round in one array means the summary numbers cost almost nothing. The best time is Math.min across the list; the average is the sum reduced down and divided by how many rounds have been played, rounded to a whole millisecond. A small rating function translates a raw number into a word so the result means something at a glance — under 250 ms is genuinely quick, and the ordinary human range sits around 200 to 270 ms. The final screen simply announces the average and the best of the five.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">times = [244, 289, 231, 305, 268]<br><br>best = min(...times) &nbsp;= 231 ms<br>avg &nbsp;= sum / count &nbsp;= 267 ms<br><br>human baseline ≈ 200–270 ms</div>`, code:`function finish(){
+  const best = Math.min(...times);
+  const avg  = Math.round(
+    times.reduce((a,b) => a + b, 0) / times.length);
+  setPad("done", avg + " ms",
+         "average · best " + best + " ms · click to replay");
+}
+function rate(ms){
+  if (ms < 200) return "Superhuman";
+  if (ms < 250) return "Lightning";
+  if (ms < 300) return "Sharp";
+  if (ms < 400) return "Average";
+  return "Sluggish";
+}` },
+
+ { title:"8. One handler routes every state", why:"A tap is not one action — it means something different in each phase — so instead of many buttons there is one router that reads phase and dispatches. In idle it arms a round; in wait (red) it is a false start; in go (green) it measures; in result it arms the next round; in done it resets for a fresh series. That five-way branch is the entire game loop. There is no animation frame, no ticking update — the game only ever advances when you tap and the router decides what that tap meant.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one tap, read the phase<br><br>idle &nbsp;&nbsp;→ arm()<br>wait &nbsp;&nbsp;→ tooSoon()<br>go &nbsp;&nbsp;&nbsp;&nbsp;→ tap()<br>result → arm()<br>done &nbsp;&nbsp;→ reset()</div>`, code:`function handleTap(){
+  if      (phase === "idle")   arm();      // start a round
+  else if (phase === "wait")   tooSoon();  // red → false start
+  else if (phase === "go")     tap();      // green → measure
+  else if (phase === "result") arm();      // next round
+  else if (phase === "done")   reset();    // new series
+}` },
+
+ { title:"9. The click zone and keyboard", why:"The wiring is deliberately thin. The big coloured div listens for a click and hands straight to the router; a single setPad helper swaps a CSS class to recolour the pad and writes its two lines of text, so the visuals are pure state. Because a mouse-down travels through the hand more slowly than a key press, serious reaction testers use the keyboard — so Space and Enter also count as a tap, with preventDefault stopping the page from scrolling, and R restarts. One element, one helper, three inputs.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">inputs<br><br>click the pad &nbsp;→ handleTap()<br>Space / Enter → handleTap()<br>R &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ reset()<br><br>setPad swaps a CSS class → colour</div>`, code:`function setPad(state, big, sub){
+  pad.className = "pad " + state;   // .idle/.wait/.go/... → colour
+  padBig.textContent = big;
+  padSub.textContent = sub;
+}
+pad.addEventListener("click", handleTap);
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" || e.key === "Enter"){
+    e.preventDefault(); handleTap();
+  } else if (e.key.toLowerCase() === "r") reset();
+});` },
+
+ { title:"10. Draw the histogram of attempts", why:"Five numbers in a column are hard to read; five bars are instant. Each time is mapped onto a fixed 600 ms scale to become a bar width as a percentage, then coloured by how fast it was — green for a flyer, lime, amber, red as it slows — so the shape of your run is obvious at a glance. Rounds not yet played show a faint stub. There is no charting library anywhere: each bar is just a div with a width and a background colour, rebuilt whenever the stats update.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">time → bar (scale 600 ms)<br><br>R1 ██████░░░░ 244 ms<br>R2 ███████░░░ 289 ms<br>R3 █████░░░░░ 231 ms<br>R4 ████████░░ 305 ms<br><br>colour by speed: green→red</div>`, code:`function speedColor(ms){
+  if (ms < 250) return "#22c55e";   // fast
+  if (ms < 350) return "#84cc16";
+  if (ms < 450) return "#f59e0b";
+  return "#ef4444";                 // slow
+}
+function renderHisto(){
+  histoEl.innerHTML = "";
+  for (let i = 0; i < TOTAL; i++){
+    const ms  = times[i];
+    const pct = ms != null ? Math.min(100, ms / 600 * 100) : 0;
+    // append a row: label + track><fill width%/colour> + value
+  }
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3000); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
