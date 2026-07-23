@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 42 — Word Search</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #ws-msg { min-height:28px; }
+
+  /* ---- the letter grid ---- */
+  .ws-grid {
+    display:grid; gap:3px; width:min(92vw, 540px); margin:0 auto;
+    background:#e2e8f0; border:2px solid #cbd5e1; border-radius:14px; padding:7px;
+    user-select:none; touch-action:none; -webkit-tap-highlight-color:transparent;
+    box-shadow:0 14px 34px rgba(0,0,0,.14);
+  }
+  .ws-cell {
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    background:#fff; border-radius:7px; font-weight:800; color:#334155;
+    font-size:clamp(11px, 2.7vw, 18px); text-transform:uppercase; cursor:pointer;
+    transition:background-color .07s ease, color .07s ease, transform .07s ease;
+  }
+  .ws-cell.sel     { background:#34d399; color:#fff; }             /* live drag        */
+  .ws-cell.pending { background:#fbbf24; color:#fff; transform:scale(1.06); } /* tap anchor */
+  .ws-cell.found   { background:#a7f3d0; color:#065f46; }          /* permanently found */
+  .ws-cell.hint    { animation: wsHint .45s ease 3; }
+  @keyframes wsHint { 0%,100% { background:#fff; } 50% { background:#93c5fd; color:#fff; } }
+
+  /* word list */
+  .ws-words { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+  .ws-word {
+    padding:5px 12px; border-radius:9px; background:#f1f5f9; font-weight:700;
+    color:#334155; font-size:14px; letter-spacing:.03em; font-variant-numeric:tabular-nums;
+    transition:background-color .2s, color .2s, opacity .2s;
+  }
+  .ws-word.done { background:#d1fae5; color:#047857; text-decoration:line-through; opacity:.7; }
+
+  .ws-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .legend { color:#64748b; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 42</div>
+      <h1 class="text-xl font-bold">🔤 Word Search — Hunt Eight Hidden Words Buried in a 12×12 Grid of Random Letters, Placed Across, Down and Diagonally, Forwards and Backwards; Drag a Straight Line of Cells to Grab a Word, Watch It Highlight Green and Cross Off the List, and Race the Clock to Clear the Board</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 LOOK</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-5xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Eight words are hiding in the noise. Drag a line through each one.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">A word search is a lattice of letters with real words tucked inside it — running left-to-right, top-to-bottom, on either diagonal, and sometimes <em>backwards</em>. The whole grid is generated fresh each round: eight words are dropped into a <strong>12×12</strong> board along one of <strong>eight directions</strong>, allowed to <strong>cross each other only where their letters agree</strong> (exactly like a crossword), and every leftover cell is stuffed with a <strong>random letter</strong> as camouflage. To grab a word, <strong>click-drag</strong> a straight line of cells from its first letter to its last — or <strong>tap the start, then tap the end</strong> on touch. The game reads the letters along your line <strong>forwards and backwards</strong>, checks them against the list, and if it&rsquo;s a hit the cells lock <strong style="color:#047857;">green</strong> and the word gets <strong>struck off</strong>. Clear all eight to win. No images, no engine — just a 2-D array of characters, a placement algorithm, and a little vector geometry to turn two cells into a line.</p>
+
+      <div class="flex justify-center gap-5 mb-4 text-sm font-bold text-slate-600 flex-wrap items-center">
+        <div>Found: <span id="ws-found" class="stat text-emerald-600">0 / 8</span></div>
+        <div>Time: <span id="ws-timer" class="stat text-slate-700">00:00</span></div>
+        <div>Board: <span class="stat text-slate-700">12 × 12</span></div>
+      </div>
+
+      <div class="flex justify-center gap-6 flex-wrap items-start">
+        <div>
+          <div id="ws-grid" class="ws-grid"></div>
+        </div>
+        <div class="text-left" style="width:260px;max-width:90vw;">
+          <div class="ws-card p-4 mb-3">
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mb-3">Words to find</div>
+            <div id="ws-words" class="ws-words"></div>
+          </div>
+          <div class="ws-card p-4">
+            <div class="text-xs uppercase font-bold text-slate-400 tracking-wider mb-2">How to select</div>
+            <p class="text-[13px] text-slate-600 leading-snug">Press on the first letter and <strong>drag</strong> to the last — across, down, or diagonally, in either direction. On touch you can also <strong>tap the start</strong> (turns amber), then <strong>tap the end</strong>.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="ws-msg" class="mt-5 font-bold text-lg text-slate-600">Drag a straight line through a hidden word to grab it.</div>
+      <div class="flex justify-center mt-3 gap-2 flex-wrap">
+        <button id="ws-new"  class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">🔀 New game</button>
+        <button id="ws-hint" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-semibold text-sm">💡 Hint</button>
+      </div>
+      <p class="text-xs legend mt-3">Drag first letter → last letter &nbsp;·&nbsp; or tap start then end &nbsp;·&nbsp; <span class="keycap">N</span> new game &nbsp; <span class="keycap">H</span> hint</p>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">Everything here is a couple of loops. The board is a two-dimensional array of single characters; placing a word means picking a random cell and one of eight <code>(row,&nbsp;col)</code> step vectors, walking that many steps to make sure it stays inside the grid, and writing the letters only if every cell they land on is either empty or already holds the same letter — that one overlap rule is what lets words cross. Reading your selection back is the reverse walk: two clicked cells define a direction and a length, so the cells between them are just <code>start + step × i</code>. All vanilla JavaScript, offline, one file.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the puzzle builds itself</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">There is no sprite sheet and no word database beyond a small array — the whole game is a 2-D array of letters plus a pinch of vector geometry. Building the puzzle is two loops: drop eight words into the grid along one of eight directions (overlapping only where letters already agree), then fill every empty cell with a random letter to hide them. Reading a selection is the same walk in reverse — two clicked cells define a step vector, and the cells between are <code>start + step × i</code>. Validating is a string compare forwards and backwards. About 120 lines of vanilla JavaScript, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The board is a 2-D array of letters</h3></div>
+        <p class="text-sm text-slate-600 mb-3">No canvas, no tiles — the entire puzzle is an <code>N×N</code> array where every cell holds one character. We start it completely empty (blank strings) so the placement step can tell &ldquo;free&rdquo; from &ldquo;taken.&rdquo; A parallel list, <code>placements</code>, remembers each word we hide and the exact cells it occupies, so later we can check a selection against the truth instead of guessing.</p>
+        <div class="relative"><pre>const N         = 12;   // grid is 12 × 12
+const NUM_WORDS = 8;    // words hidden per game
+
+let grid;         // grid[r][c] = one letter (or "" while building)
+let placements;   // [{ word, cells:[{r,c}...], found:false }]
+
+function blankGrid(){
+  return Array.from({length:N}, () =&gt; Array(N).fill(""));
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Eight directions are eight step vectors</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A word can run in any of eight compass directions, and each one is just a <code>(row&nbsp;step, col&nbsp;step)</code> pair. East is &ldquo;column +1, row unchanged&rdquo;; south-west is &ldquo;row +1, column −1&rdquo;; and so on. Once a direction is a vector, walking a word across the grid is one loop — add the vector to the current cell to get the next. The four negative directions are what give you <em>backwards</em> and <em>upward</em> words.</p>
+        <div class="relative"><pre>const DIRS = [
+  [0, 1], [0,-1],   // E,  W
+  [1, 0], [-1,0],   // S,  N
+  [1, 1], [1,-1],   // SE, SW
+  [-1,1], [-1,-1]   // NE, NW
+];
+// cell i of a word = { r: r0 + dr*i, c: c0 + dc*i }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Place one word — try, check, commit</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To hide a word we gamble: pick a random start cell and a random direction, then check whether it fits. Two things can go wrong — the word runs off the edge of the board, or it collides with a letter already there. So we first bounds-check the last cell, then walk the word cell by cell. Only if the whole path is legal do we actually write the letters; otherwise we throw the attempt away and roll again, up to a couple hundred times.</p>
+        <div class="relative"><pre>function tryPlace(word){
+  for (let attempt = 0; attempt &lt; 200; attempt++){
+    const [dr,dc] = DIRS[rand(DIRS.length)];
+    const r0 = rand(N), c0 = rand(N);
+    const rEnd = r0 + dr*(word.length-1);
+    const cEnd = c0 + dc*(word.length-1);
+    if (rEnd&lt;0 || rEnd&gt;=N || cEnd&lt;0 || cEnd&gt;=N) continue;  // off-board
+    if (fits(word, r0, c0, dr, dc)) return commit(word, r0, c0, dr, dc);
+  }
+  return null;   // gave up on this word
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Words may cross only where letters agree</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the one rule that makes a word search feel dense instead of sparse. As we walk the candidate path, each cell is fine if it is <em>empty</em>, or if it already holds <em>the exact letter</em> this word wants there — that&rsquo;s a shared crossing, just like a crossword. Any other occupied cell is a conflict and the whole placement is rejected. Commit simply writes each letter and records the cell path for later.</p>
+        <div class="relative"><pre>function fits(word, r0, c0, dr, dc){
+  for (let i = 0; i &lt; word.length; i++){
+    const cell = grid[r0+dr*i][c0+dc*i];
+    if (cell !== "" &amp;&amp; cell !== word[i]) return false;  // clash
+  }
+  return true;                                          // free or matching
+}
+function commit(word, r0, c0, dr, dc){
+  const cells = [];
+  for (let i = 0; i &lt; word.length; i++){
+    const r = r0+dr*i, c = c0+dc*i;
+    grid[r][c] = word[i];
+    cells.push({r, c});
+  }
+  return cells;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Generate the whole puzzle</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Now assemble a game: shuffle a pool of candidate words, try to place them one by one until eight have stuck, and record each success in <code>placements</code>. A word that can&rsquo;t find room after 200 tries is skipped and the next pool word is tried instead. Finally, sweep the board and fill every still-empty cell with a random letter — that camouflage is what turns a few scattered words into a puzzle.</p>
+        <div class="relative"><pre>function newGame(){
+  grid = blankGrid();
+  placements = [];
+  for (const word of shuffle([...POOL])){
+    if (placements.length &gt;= NUM_WORDS) break;
+    const cells = tryPlace(word);
+    if (cells) placements.push({ word, cells, found:false });
+  }
+  for (let r = 0; r &lt; N; r++)
+    for (let c = 0; c &lt; N; c++)
+      if (grid[r][c] === "") grid[r][c] = LETTERS[rand(26)];  // fill blanks
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">The classic search algorithm</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the algorithm a solver (or our <em>Hint</em> button) uses to <em>find</em> a word without knowing where it was placed: stand on every cell, and from each one try all eight directions, matching the target letter by letter and bailing the instant a character or a boundary disagrees. If a whole direction matches, you&rsquo;ve found the word and can return its cell path. It is a brute-force scan — <code>rows × cols × 8 × word&nbsp;length</code> — but on a 12×12 board that is nothing.</p>
+        <div class="relative"><pre>function findWord(word){
+  for (let r = 0; r &lt; N; r++)
+    for (let c = 0; c &lt; N; c++)
+      for (const [dr,dc] of DIRS){
+        let ok = true;
+        for (let i = 0; i &lt; word.length; i++){
+          const rr = r+dr*i, cc = c+dc*i;
+          if (rr&lt;0||rr&gt;=N||cc&lt;0||cc&gt;=N || grid[rr][cc] !== word[i]){ ok=false; break; }
+        }
+        if (ok){                                  // matched in this direction
+          const cells = [];
+          for (let i = 0; i &lt; word.length; i++) cells.push({r:r+dr*i, c:c+dc*i});
+          return cells;
+        }
+      }
+  return null;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Turn two cells into a straight line</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A selection is defined by just two cells: where you started and where you are now. That pair is only a legal word-line if it is horizontal, vertical, or a perfect 45° diagonal — i.e. the row change is zero, the column change is zero, or their absolute values are equal. When it qualifies, the number of steps is the larger delta, the per-step direction is the <code>sign</code> of each delta, and the cells between are the same <code>start + step × i</code> walk we used to place words.</p>
+        <div class="relative"><pre>function lineBetween(a, b){
+  const dr = b.r - a.r, dc = b.c - a.c;
+  const straight = (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc));
+  if (!straight) return [a];                       // not a valid line yet
+  const len = Math.max(Math.abs(dr), Math.abs(dc));
+  const sr = Math.sign(dr), sc = Math.sign(dc);
+  const path = [];
+  for (let i = 0; i &lt;= len; i++) path.push({ r:a.r+sr*i, c:a.c+sc*i });
+  return path;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Drag to select with pointer events</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One set of pointer handlers covers mouse and touch. <code>pointerdown</code> on a cell sets the anchor; while the button is held, <code>pointermove</code> uses <code>elementFromPoint</code> to find whichever cell is under the finger and recomputes the line from anchor to there, repainting the preview; <code>pointerup</code> ends the drag and commits. Because a tap is a down-then-up with no move, a one-cell result is routed to the tap-start / tap-end path instead — free touch support.</p>
+        <div class="relative"><pre>grid.addEventListener("pointerdown", e =&gt; {
+  const cell = e.target.closest("[data-r]"); if (!cell) return;
+  e.preventDefault();
+  selecting = true; dragMoved = false;
+  start = pos(cell); selPath = [start]; paint();
+});
+document.addEventListener("pointermove", e =&gt; {
+  if (!selecting) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const cell = el &amp;&amp; el.closest &amp;&amp; el.closest("[data-r]"); if (!cell) return;
+  const end = pos(cell);
+  if (end.r !== start.r || end.c !== start.c) dragMoved = true;
+  selPath = lineBetween(start, end); paint();
+});
+document.addEventListener("pointerup", () =&gt; { if (selecting){ selecting=false; commit(); } });</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Validate a selection against the words</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When a line is committed, check it against the truth we stored at generation time. Because a word reads the same to a player whether they swept it left-to-right or right-to-left, a selection matches a placement if its cell sequence equals the placement&rsquo;s cells <em>or</em> that list reversed. Matching cell paths (not just letters) means a lucky line through random filler can never falsely trigger a word. A hit flips <code>found</code>, locks the cells green, and strikes the word off.</p>
+        <div class="relative"><pre>function samePath(a, b){                    // b, forwards or reversed
+  if (a.length !== b.length) return false;
+  const fwd = a.every((p,i) =&gt; p.r===b[i].r          &amp;&amp; p.c===b[i].c);
+  const rev = a.every((p,i) =&gt; p.r===b[b.length-1-i].r &amp;&amp; p.c===b[b.length-1-i].c);
+  return fwd || rev;
+}
+function evaluate(path){
+  if (path.length &lt; 2) return;
+  const hit = placements.find(p =&gt; !p.found &amp;&amp; samePath(path, p.cells));
+  if (!hit){ msg("Not a word — try again."); return; }
+  hit.found = true;
+  hit.cells.forEach(p =&gt; cellEls[p.r][p.c].classList.add("found"));
+  renderWords();                            // re-draws the struck-off list
+  if (placements.every(p =&gt; p.found)) win();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Draw the grid, strike the list, win</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Rendering is pure state. The grid is a CSS <code>grid</code> of <code>N</code> columns; each cell is a <code>div</code> tagged with its <code>data-r</code>/<code>data-c</code> so a pointer can name it, and its classes (<code>sel</code> while dragging, <code>found</code> once caught) come straight from the game state. The word list re-renders on every find, adding a <code>done</code> class that line-throughs the caught words. When <code>placements.every(found)</code> is true the timer stops and the win message appears — <em>New game</em> rebuilds a fresh board from scratch.</p>
+        <div class="relative"><pre>function render(){
+  gridEl.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+  gridEl.innerHTML = ""; cellEls = [];
+  for (let r = 0; r &lt; N; r++){
+    cellEls[r] = [];
+    for (let c = 0; c &lt; N; c++){
+      const d = document.createElement("div");
+      d.className = "ws-cell"; d.textContent = grid[r][c];
+      d.dataset.r = r; d.dataset.c = c;
+      gridEl.appendChild(d); cellEls[r][c] = d;
+    }
+  }
+  renderWords();
+}
+function win(){ stopTimer(); msg("🎉 Solved! All words found."); }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 42 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built a full word search end to end: the board as a 2-D array of letters; eight directions expressed as <code>(row,&nbsp;col)</code> step vectors; placing a word by gambling on a random start and direction, bounds-checking the far end and walking it cell by cell; the crossword overlap rule that lets words cross only where their letters agree; generating the puzzle by placing eight words then flooding the blanks with random camouflage; the brute-force <code>rows × cols × 8</code> search that a solver or the hint button uses to locate a word; the vector geometry that turns two clicked cells into a straight line of cells; one set of pointer handlers that gives mouse-drag <em>and</em> touch tap-start/tap-end for free; validating a selection by matching its cell path — forwards or reversed — against the words placed at generation time; and rendering the grid, striking off the list, and detecting the win. Next: add a difficulty dial (bigger grid, more diagonals/backwards), a per-word timer, or a &ldquo;reveal remaining&rdquo; that animates the solver&rsquo;s path. <strong>👉 Tomorrow — Day 43: Typing Test — race a passage against the clock and measure your words-per-minute and accuracy live.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== WORD SEARCH ENGINE (vanilla) =====
+const N         = 12;    // grid is N x N
+const NUM_WORDS = 8;     // words hidden per game
+const LETTERS   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const DIRS = [
+  [0, 1], [0,-1],   // E, W
+  [1, 0], [-1,0],   // S, N
+  [1, 1], [1,-1],   // SE, SW
+  [-1,1], [-1,-1]   // NE, NW
+];
+// on-theme word pool (letters only, length 3-8 so they fit a 12-grid)
+const POOL = ["SNAKE","TETRIS","ARCADE","PIXEL","LEVEL","SCORE","BONUS","PLAYER",
+              "JUMP","MAZE","CHESS","SOKOBAN","WORDLE","PACMAN","ASTEROID","INVADER",
+              "FLAPPY","GAMER","QUEST","COMBO","POWERUP","RESPAWN","JOYSTICK","CONSOLE"];
+
+let grid, placements, cellEls;
+let selecting = false, dragMoved = false, start = null, selPath = [], paintedSel = [];
+let pendingStart = null, foundCount = 0;
+let seconds = 0, timerId = null;
+
+const rand = n => Math.floor(Math.random() * n);
+function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+const gridEl  = document.getElementById("ws-grid");
+const wordsEl = document.getElementById("ws-words");
+const timerEl = document.getElementById("ws-timer");
+const foundEl = document.getElementById("ws-found");
+
+// ---- grid generation ----
+function blankGrid(){ return Array.from({length:N}, () => Array(N).fill("")); }
+
+function fits(word, r0, c0, dr, dc){
+  for (let i=0;i<word.length;i++){
+    const ch = grid[r0+dr*i][c0+dc*i];
+    if (ch !== "" && ch !== word[i]) return false;   // clash with a different letter
+  }
+  return true;
+}
+function commitWord(word, r0, c0, dr, dc){
+  const cells = [];
+  for (let i=0;i<word.length;i++){
+    const r=r0+dr*i, c=c0+dc*i;
+    grid[r][c] = word[i];
+    cells.push({r,c});
+  }
+  return cells;
+}
+function tryPlace(word){
+  for (let attempt=0; attempt<200; attempt++){
+    const [dr,dc] = DIRS[rand(DIRS.length)];
+    const r0 = rand(N), c0 = rand(N);
+    const rEnd = r0 + dr*(word.length-1), cEnd = c0 + dc*(word.length-1);
+    if (rEnd<0 || rEnd>=N || cEnd<0 || cEnd>=N) continue;   // runs off the board
+    if (fits(word, r0, c0, dr, dc)) return commitWord(word, r0, c0, dr, dc);
+  }
+  return null;
+}
+
+// the classic solver — used by the Hint button (scan every cell x 8 dirs)
+function findWord(word){
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    for (const [dr,dc] of DIRS){
+      let ok = true;
+      for (let i=0;i<word.length;i++){
+        const rr=r+dr*i, cc=c+dc*i;
+        if (rr<0||rr>=N||cc<0||cc>=N || grid[rr][cc] !== word[i]){ ok=false; break; }
+      }
+      if (ok){ const cells=[]; for (let i=0;i<word.length;i++) cells.push({r:r+dr*i,c:c+dc*i}); return cells; }
+    }
+  }
+  return null;
+}
+
+function newGame(){
+  grid = blankGrid();
+  placements = [];
+  for (const word of shuffle([...POOL])){
+    if (placements.length >= NUM_WORDS) break;
+    const cells = tryPlace(word);
+    if (cells) placements.push({ word, cells, found:false });
+  }
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++)
+    if (grid[r][c] === "") grid[r][c] = LETTERS[rand(26)];   // camouflage
+  foundCount = 0;
+  selecting = false; dragMoved = false; selPath = []; paintedSel = []; pendingStart = null;
+  render();
+  updateHUD();
+  msg("Drag a straight line through a hidden word to grab it.", "");
+  startTimer();
+}
+
+// ---- render ----
+function render(){
+  gridEl.style.gridTemplateColumns = "repeat(" + N + ", 1fr)";
+  gridEl.innerHTML = ""; cellEls = [];
+  for (let r=0;r<N;r++){
+    cellEls[r] = [];
+    for (let c=0;c<N;c++){
+      const d = document.createElement("div");
+      d.className = "ws-cell"; d.textContent = grid[r][c];
+      d.dataset.r = r; d.dataset.c = c;
+      gridEl.appendChild(d); cellEls[r][c] = d;
+    }
+  }
+  renderWords();
+}
+function renderWords(){
+  wordsEl.innerHTML = "";
+  placements.forEach(p => {
+    const s = document.createElement("span");
+    s.className = "ws-word" + (p.found ? " done" : "");
+    s.textContent = p.word;
+    wordsEl.appendChild(s);
+  });
+}
+
+// ---- selection ----
+function pos(cell){ return { r:+cell.dataset.r, c:+cell.dataset.c }; }
+
+function lineBetween(a, b){
+  const dr = b.r - a.r, dc = b.c - a.c;
+  const straight = (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc));
+  if (!straight) return [a];                          // not a valid line — keep just the anchor
+  const len = Math.max(Math.abs(dr), Math.abs(dc));
+  const sr = Math.sign(dr), sc = Math.sign(dc);
+  const path = [];
+  for (let i=0;i<=len;i++) path.push({ r:a.r+sr*i, c:a.c+sc*i });
+  return path;
+}
+
+function paint(){
+  paintedSel.forEach(p => cellEls[p.r][p.c].classList.remove("sel"));
+  paintedSel = selPath.slice();
+  paintedSel.forEach(p => cellEls[p.r][p.c].classList.add("sel"));
+}
+function clearSel(){
+  paintedSel.forEach(p => cellEls[p.r][p.c].classList.remove("sel"));
+  paintedSel = []; selPath = [];
+}
+function setPending(cell){ pendingStart = cell; cellEls[cell.r][cell.c].classList.add("pending"); }
+function clearPending(){ if (pendingStart) cellEls[pendingStart.r][pendingStart.c].classList.remove("pending"); pendingStart = null; }
+
+function samePath(a, b){
+  if (a.length !== b.length) return false;
+  const fwd = a.every((p,i) => p.r===b[i].r            && p.c===b[i].c);
+  const rev = a.every((p,i) => p.r===b[b.length-1-i].r && p.c===b[b.length-1-i].c);
+  return fwd || rev;
+}
+
+function evaluate(path){
+  if (path.length < 2) return;
+  const hit = placements.find(p => !p.found && samePath(path, p.cells));
+  if (!hit){ msg("Not a word — try again.", "warn"); return; }
+  hit.found = true;
+  hit.cells.forEach(p => { const el = cellEls[p.r][p.c]; el.classList.add("found"); el.classList.remove("sel"); });
+  renderWords();
+  foundCount++;
+  updateHUD();
+  if (foundCount >= placements.length) win();
+  else msg("Found “" + hit.word + "”! " + (placements.length - foundCount) + " to go.", "win");
+}
+
+function commit(){
+  const path = selPath.slice();
+  if (path.length > 1){
+    clearPending(); clearSel(); evaluate(path);
+  } else if (dragMoved){
+    clearSel();                       // a drag that never formed a valid line — cancel quietly
+  } else {
+    const only = path[0] || start;
+    clearSel();
+    if (!pendingStart){ setPending(only); msg("Start set — now tap the other end of the word.", ""); }
+    else { const a = pendingStart; clearPending(); evaluate(lineBetween(a, only)); }
+  }
+}
+
+gridEl.addEventListener("pointerdown", e => {
+  const cell = e.target.closest("[data-r]"); if (!cell) return;
+  e.preventDefault();
+  selecting = true; dragMoved = false;
+  start = pos(cell); selPath = [start]; paint();
+});
+document.addEventListener("pointermove", e => {
+  if (!selecting) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const cell = el && el.closest && el.closest("[data-r]"); if (!cell) return;
+  const end = pos(cell);
+  if (end.r !== start.r || end.c !== start.c) dragMoved = true;
+  selPath = lineBetween(start, end); paint();
+});
+document.addEventListener("pointerup", () => { if (selecting){ selecting = false; commit(); } });
+
+// ---- hint: uses the real char-by-char search to locate an unfound word ----
+function hint(){
+  const left = placements.filter(p => !p.found);
+  if (!left.length) return;
+  const word = left[rand(left.length)].word;
+  const cells = findWord(word);                       // brute-force scan
+  if (!cells) return;
+  const el = cellEls[cells[0].r][cells[0].c];
+  el.classList.add("hint");
+  setTimeout(() => el.classList.remove("hint"), 1400);
+  msg("Hint: a word starts on the flashing cell.", "");
+}
+
+// ---- HUD / timer / message ----
+function updateHUD(){ foundEl.textContent = foundCount + " / " + placements.length; }
+function startTimer(){ stopTimer(); seconds = 0; drawTime(); timerId = setInterval(() => { seconds++; drawTime(); }, 1000); }
+function stopTimer(){ if (timerId) clearInterval(timerId); timerId = null; }
+function drawTime(){
+  const m = String(Math.floor(seconds/60)).padStart(2,"0");
+  const s = String(seconds%60).padStart(2,"0");
+  timerEl.textContent = m + ":" + s;
+}
+function win(){
+  stopTimer();
+  msg("🎉 Solved! All " + placements.length + " words found in " + timerEl.textContent + ". Hit New game for a fresh board.", "win");
+}
+function msg(text, tone){
+  const el = document.getElementById("ws-msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : tone === "warn" ? "text-rose-600" : "text-slate-600");
+}
+
+document.getElementById("ws-new").onclick  = newGame;
+document.getElementById("ws-hint").onclick = hint;
+document.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  const k = e.key.toLowerCase();
+  if (k === "n") newGame();
+  else if (k === "h") hint();
+});
+
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is a 2-D array of letters", why:"There is no canvas and no tile atlas — the whole puzzle is an N by N array in which every cell holds exactly one character. We start it entirely empty, using blank strings, precisely so the placement step can tell an untouched cell from one a word already claimed. Alongside the grid we keep a second list, placements, that remembers every word we hide together with the exact cells it runs through. That record is the ground truth we later check a player's selection against, so a match is never a guess about letters but a comparison against where a word genuinely lives.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">grid = N x N of letters<br><br>. . . . . . .<br>. S N A K E .<br>. . . . . . .<br>. . M A Z E .<br><br>placements = [{word:"SNAKE", cells:[...]}, ...]</div>`, code:`const N         = 12;   // grid is 12 x 12
+const NUM_WORDS = 8;    // words hidden per game
+
+let grid;         // grid[r][c] = one letter (or "" while building)
+let placements;   // [{ word, cells:[{r,c}...], found:false }]
+
+function blankGrid(){
+  return Array.from({length:N}, () => Array(N).fill(""));
+}` },
+
+ { title:"2. Eight directions are eight vectors", why:"A word in a search can run in any of eight compass directions, and the neat trick is that each direction is nothing more than a pair of integers: how much the row changes per step and how much the column changes. East is (0, +1) — same row, next column. South-west is (+1, -1) — down a row and left a column. Once a direction is a vector you can walk a word across the grid with a single loop, adding the vector to the current cell to reach the next. The four directions with a negative component are exactly what produce words that read backwards or climb upward, which is what makes a word search genuinely hard.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">8 step vectors (dr, dc)<br><br>NW(-1,-1) &nbsp;N(-1,0) &nbsp;NE(-1,1)<br>&nbsp;W(0,-1) &nbsp;&nbsp;&nbsp;[ ] &nbsp;&nbsp;&nbsp;E(0,1)<br>SW(1,-1) &nbsp;&nbsp;S(1,0) &nbsp;SE(1,1)<br><br>cell i = start + dir * i</div>`, code:`const DIRS = [
+  [0, 1], [0,-1],   // E, W
+  [1, 0], [-1,0],   // S, N
+  [1, 1], [1,-1],   // SE, SW
+  [-1,1], [-1,-1]   // NE, NW
+];` },
+
+ { title:"3. Place one word — try, check, commit", why:"Hiding a word is a gamble we repeat until it pays off. Pick a random start cell and a random direction, then ask two questions before writing anything. First, does the word even fit — does its last cell still land inside the grid? That is a quick bounds check on the far end. Second, is the path clear? Only when both hold do we actually stamp the letters onto the board. If either fails we discard the attempt and roll again, up to two hundred times; if we still can't seat the word we give up on it and move to the next one. Randomised placement with a retry budget is what keeps every generated puzzle different.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each attempt (up to 200):<br><br>&nbsp;&nbsp;pick random start + direction<br>&nbsp;&nbsp;does the LAST cell fit on board? &nbsp;--no--> retry<br>&nbsp;&nbsp;is the whole path clear? &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--no--> retry<br>&nbsp;&nbsp;yes --> write the letters, done</div>`, code:`function tryPlace(word){
+  for (let attempt = 0; attempt < 200; attempt++){
+    const [dr,dc] = DIRS[rand(DIRS.length)];
+    const r0 = rand(N), c0 = rand(N);
+    const rEnd = r0 + dr*(word.length-1);
+    const cEnd = c0 + dc*(word.length-1);
+    if (rEnd<0||rEnd>=N||cEnd<0||cEnd>=N) continue;   // off-board
+    if (fits(word,r0,c0,dr,dc)) return commit(word,r0,c0,dr,dc);
+  }
+  return null;   // gave up on this word
+}` },
+
+ { title:"4. Cross only where letters agree", why:"This single rule is what makes a word search dense and interesting rather than a handful of isolated words floating in noise. As we walk the candidate path, a cell is acceptable in one of two cases: it is still empty, or it already contains the very letter this word needs in that spot. That second case is a shared crossing — two words passing through one cell on a mutual letter, exactly like a crossword. Any cell that is occupied by a different letter is a genuine conflict, and one conflict rejects the entire placement. Committing is then trivial: walk the path once more, write each letter, and record the list of cells so we know precisely where this word lives.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">overlap is allowed only on a shared letter<br><br>. . C . . &nbsp;&nbsp;&nbsp;MAZE across<br>M A Z E . &nbsp;&nbsp;&nbsp;CHESS down<br>. . H . . &nbsp;&nbsp;&nbsp;share the Z? no -> the C/H column<br>. . E . .<br>. . S . .  &nbsp;(they cross where letters match)</div>`, code:`function fits(word, r0, c0, dr, dc){
+  for (let i = 0; i < word.length; i++){
+    const cell = grid[r0+dr*i][c0+dc*i];
+    if (cell !== "" && cell !== word[i]) return false;  // clash
+  }
+  return true;                                          // free or matching
+}` },
+
+ { title:"5. Generate the whole puzzle", why:"With one-word placement working, a full game is just orchestration. Shuffle a pool of candidate words so each game draws a different set in a different order, then place them one at a time until eight have stuck, recording every success in placements. A word that cannot find room after its two hundred tries is simply skipped and the next pool word is attempted, so a crowded board never deadlocks the generator. The final touch is the camouflage: sweep every cell that is still empty and drop in a random letter. Those random fillers are what bury the real words and turn a few placed strings into an actual puzzle to be solved.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">1. shuffle the word pool<br>2. place words until 8 stick<br>3. flood every blank with a random letter<br><br>. . . . . -> Q Z R T Y<br>S N A K E &nbsp;&nbsp;S N A K E<br>. . . . . -> W X B M V &nbsp;(camouflage)</div>`, code:`function newGame(){
+  grid = blankGrid();
+  placements = [];
+  for (const word of shuffle([...POOL])){
+    if (placements.length >= NUM_WORDS) break;
+    const cells = tryPlace(word);
+    if (cells) placements.push({ word, cells, found:false });
+  }
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++)
+    if (grid[r][c] === "") grid[r][c] = LETTERS[rand(26)];
+  render();
+}` },
+
+ { title:"6. The classic search algorithm", why:"This is the algorithm you would use to find a word when you do NOT already know where it was placed — it is what a solver does, and what our Hint button runs. Stand on every cell of the grid in turn, and from each cell try all eight directions. Down each direction, compare the grid's letters to the target one character at a time, and bail out the instant a letter disagrees or you step off the board. If an entire direction matches to the word's length, you have found it and can return the cells it occupies. It is unashamedly brute force — rows times columns times eight directions times the word length — but on a small board that is a few thousand cheap comparisons, effectively instant.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">from EVERY cell, try ALL 8 directions<br><br>at (r,c): match target letter-by-letter<br>&nbsp;&nbsp;stop on first mismatch or edge<br>&nbsp;&nbsp;full match -> return the path<br><br>cost = rows x cols x 8 x len (tiny)</div>`, code:`function findWord(word){
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++)
+    for (const [dr,dc] of DIRS){
+      let ok = true;
+      for (let i=0;i<word.length;i++){
+        const rr=r+dr*i, cc=c+dc*i;
+        if (rr<0||rr>=N||cc<0||cc>=N||grid[rr][cc]!==word[i]){ ok=false; break; }
+      }
+      if (ok) return buildPath(r,c,dr,dc,word.length);
+    }
+  return null;
+}` },
+
+ { title:"7. Two cells become a straight line", why:"A player's selection is defined by only two points: the cell they pressed on first and the cell the pointer is over now. That pair is a legal word-line only if it lies along one of the eight directions, which is easy to test — the row difference is zero (horizontal), the column difference is zero (vertical), or the two differences are equal in magnitude (a perfect 45-degree diagonal). Anything else, like a knight's-move offset, is not a straight run and we ignore it. When the pair does qualify, the length is the larger of the two differences, the per-step direction is the sign of each difference, and the cells in between are produced by the same start-plus-vector-times-i walk we used to place words. Selection is placement run backwards.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">valid only if dr==0, dc==0, or |dr|==|dc|<br><br>start (1,1) --> end (1,5)<br>&nbsp;&nbsp;dr=0, dc=4 -> horizontal, 5 cells<br><br>start (1,1) --> end (4,4)<br>&nbsp;&nbsp;|dr|=|dc|=3 -> diagonal, 4 cells</div>`, code:`function lineBetween(a, b){
+  const dr = b.r-a.r, dc = b.c-a.c;
+  if (!(dr===0 || dc===0 || Math.abs(dr)===Math.abs(dc))) return [a];
+  const len = Math.max(Math.abs(dr), Math.abs(dc));
+  const sr = Math.sign(dr), sc = Math.sign(dc);
+  const path = [];
+  for (let i=0;i<=len;i++) path.push({ r:a.r+sr*i, c:a.c+sc*i });
+  return path;
+}` },
+
+ { title:"8. Drag to select with pointer events", why:"One set of pointer-event handlers gives both mouse and touch for free. On pointerdown over a cell we record the anchor and begin selecting. While the button or finger is held, pointermove asks elementFromPoint which cell currently sits under the coordinates — that indirection is what makes touch work, since a touch's target stays the element it began on. Each move recomputes the straight line from the anchor to the current cell and repaints the highlighted preview. pointerup ends the gesture and commits whatever line was formed. Because a plain tap is a down and up with no movement in between, it yields a one-cell path, which we route to a separate tap-start then tap-end flow so touch users who prefer tapping are supported too.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">pointerdown -> anchor, start selecting<br>pointermove -> elementFromPoint finds the cell<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; recompute line, repaint preview<br>pointerup &nbsp;-> commit the line<br><br>(a no-move tap -> tap-start / tap-end)</div>`, code:`grid.addEventListener("pointerdown", e => {
+  const cell = e.target.closest("[data-r]"); if (!cell) return;
+  e.preventDefault();
+  selecting = true; dragMoved = false;
+  start = pos(cell); selPath = [start]; paint();
+});
+document.addEventListener("pointermove", e => {
+  if (!selecting) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const cell = el && el.closest && el.closest("[data-r]"); if (!cell) return;
+  selPath = lineBetween(start, pos(cell)); paint();
+});
+document.addEventListener("pointerup", () => {
+  if (selecting){ selecting = false; commit(); }
+});` },
+
+ { title:"9. Validate against the placed words", why:"When a line is committed we compare it to the truth stored at generation time rather than trying to re-read letters. Since a word looks identical to a player whether they swept it from first letter to last or from last to first, a selection matches a placement when its sequence of cells equals the placement's cells either forwards or reversed. Comparing cell paths, not letter strings, is deliberate: a random run of filler letters can occasionally spell a real word by accident, and path-matching means such a coincidence never falsely counts. A genuine hit flips the word's found flag, locks its cells green, re-renders the list with the word struck through, and when every word is found, triggers the win.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">selection matches if its cells ==<br>a placement's cells, forwards OR reversed<br><br>you dragged E-K-A-N-S<br>placement is S-N-A-K-E<br>reversed -> equal -> SNAKE found</div>`, code:`function samePath(a, b){                    // b, forwards or reversed
+  if (a.length !== b.length) return false;
+  const fwd = a.every((p,i)=> p.r===b[i].r          && p.c===b[i].c);
+  const rev = a.every((p,i)=> p.r===b[b.length-1-i].r && p.c===b[b.length-1-i].c);
+  return fwd || rev;
+}
+function evaluate(path){
+  if (path.length < 2) return;
+  const hit = placements.find(p => !p.found && samePath(path, p.cells));
+  if (!hit){ msg("Not a word — try again."); return; }
+  hit.found = true;
+  hit.cells.forEach(p => cellEls[p.r][p.c].classList.add("found"));
+  renderWords();
+  if (placements.every(p => p.found)) win();
+}` },
+
+ { title:"10. Render, strike the list, win", why:"Rendering is a pure function of the game state. The grid is a CSS grid of N columns; each cell is a div tagged with data-r and data-c so a pointer event can name exactly which cell it touched, and its visual state — highlighted while dragging, locked green once caught — is driven entirely by CSS classes we add and remove. The word list is re-rendered on every find, giving each caught word a class that draws a line through it, so progress is obvious at a glance. A one-second interval ticks the timer, and when placements.every(found) becomes true the timer stops and the win message appears. New game throws all of this away and rebuilds a completely fresh board, so no two rounds are the same.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">state -> DOM<br><br>grid: N-column CSS grid of &lt;div data-r data-c&gt;<br>classes: .sel (dragging) / .found (caught)<br>word list: .done strikes it through<br>all found -> stop timer -> win</div>`, code:`function render(){
+  gridEl.style.gridTemplateColumns = "repeat(" + N + ", 1fr)";
+  gridEl.innerHTML = ""; cellEls = [];
+  for (let r=0;r<N;r++){ cellEls[r]=[];
+    for (let c=0;c<N;c++){
+      const d = document.createElement("div");
+      d.className = "ws-cell"; d.textContent = grid[r][c];
+      d.dataset.r = r; d.dataset.c = c;
+      gridEl.appendChild(d); cellEls[r][c] = d;
+    }
+  }
+  renderWords();
+}
+function win(){ stopTimer(); msg("🎉 Solved! All words found."); }` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3000); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>

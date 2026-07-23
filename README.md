@@ -48,6 +48,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 39 — Chess](https://dev48v.infy.uk/game/day39-chess.html) — `day39-chess.html`
 - [GameFromZero · Day 40 — Gomoku](https://dev48v.infy.uk/game/day40-gomoku.html) — `day40-gomoku.html`
 - [GameFromZero · Day 41 — Reaction Time](https://dev48v.infy.uk/game/day41-reaction-time.html) — `day41-reaction-time.html`
+- [GameFromZero · Day 42 — Word Search](https://dev48v.infy.uk/game/day42-word-search.html) — `day42-word-search.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
