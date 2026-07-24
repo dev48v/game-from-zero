@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 43 — Tron Light-Cycles</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  #tron-msg { min-height:28px; }
+
+  /* ---- the arena ---- */
+  #tron-canvas {
+    display:block; width:min(92vw, 576px); height:auto; margin:0 auto;
+    background:#020617; border:2px solid #1e293b; border-radius:14px;
+    image-rendering:pixelated; touch-action:none;
+    box-shadow:0 14px 34px rgba(0,0,0,.28), 0 0 40px rgba(16,185,129,.08) inset;
+  }
+  .tron-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .legend { color:#64748b; }
+
+  /* score chips */
+  .chip { padding:6px 14px; border-radius:10px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .chip-you { background:#d1fae5; color:#047857; }
+  .chip-cpu { background:#ffe4e6; color:#be123c; }
+
+  /* touch d-pad */
+  .dpad { display:grid; grid-template-columns:repeat(3,52px); grid-template-rows:repeat(3,52px); gap:6px; justify-content:center; }
+  .dpad button { border:0; border-radius:10px; background:#e2e8f0; color:#334155; font-size:20px; font-weight:800; cursor:pointer; }
+  .dpad button:active { background:#34d399; color:#fff; }
+  .dpad .sp { visibility:hidden; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 43</div>
+      <h1 class="text-xl font-bold">🏍️ Tron Light-Cycles — Race Your Cycle Around a Walled Grid Arena Against a CPU Rider, Each of You Laying a Solid Wall of Light Behind You Every Cell You Cross; Steer With the Arrow Keys, Never Reverse Into Your Own Trail, and Force the Enemy to Smash Into a Wall, Your Trail, or Its Own — First Rider to Crash Loses the Round, First to Five Wins the Match</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-8 bg-slate-100">
+    <div class="max-w-5xl mx-auto text-center">
+      <h2 class="text-2xl font-bold mb-1">Two cycles, one shrinking arena. Outlast the machine.</h2>
+      <p class="text-slate-500 mb-5 max-w-3xl mx-auto">A light-cycle duel is the purest survival game there is. The arena is nothing but a <strong>grid of cells</strong>, and each rider is a single moving point that <strong>can never stop and never slow down</strong> — one cell every tick, forever. Wherever a cycle has been turns into a <strong>solid wall of light</strong>, so the board fills up as the round goes on and the free space collapses. Touch <em>anything</em> — the outer wall, your own trail, or the enemy&rsquo;s — and you crash. You steer with the <strong>arrow keys</strong> (or WASD), turning 90° at a time; the one move you are never allowed is a straight reverse into the wall you just laid. The CPU rider isn&rsquo;t scripted to follow a path — every tick it <strong>looks ahead</strong>, flood-fills the open space each of its turns would lead into, and drives toward the roomiest side so it doesn&rsquo;t seal itself into a shrinking pocket. Bait it into a corner, cut off its escape, and let its own greed trap it. First crash loses the round; <strong>first to five</strong> takes the match.</p>
+
+      <div class="flex justify-center gap-3 mb-4 text-sm font-bold flex-wrap items-center">
+        <div class="chip chip-you">🟢 You <span id="tron-you" class="stat">0</span></div>
+        <div class="chip chip-cpu">🔴 CPU <span id="tron-cpu" class="stat">0</span></div>
+        <div class="text-slate-600">Round <span id="tron-round" class="stat text-slate-800">1</span></div>
+        <div class="text-slate-500 text-xs">first to 5</div>
+      </div>
+
+      <canvas id="tron-canvas"></canvas>
+
+      <div id="tron-msg" class="mt-5 font-bold text-lg text-slate-600">Press New game to ride.</div>
+
+      <div class="flex justify-center mt-3 gap-2 flex-wrap items-center">
+        <button id="tron-new" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold text-sm">🔀 New game</button>
+      </div>
+
+      <div class="mt-5 flex justify-center">
+        <div class="dpad" aria-label="touch controls">
+          <div class="sp"></div><button data-dir="up">▲</button><div class="sp"></div>
+          <button data-dir="left">◀</button><div class="sp"></div><button data-dir="right">▶</button>
+          <div class="sp"></div><button data-dir="down">▼</button><div class="sp"></div>
+        </div>
+      </div>
+
+      <p class="text-xs legend mt-4"><span class="keycap">↑</span><span class="keycap">↓</span><span class="keycap">←</span><span class="keycap">→</span> or <span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span> steer &nbsp;·&nbsp; <span class="keycap">N</span> new game &nbsp;·&nbsp; no reversing into your own trail</p>
+
+      <p class="text-xs text-slate-400 mt-6 max-w-3xl mx-auto">There is no physics engine and no sprites — the whole game is a 2-D array where each cell is <code>0</code> (empty), <code>1</code> (your trail) or <code>2</code> (the CPU&rsquo;s). A rider is just a <code>(row, col)</code> position plus a <code>(row, col)</code> direction vector; every tick each rider&rsquo;s next cell is <code>pos + dir</code>. Collision is one line — that next cell is fatal if it is off the board or already non-zero. The CPU&rsquo;s &ldquo;intelligence&rdquo; is a bounded flood-fill: for each of its three legal turns it counts how many empty cells are reachable, and steers toward the largest. All vanilla JavaScript on one canvas, offline, one file.</p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How the duel works</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">No engine, no sprite sheet — a Tron duel is a 2-D array of cells, two moving points, and one collision test. Everything runs on a fixed tick: read the player&rsquo;s buffered turn, let the CPU pick a turn by looking ahead, compute both next cells as <code>pos + dir</code>, and check each against the board — off the edge or onto any trail means a crash. The only clever part is the CPU: a bounded flood-fill that counts the open room behind each of its three legal turns so it drives into space instead of trapping itself. About 130 lines of vanilla JavaScript on one canvas, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The arena is a grid of cells</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The whole game state is one 2-D array. Every cell holds <code>0</code> for empty, <code>1</code> for your trail, or <code>2</code> for the CPU&rsquo;s. The canvas is only a <em>view</em> of this array — the truth lives in <code>occ</code>. We size the canvas to the grid so one array cell maps to one square of <code>CELL</code> pixels, and clear the array to all-zero at the start of every round.</p>
+        <div class="relative"><pre>const CELL = 12, COLS = 48, ROWS = 30;   // arena is 48 x 30 cells
+
+let occ;   // occ[r][c] = 0 empty | 1 you | 2 cpu
+
+function emptyGrid(){
+  return Array.from({length:ROWS}, () =&gt; new Array(COLS).fill(0));
+}
+
+canvas.width  = COLS * CELL;   // one cell = CELL px
+canvas.height = ROWS * CELL;</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">A cycle is a point plus a direction</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each rider is just a cell position <code>(r, c)</code> and a step vector <code>(dr, dc)</code> — the direction it will move next tick. They spawn on opposite sides facing each other: you on the left heading east, the CPU on the right heading west. We immediately mark each spawn cell occupied, because a cycle&rsquo;s very first cell is already a wall the other rider can crash into.</p>
+        <div class="relative"><pre>let player, ai;
+
+function resetArena(){
+  occ = emptyGrid();
+  player = { r: ROWS&gt;&gt;1, c: 9,        dr:0, dc: 1, next:null }; // heading E
+  ai     = { r: ROWS&gt;&gt;1, c: COLS-10,  dr:0, dc:-1 };            // heading W
+  occ[player.r][player.c] = 1;
+  occ[ai.r][ai.c]         = 2;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The tick is the heartbeat</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A cycle never stops, so the game is driven by a fixed-interval tick. Every <code>TICK_MS</code> milliseconds the whole world advances exactly one cell. That single <code>step()</code> call is where turns are applied, the CPU decides, both riders move, and crashes are detected. Slower ticks = an easier, more readable game; faster = frantic.</p>
+        <div class="relative"><pre>const TICK_MS = 70;
+let tickId = null;
+
+function startRunning(){
+  clearInterval(tickId);
+  tickId = setInterval(step, TICK_MS);   // one cell per tick, forever
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Steering — turn, but never reverse</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Arrow keys don&rsquo;t move you directly; they <em>buffer</em> a desired direction that the next tick applies. Buffering avoids two turns inside one tick. The one illegal move is a straight reverse — flipping 180° would drive you instantly into the trail cell right behind you, so we reject any direction that is the negative of the current heading.</p>
+        <div class="relative"><pre>const KEYS = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1],
+               w:[-1,0], s:[1,0], a:[0,-1], d:[0,1] };
+
+function setDir(dir){
+  const [cr, cc] = [player.dr, player.dc];
+  if (dir[0] === -cr &amp;&amp; dir[1] === -cc) return;   // no 180° reverse
+  player.next = dir;                              // applied at next tick
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Collision detection is one line</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the whole rulebook. A candidate next cell kills its rider if it falls outside the grid <em>or</em> if it is already non-zero — meaning any wall at all: the arena edge, your own light-trail, or the enemy&rsquo;s. Because both trails live in the same array with the same &ldquo;solid&rdquo; meaning, one test covers every way to die.</p>
+        <div class="relative"><pre>function crashes(cell){
+  return cell.r &lt; 0 || cell.r &gt;= ROWS ||
+         cell.c &lt; 0 || cell.c &gt;= COLS ||
+         occ[cell.r][cell.c] !== 0;     // any trail = solid wall
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">One tick, resolved in order</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The tick applies your buffered turn, lets the CPU choose, then computes both next cells and judges them <em>before</em> anyone moves. If both aim at the same cell it&rsquo;s a head-on tie; if both would crash it&rsquo;s a tie; otherwise whoever crashes loses. Only when both cells are safe do we stamp the trails and advance the heads. Checking first, moving second, is what makes simultaneous outcomes fair.</p>
+        <div class="relative"><pre>function step(){
+  if (player.next){ [player.dr, player.dc] = player.next; player.next = null; }
+  aiChoose();                                     // CPU sets its own dir
+
+  const pN = { r: player.r + player.dr, c: player.c + player.dc };
+  const aN = { r: ai.r     + ai.dr,     c: ai.c     + ai.dc     };
+
+  const headOn = pN.r === aN.r &amp;&amp; pN.c === aN.c;
+  const pDead = crashes(pN), aDead = crashes(aN);
+
+  if (headOn || (pDead &amp;&amp; aDead)) return endRound("tie");
+  if (pDead) return endRound("ai");               // you crashed
+  if (aDead) return endRound("player");           // cpu crashed
+
+  occ[pN.r][pN.c] = 1; player.r = pN.r; player.c = pN.c;
+  occ[aN.r][aN.c] = 2; ai.r     = aN.r; ai.c     = aN.c;
+  draw();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">The CPU has three choices</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Just like you, the CPU can never reverse, so from its current heading it has exactly three options: keep straight, turn left, or turn right. A 90° turn is a swap of the vector&rsquo;s components with one sign flipped — <code>left = (-dc, dr)</code> and <code>right = (dc, -dr)</code>. These three vectors are the entire set of moves the AI ever gets to consider.</p>
+        <div class="relative"><pre>function turns(dr, dc){
+  return [
+    [dr, dc],      // straight
+    [-dc, dr],     // turn left  (90° rotate)
+    [dc, -dr]      // turn right (90° rotate)
+  ];
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Look-ahead: measure the open space</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A naive bot that just avoids the next wall will happily drive into a dead-end pocket and bury itself. The fix is to look further: from a candidate cell, run a bounded <strong>flood-fill</strong> — a breadth-first sweep — that counts how many empty cells are reachable. That number is &ldquo;how much room is on this side.&rdquo; We cap the count so it stays cheap; we only need to compare options, not map the whole board.</p>
+        <div class="relative"><pre>function freeSpace(r, c, cap){
+  if (crashes({r, c})) return 0;                  // dead on arrival
+  const seen = new Set([r * COLS + c]);
+  const queue = [[r, c]];
+  let count = 0;
+  while (queue.length &amp;&amp; count &lt; cap){
+    const [cr, cc] = queue.shift(); count++;
+    for (const [dr, dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nr = cr+dr, nc = cc+dc, key = nr*COLS+nc;
+      if (nr&lt;0||nr&gt;=ROWS||nc&lt;0||nc&gt;=COLS) continue;
+      if (occ[nr][nc] !== 0 || seen.has(key)) continue;
+      seen.add(key); queue.push([nr, nc]);
+    }
+  }
+  return count;                                   // reachable room, capped
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">The CPU picks the roomiest turn</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Now the decision is easy: score each of the three legal turns by the open space it leads into, nudge the straight option slightly so the bot doesn&rsquo;t jitter, add a hair of randomness to break ties, and steer toward the best. If every turn is instant death it just holds course and crashes — which is exactly when <em>you</em> have trapped it. This greedy &ldquo;drive toward the most space&rdquo; rule is a genuinely tough opponent.</p>
+        <div class="relative"><pre>function aiChoose(){
+  let best = null, bestScore = -1;
+  for (const [ndr, ndc] of turns(ai.dr, ai.dc)){
+    const nr = ai.r + ndr, nc = ai.c + ndc;
+    if (crashes({r:nr, c:nc})) continue;          // skip lethal turns
+    let score = freeSpace(nr, nc, 140);
+    if (ndr === ai.dr &amp;&amp; ndc === ai.dc) score += 2;  // prefer straight
+    score += Math.random() * 0.5;                    // break ties
+    if (score &gt; bestScore){ bestScore = score; best = [ndr, ndc]; }
+  }
+  if (best){ ai.dr = best[0]; ai.dc = best[1]; }  // else hold course &amp; die
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Rounds, score, and the win</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When <code>step()</code> reports a crash, the round ends: stop the tick, award the point (a tie awards none), and update the score. First rider to <code>WIN_TARGET</code> takes the match and the board waits for <em>New game</em>; otherwise the arena wipes and the next round auto-starts after a short pause. Drawing is pure state — repaint the dark grid, fill every trail cell in its owner&rsquo;s colour, and glow the two heads.</p>
+        <div class="relative"><pre>const WIN_TARGET = 5;
+let pScore = 0, aScore = 0, round = 1;
+
+function endRound(who){
+  clearInterval(tickId);
+  if (who === "player") pScore++;
+  else if (who === "ai") aScore++;
+  updateHUD();
+  if (pScore &gt;= WIN_TARGET || aScore &gt;= WIN_TARGET){
+    setStatus(pScore &gt; aScore ? "🏆 You win the match!" : "🤖 CPU wins the match.");
+    return;                                       // wait for New game
+  }
+  setTimeout(nextRound, 1400);                    // wipe + next round
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 43 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built a full Tron light-cycle duel end to end: the arena as a 2-D array of cells where <code>0/1/2</code> means empty, your trail, or the CPU&rsquo;s; a cycle as a position plus a <code>(dr, dc)</code> direction vector; the fixed tick that advances the whole world one cell at a time; buffered steering that turns 90° but forbids a suicidal reverse; the one-line collision test that treats the wall, your own trail, and the enemy&rsquo;s as equally solid; a tick that judges both riders&rsquo; next cells before anyone moves so head-on and simultaneous crashes resolve fairly; the CPU&rsquo;s three legal turns as rotated vectors; a bounded breadth-first flood-fill that measures the open room behind each turn; the greedy &ldquo;drive toward the most space&rdquo; rule that makes the bot avoid trapping itself; and the round loop that keeps score, ends the match at five, and repaints the whole arena from state each tick. Next: add a speed dial, a two-player local mode on the same keyboard, or a smarter AI that also runs the flood-fill from <em>your</em> position to cut you off. <strong>👉 Tomorrow — Day 44: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+  if (t.dataset.tab === "look") resumeGame(); else pauseGame();
+});
+
+// ===== TRON LIGHT-CYCLE ENGINE (vanilla) =====
+const CELL = 12, COLS = 48, ROWS = 30;
+const TICK_MS = 70, WIN_TARGET = 5, FF_CAP = 140;
+
+const cv  = document.getElementById("tron-canvas");
+const ctx = cv.getContext("2d");
+cv.width  = COLS * CELL;
+cv.height = ROWS * CELL;
+
+let occ, player, ai;
+let state = "idle";           // idle | countdown | running | between | matchover | paused
+let round = 1, pScore = 0, aScore = 0;
+let tickId = null, cdId = null, cd = 0, crashCell = null;
+
+function emptyGrid(){ return Array.from({length:ROWS}, () => new Array(COLS).fill(0)); }
+
+function resetArena(){
+  occ = emptyGrid();
+  player = { r: ROWS >> 1, c: 9,       dr:0, dc: 1, next:null };  // left, heading E
+  ai     = { r: ROWS >> 1, c: COLS-10, dr:0, dc:-1 };             // right, heading W
+  occ[player.r][player.c] = 1;
+  occ[ai.r][ai.c]         = 2;
+  crashCell = null;
+}
+
+// ---- match / round flow ----
+function newMatch(){
+  clearInterval(tickId); clearInterval(cdId);
+  pScore = 0; aScore = 0; round = 0;
+  nextRound();
+}
+function nextRound(){
+  round++;
+  resetArena();
+  updateHUD();
+  startCountdown();
+}
+function startCountdown(){
+  state = "countdown"; cd = 3;
+  setStatus("Round " + round + " — get ready…", "");
+  draw();
+  clearInterval(cdId);
+  cdId = setInterval(() => {
+    cd--;
+    if (cd <= 0){ clearInterval(cdId); startRunning(); }
+    else draw();
+  }, 600);
+}
+function startRunning(){
+  state = "running";
+  setStatus("Go! Steer with the arrow keys.", "");
+  draw();
+  clearInterval(tickId);
+  tickId = setInterval(step, TICK_MS);
+}
+
+// ---- the tick: turn, decide, move, judge ----
+function crashes(cell){
+  return cell.r < 0 || cell.r >= ROWS || cell.c < 0 || cell.c >= COLS || occ[cell.r][cell.c] !== 0;
+}
+function step(){
+  if (player.next){ player.dr = player.next[0]; player.dc = player.next[1]; player.next = null; }
+  aiChoose();
+
+  const pN = { r: player.r + player.dr, c: player.c + player.dc };
+  const aN = { r: ai.r     + ai.dr,     c: ai.c     + ai.dc     };
+
+  const headOn = (pN.r === aN.r && pN.c === aN.c);
+  const pDead  = crashes(pN), aDead = crashes(aN);
+
+  if (headOn || (pDead && aDead)){ crashCell = pN; return endRound("tie"); }
+  if (pDead){ crashCell = pN; return endRound("ai"); }
+  if (aDead){ crashCell = aN; return endRound("player"); }
+
+  occ[pN.r][pN.c] = 1; player.r = pN.r; player.c = pN.c;
+  occ[aN.r][aN.c] = 2; ai.r     = aN.r; ai.c     = aN.c;
+  draw();
+}
+
+// ---- CPU: three legal turns, pick the one with the most open space ----
+function turns(dr, dc){
+  return [ [dr, dc], [-dc, dr], [dc, -dr] ];   // straight, left, right
+}
+function freeSpace(r, c, cap){
+  if (crashes({r, c})) return 0;
+  const seen = new Set([r * COLS + c]);
+  const queue = [[r, c]];
+  let count = 0;
+  while (queue.length && count < cap){
+    const [cr, cc] = queue.shift(); count++;
+    const nb = [[cr+1,cc],[cr-1,cc],[cr,cc+1],[cr,cc-1]];
+    for (const [nr, nc] of nb){
+      if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+      const key = nr * COLS + nc;
+      if (occ[nr][nc] !== 0 || seen.has(key)) continue;
+      seen.add(key); queue.push([nr, nc]);
+    }
+  }
+  return count;
+}
+function aiChoose(){
+  let best = null, bestScore = -1;
+  for (const [ndr, ndc] of turns(ai.dr, ai.dc)){
+    const nr = ai.r + ndr, nc = ai.c + ndc;
+    if (crashes({r:nr, c:nc})) continue;          // never turn into instant death
+    let score = freeSpace(nr, nc, FF_CAP);
+    if (ndr === ai.dr && ndc === ai.dc) score += 2;   // prefer going straight
+    score += Math.random() * 0.5;                     // break ties
+    if (score > bestScore){ bestScore = score; best = [ndr, ndc]; }
+  }
+  if (best){ ai.dr = best[0]; ai.dc = best[1]; }  // else keep course and crash
+}
+
+// ---- round end ----
+function endRound(who){
+  clearInterval(tickId);
+  state = "between";
+  if (who === "player") pScore++;
+  else if (who === "ai") aScore++;
+  updateHUD();
+  draw();
+
+  if (pScore >= WIN_TARGET || aScore >= WIN_TARGET){
+    state = "matchover";
+    if (pScore > aScore) setStatus("🏆 You win the match " + pScore + "–" + aScore + "! Press New game.", "win");
+    else                 setStatus("🤖 CPU wins the match " + aScore + "–" + pScore + ". Press New game.", "warn");
+    return;
+  }
+  const m = who === "player" ? "🏁 Round won — the CPU crashed!"
+          : who === "ai"     ? "💥 You crashed — CPU takes the round."
+          :                    "🤝 Head-on! Round tied.";
+  setStatus(m + " Next round in a moment…", who === "player" ? "win" : who === "ai" ? "warn" : "");
+  setTimeout(() => { if (state === "between") nextRound(); }, 1400);
+}
+
+// ---- pause / resume when leaving the PLAY tab ----
+function pauseGame(){
+  if (state === "running" || state === "countdown"){
+    clearInterval(tickId); clearInterval(cdId);
+    state = "paused";
+    setStatus("Paused — return to the PLAY tab to resume.", "");
+  }
+}
+function resumeGame(){
+  if (state === "paused") startCountdown();
+}
+
+// ---- render ----
+function draw(){
+  ctx.fillStyle = "#020617";
+  ctx.fillRect(0, 0, cv.width, cv.height);
+
+  ctx.strokeStyle = "rgba(56,189,248,0.06)"; ctx.lineWidth = 1;
+  for (let c = 0; c <= COLS; c++){ ctx.beginPath(); ctx.moveTo(c*CELL + 0.5, 0); ctx.lineTo(c*CELL + 0.5, cv.height); ctx.stroke(); }
+  for (let r = 0; r <= ROWS; r++){ ctx.beginPath(); ctx.moveTo(0, r*CELL + 0.5); ctx.lineTo(cv.width, r*CELL + 0.5); ctx.stroke(); }
+
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++){
+      if (occ[r][c] === 1) fillCell(r, c, "#10b981");
+      else if (occ[r][c] === 2) fillCell(r, c, "#f43f5e");
+    }
+
+  head(player, "#6ee7b7", "#10b981");
+  head(ai,     "#fda4af", "#f43f5e");
+
+  if (crashCell && state === "between") fillCell(crashCell.r, crashCell.c, "#fde047");
+
+  if (state === "countdown") overlay(cd > 0 ? String(cd) : "GO");
+}
+function fillCell(r, c, color){ ctx.fillStyle = color; ctx.fillRect(c*CELL + 1, r*CELL + 1, CELL - 2, CELL - 2); }
+function head(cyc, light, glow){
+  ctx.save(); ctx.shadowColor = glow; ctx.shadowBlur = 10;
+  ctx.fillStyle = light; ctx.fillRect(cyc.c*CELL, cyc.r*CELL, CELL, CELL);
+  ctx.restore();
+}
+function overlay(t){
+  ctx.save();
+  ctx.fillStyle = "rgba(2,6,23,0.55)"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = "#e2e8f0"; ctx.font = "bold 64px -apple-system, Inter, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(t, cv.width / 2, cv.height / 2);
+  ctx.restore();
+}
+
+// ---- HUD / status ----
+function updateHUD(){
+  document.getElementById("tron-you").textContent   = pScore;
+  document.getElementById("tron-cpu").textContent   = aScore;
+  document.getElementById("tron-round").textContent = round;
+}
+function setStatus(text, tone){
+  const el = document.getElementById("tron-msg");
+  el.textContent = text;
+  el.className = "mt-5 font-bold text-lg " + (tone === "win" ? "text-emerald-600" : tone === "warn" ? "text-rose-600" : "text-slate-600");
+}
+
+// ---- input ----
+const KEYS = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1],
+               w:[-1,0], s:[1,0], a:[0,-1], d:[0,1] };
+function setDir(dir){
+  if (state !== "running") return;
+  const cr = player.dr, cc = player.dc;
+  if (dir[0] === -cr && dir[1] === -cc) return;   // no reverse into own trail
+  player.next = dir;
+}
+document.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;   // only on PLAY tab
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (k === "n"){ newMatch(); return; }
+  const dir = KEYS[k];
+  if (!dir) return;
+  e.preventDefault();
+  setDir(dir);
+});
+document.querySelectorAll(".dpad button").forEach(b => {
+  const map = { up:[-1,0], down:[1,0], left:[0,-1], right:[0,1] };
+  b.addEventListener("click", () => setDir(map[b.dataset.dir]));
+});
+document.getElementById("tron-new").onclick = newMatch;
+
+// boot
+resetArena();
+updateHUD();
+draw();
+newMatch();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The arena is a grid of cells", why:"There is no physics engine and no sprite sheet — the entire game is a single two-dimensional array. Every cell holds one of three values: zero for empty, one for your trail, two for the CPU's. The canvas you see is only a view of this array; the real state lives in occ. Because one array cell maps to one square of CELL pixels, drawing is trivial and collision is just an array lookup. At the start of every round we throw the array away and rebuild it as all zeros, so nothing from the previous round can linger and cause a phantom crash.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">occ[r][c] = 0 empty | 1 you | 2 cpu<br><br>0 0 0 0 0 0 0<br>1 1 1 0 0 2 2<br>0 0 1 0 0 2 0<br>0 0 1 0 0 0 0<br><br>canvas = a picture of this array</div>`, code:`const CELL = 12, COLS = 48, ROWS = 30;   // arena is 48 x 30 cells
+
+let occ;   // occ[r][c] = 0 empty | 1 you | 2 cpu
+
+function emptyGrid(){
+  return Array.from({length:ROWS}, () => new Array(COLS).fill(0));
+}
+canvas.width  = COLS * CELL;
+canvas.height = ROWS * CELL;` },
+
+ { title:"2. A cycle is a point plus a direction", why:"Each rider is astonishingly simple: a position given as a row and column, and a direction given as a step vector — how much the row changes and how much the column changes each tick. East is (0, +1), north is (-1, 0), and so on. That is all a light-cycle is. The two riders spawn on opposite sides of the arena facing one another, you on the left moving east and the CPU on the right moving west, and we immediately mark each spawn cell as occupied, because a cycle's starting square is already a solid wall the other rider can die against.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">rider = { r, c, dr, dc }<br><br>you  (15, 9)  dir (0,+1)  ->  heading EAST<br>cpu  (15,38)  dir (0,-1)  ->  heading WEST<br><br>next cell = (r + dr, c + dc)</div>`, code:`let player, ai;
+
+function resetArena(){
+  occ = emptyGrid();
+  player = { r: ROWS>>1, c: 9,       dr:0, dc: 1, next:null };  // E
+  ai     = { r: ROWS>>1, c: COLS-10, dr:0, dc:-1 };             // W
+  occ[player.r][player.c] = 1;
+  occ[ai.r][ai.c]         = 2;
+}` },
+
+ { title:"3. The tick is the heartbeat", why:"A defining rule of Tron is that a cycle can never stop and never slow down. That makes the game clock-driven rather than input-driven: a fixed-interval timer fires every TICK_MS milliseconds, and on each fire the entire world advances by exactly one cell. That single step call is where everything happens — the player's buffered turn is applied, the CPU decides, both riders move, and crashes are judged. Lengthening the interval makes a calmer, more readable game; shortening it makes a frantic one. Nothing in the game moves except on a tick.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every TICK_MS ms:  step()<br><br>tick --> everyone moves one cell<br>tick --> everyone moves one cell<br>tick --> ...<br><br>no tick = no movement (a cycle never idles)</div>`, code:`const TICK_MS = 70;
+let tickId = null;
+
+function startRunning(){
+  clearInterval(tickId);
+  tickId = setInterval(step, TICK_MS);   // one cell per tick
+}` },
+
+ { title:"4. Steering — turn, but never reverse", why:"Pressing an arrow key does not move you directly. Instead it buffers a desired direction that the next tick will apply. Buffering matters: without it, two quick key presses inside a single tick could turn you twice and fold you onto your own trail. The one move that is always illegal is a straight reverse — flipping the direction a full 180 degrees would drive you instantly into the trail cell directly behind you, an automatic crash. So we reject any requested direction that is the exact negative of the current heading, and quietly ignore it.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">key -> buffer a direction -> applied next tick<br><br>heading EAST (0,+1)<br>&nbsp;&nbsp;press WEST (0,-1)  ->  REJECTED (reverse)<br>&nbsp;&nbsp;press NORTH (-1,0) ->  ok, turn<br>&nbsp;&nbsp;press SOUTH (+1,0) ->  ok, turn</div>`, code:`const KEYS = { ArrowUp:[-1,0], ArrowDown:[1,0],
+               ArrowLeft:[0,-1], ArrowRight:[0,1] };
+
+function setDir(dir){
+  const cr = player.dr, cc = player.dc;
+  if (dir[0] === -cr && dir[1] === -cc) return;   // no 180 reverse
+  player.next = dir;                              // applied next tick
+}` },
+
+ { title:"5. Collision detection is one line", why:"This single test is the entire rulebook of Tron. A candidate next cell is fatal if it lies outside the grid — off the top, bottom, or either side wall — or if the array already holds a non-zero value there. A non-zero value means any wall at all: the arena boundary, your own light-trail, or the enemy's. Because both trails are stored in the very same array with the same solid meaning, one check covers every possible way to die. There is no special case for hitting yourself versus hitting the opponent; a wall is a wall.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a cell kills you if:<br><br>&nbsp;&nbsp;r < 0  or  r >= ROWS   (off top/bottom)<br>&nbsp;&nbsp;c < 0  or  c >= COLS   (off left/right)<br>&nbsp;&nbsp;occ[r][c] != 0         (any trail)<br><br>edge, your trail, enemy trail -> all solid</div>`, code:`function crashes(cell){
+  return cell.r < 0 || cell.r >= ROWS ||
+         cell.c < 0 || cell.c >= COLS ||
+         occ[cell.r][cell.c] !== 0;   // any trail = wall
+}` },
+
+ { title:"6. One tick, resolved in order", why:"The tick is careful about ordering so that simultaneous outcomes are fair. First it applies your buffered turn, then it lets the CPU choose its direction. Then it computes both riders' next cells and judges them before anyone actually moves. If both riders aim at the very same cell, that is a head-on collision and a tie. If both would crash into walls, also a tie. Otherwise, whichever rider crashes loses and the other wins. Only when both next cells are proven safe do we stamp the two trails into the array and advance the heads. Check first, move second — that is what keeps a mutual crash from unfairly favouring whoever happened to be processed first.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">1. apply player's buffered turn<br>2. CPU chooses a direction<br>3. compute both next cells<br>4. judge BEFORE moving:<br>&nbsp;&nbsp;&nbsp;same cell / both crash -> tie<br>&nbsp;&nbsp;&nbsp;one crashes -> the other wins<br>5. both safe -> stamp trails, advance</div>`, code:`function step(){
+  if (player.next){ player.dr = player.next[0]; player.dc = player.next[1]; player.next = null; }
+  aiChoose();
+
+  const pN = { r: player.r + player.dr, c: player.c + player.dc };
+  const aN = { r: ai.r + ai.dr, c: ai.c + ai.dc };
+
+  const headOn = pN.r === aN.r && pN.c === aN.c;
+  const pDead = crashes(pN), aDead = crashes(aN);
+
+  if (headOn || (pDead && aDead)) return endRound("tie");
+  if (pDead) return endRound("ai");
+  if (aDead) return endRound("player");
+
+  occ[pN.r][pN.c] = 1; player.r = pN.r; player.c = pN.c;
+  occ[aN.r][aN.c] = 2; ai.r = aN.r; ai.c = aN.c;
+  draw();
+}` },
+
+ { title:"7. The CPU has three choices", why:"The CPU obeys the same no-reverse rule you do, so from its current heading it has exactly three possible moves: keep going straight, turn ninety degrees left, or turn ninety degrees right. And a ninety-degree turn is a beautifully cheap operation on a vector — swap the row and column components and flip one sign. Left becomes (negative dc, dr) and right becomes (dc, negative dr). Those three vectors are the complete universe of moves the AI ever considers on any given tick; everything smart it does is a choice among just these three.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">heading (dr, dc), the 3 legal moves:<br><br>straight = ( dr,  dc)<br>left     = (-dc,  dr)<br>right    = ( dc, -dr)<br><br>(reverse is never allowed)</div>`, code:`function turns(dr, dc){
+  return [
+    [dr, dc],      // straight
+    [-dc, dr],     // turn left
+    [dc, -dr]      // turn right
+  ];
+}` },
+
+ { title:"8. Look-ahead: measure the open space", why:"A bot that only avoids the wall in the very next cell is easy to beat — it will cheerfully drive into a narrow pocket and then have nowhere to go, burying itself. The cure is to look further ahead. From a candidate cell we run a bounded flood-fill, a breadth-first sweep that counts how many empty cells are reachable from there. That count is a direct measure of how much room exists on that side of the board. We cap the sweep at a fixed number of cells because we only need to compare the options against each other, not survey the whole arena; capping keeps every decision cheap enough to run several times per tick.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">flood-fill = count reachable empty cells<br><br>. . | . . . . .   left of wall: small pocket (6)<br>. . | . . . . .   right of wall: open (140+)<br>. . | . . . . .<br><br>choose the side with MORE room</div>`, code:`function freeSpace(r, c, cap){
+  if (crashes({r, c})) return 0;
+  const seen = new Set([r * COLS + c]);
+  const queue = [[r, c]];
+  let count = 0;
+  while (queue.length && count < cap){
+    const [cr, cc] = queue.shift(); count++;
+    for (const [dr, dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nr = cr+dr, nc = cc+dc, key = nr*COLS+nc;
+      if (nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+      if (occ[nr][nc] !== 0 || seen.has(key)) continue;
+      seen.add(key); queue.push([nr, nc]);
+    }
+  }
+  return count;
+}` },
+
+ { title:"9. The CPU picks the roomiest turn", why:"With the flood-fill in hand the decision writes itself. Score each of the three legal turns by the amount of open space it leads into, skipping any turn that is instant death. Add a small bonus to going straight so the bot does not jitter back and forth pointlessly, and add a whisker of randomness so perfectly tied options are broken differently each time, which keeps games from feeling robotic. Then simply steer toward the highest score. If every one of the three turns is lethal, the bot has no good move and keeps its course into a wall — and that moment is precisely when you have successfully trapped it. This greedy rule, drive toward the most space, produces a genuinely tough opponent from a dozen lines of code.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each of straight / left / right:<br>&nbsp;&nbsp;lethal? skip<br>&nbsp;&nbsp;score = freeSpace(next cell)<br>&nbsp;&nbsp;+2 if straight, + tiny random<br><br>pick the highest score<br>all lethal -> hold course -> you trapped it</div>`, code:`function aiChoose(){
+  let best = null, bestScore = -1;
+  for (const [ndr, ndc] of turns(ai.dr, ai.dc)){
+    const nr = ai.r + ndr, nc = ai.c + ndc;
+    if (crashes({r:nr, c:nc})) continue;
+    let score = freeSpace(nr, nc, 140);
+    if (ndr === ai.dr && ndc === ai.dc) score += 2;
+    score += Math.random() * 0.5;
+    if (score > bestScore){ bestScore = score; best = [ndr, ndc]; }
+  }
+  if (best){ ai.dr = best[0]; ai.dc = best[1]; }
+}` },
+
+ { title:"10. Rounds, score, and the win", why:"When the tick reports a crash the round is over: stop the timer, award a point to the survivor — a tie awards none — and refresh the scoreboard. If either rider has reached the win target the match is over and the arena freezes until you press New game; otherwise the board wipes clean and the next round auto-starts after a short pause so you can breathe. Drawing is a pure function of state that runs every tick: repaint the dark grid, fill every trail cell in its owner's colour, and give the two live heads a soft glow so you can always find yourself. New game resets both scores to zero and begins round one from scratch.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">crash -> stop tick -> award point<br><br>you 3  cpu 4   round 8<br><br>reached 5? -> match over, wait for New game<br>else -> wipe arena, auto-start next round</div>`, code:`const WIN_TARGET = 5;
+let pScore = 0, aScore = 0, round = 1;
+
+function endRound(who){
+  clearInterval(tickId);
+  if (who === "player") pScore++;
+  else if (who === "ai") aScore++;
+  updateHUD();
+  if (pScore >= WIN_TARGET || aScore >= WIN_TARGET){
+    setStatus(pScore > aScore ? "You win the match!" : "CPU wins the match.");
+    return;
+  }
+  setTimeout(nextRound, 1400);
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3000); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
