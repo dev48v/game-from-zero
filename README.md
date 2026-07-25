@@ -50,6 +50,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 41 — Reaction Time](https://dev48v.infy.uk/game/day41-reaction-time.html) — `day41-reaction-time.html`
 - [GameFromZero · Day 42 — Word Search](https://dev48v.infy.uk/game/day42-word-search.html) — `day42-word-search.html`
 - [GameFromZero · Day 43 — Tron Light-Cycles](https://dev48v.infy.uk/game/day43-tron-duel.html) — `day43-tron-duel.html`
+- [GameFromZero · Day 44 — Idle Mine (Incremental Clicker)](https://dev48v.infy.uk/game/day44-idle-clicker.html) — `day44-idle-clicker.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

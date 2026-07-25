@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 44 — Idle Mine (Incremental Clicker)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+
+  /* ---- the mine ---- */
+  .mine-btn {
+    background:radial-gradient(circle at 50% 35%, #34d399, #059669 60%, #047857);
+    color:#fff; border:0; border-radius:22px; cursor:pointer; user-select:none;
+    box-shadow:0 14px 30px rgba(5,150,105,.35), 0 0 0 6px rgba(16,185,129,.10);
+    transition:transform .06s ease;
+  }
+  .mine-btn:active { transform:scale(.96); }
+  .mine-btn.bump { animation:bump .12s ease; }
+  @keyframes bump { 0%{ transform:scale(1);} 40%{ transform:scale(1.06);} 100%{ transform:scale(1);} }
+
+  .floaty { position:absolute; pointer-events:none; font-weight:800; color:#065f46; animation:floaty .9s ease-out forwards; }
+  @keyframes floaty { from{ opacity:1; transform:translate(-50%,0);} to{ opacity:0; transform:translate(-50%,-46px);} }
+
+  .gen-row { transition:opacity .2s, border-color .15s; }
+  .gen-row.afford { border-color:#34d399; }
+  .buy-btn:disabled, .up-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 44</div>
+      <h1 class="text-xl font-bold">⛏️ Deep Delve Idle Mine — Click the Rock to Mine Ore by Hand, Then Spend That Ore on Miners, Carts, Drills and Excavators That Dig for You Automatically Every Second; Every Copy You Buy Costs 15% More Than the Last, so Growth Is a Constant Tug-of-War Between Price and Payback, Your Production Compounds as Machines Fund More Machines, a Real Delta-Timed Game Loop Keeps the Ore Flowing Even While You Sit Idle, and When Progress Crawls You Prestige — Melt the Whole Mine Down Into Permanent Gems That Each Add +2% to Everything Forever — Every Number Formatted K/M/B/T, Pure Vanilla JavaScript, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-5">
+        <h2 class="text-2xl font-bold mb-1">Every idle game is one equation: production × time.</h2>
+        <p class="text-slate-500 max-w-3xl mx-auto text-sm">There is no world here — just numbers. Tap the rock to mine ore, buy generators that dig for you every second, and watch a real delta-timed loop pay you even while you read this. Costs climb 15% each buy, production compounds, and when it stalls you <strong>Prestige</strong> for a permanent multiplier. Your mine saves automatically and earns while you're away.</p>
+      </div>
+
+      <!-- resource counter -->
+      <div class="bg-slate-900 text-white rounded-2xl px-6 py-5 text-center shadow-lg mb-5">
+        <div class="text-4xl md:text-5xl font-black stat">⛏️ <span id="ore">0</span></div>
+        <div class="text-emerald-300 text-sm font-semibold mt-1">ore &nbsp;·&nbsp; <span id="persec" class="stat">0</span> / sec</div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-5">
+
+        <!-- LEFT: click + generators -->
+        <div>
+          <div class="relative flex justify-center mb-5">
+            <button id="mine-btn" class="mine-btn px-10 py-8 text-lg font-extrabold">
+              <div class="text-4xl mb-1">⛏️</div>
+              MINE<br><span class="text-sm font-bold opacity-90">+<span id="clickpow" class="stat">1</span> per tap</span>
+            </button>
+            <div id="floaties" class="absolute inset-0 overflow-hidden pointer-events-none"></div>
+          </div>
+
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-slate-700">Generators <span class="text-slate-400 text-xs font-normal">— auto-mine every second</span></h3>
+          </div>
+          <div id="gens" class="space-y-2"></div>
+        </div>
+
+        <!-- RIGHT: upgrades + prestige -->
+        <div class="space-y-4">
+          <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <h3 class="font-bold text-slate-700 mb-1">Sharpen the pick</h3>
+            <p class="text-xs text-slate-500 mb-3">Each level adds <strong>+1</strong> to your base tap power.</p>
+            <div class="flex items-center justify-between">
+              <div class="text-sm text-slate-600">Level <span id="click-lvl" class="stat font-bold">0</span></div>
+              <button id="click-up" class="up-btn bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-semibold text-sm">
+                Sharpen &nbsp;·&nbsp; ⛏️ <span id="click-cost" class="stat">50</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-gradient-to-br from-fuchsia-50 to-emerald-50 rounded-2xl border border-fuchsia-200 p-5">
+            <h3 class="font-bold text-slate-800 mb-1">💎 Prestige</h3>
+            <p class="text-xs text-slate-600 mb-3">Reset the mine for permanent gems. Each gem gives <strong>+2%</strong> to <em>all</em> production, forever.</p>
+            <div class="grid grid-cols-2 gap-3 text-center mb-3">
+              <div class="bg-white/70 rounded-lg py-2">
+                <div class="text-2xl font-black stat" id="gems">0</div>
+                <div class="text-[11px] text-slate-500 font-semibold uppercase tracking-wide">gems held</div>
+              </div>
+              <div class="bg-white/70 rounded-lg py-2">
+                <div class="text-2xl font-black text-emerald-600 stat" id="mult">×1.00</div>
+                <div class="text-[11px] text-slate-500 font-semibold uppercase tracking-wide">bonus</div>
+              </div>
+            </div>
+            <button id="prestige-btn" class="up-btn w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-4 py-3 rounded-lg font-bold text-sm">
+              Prestige for +<span id="pending" class="stat">0</span> 💎
+            </button>
+            <p class="text-[11px] text-slate-500 mt-2 text-center">Gems = √(ore earned this run ÷ 2,500)</p>
+          </div>
+
+          <div class="flex gap-2">
+            <button id="reset-btn" class="text-xs text-slate-400 hover:text-rose-500 font-semibold">↺ Hard reset (wipe save)</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="idle-msg" class="mt-5 text-center text-sm font-semibold text-emerald-600 min-h-[20px]"></div>
+      <p class="text-xs text-slate-400 mt-4 text-center max-w-3xl mx-auto">
+        <span class="keycap">Space</span> or <span class="keycap">Click</span> to mine &nbsp;·&nbsp; there is no canvas and no physics — the whole game is a few variables, one <code>requestAnimationFrame</code> loop that multiplies your per-second rate by real elapsed seconds, and a geometric cost curve. Autosaves every 5s to <code>localStorage</code>; offline time is paid out on load.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">The economy, step by step</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">An idle clicker has no engine and no sprites — it is pure economy math. The whole game is a handful of numbers, one <code>requestAnimationFrame</code> loop that pays you <code>production × elapsed-seconds</code> every frame, a geometric <code>×1.15</code> price curve that keeps every purchase a decision, and a prestige reset that trades your run for a permanent multiplier. About 120 lines of vanilla JavaScript, no libraries, saved to <code>localStorage</code>. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The whole game is a few numbers</h3></div>
+        <p class="text-sm text-slate-600 mb-3">No world, no physics. The entire state is: how much ore you hold now, how much you've earned <em>this run</em> (that drives prestige), how many of each generator you own, your click level, and your permanent gems. Everything on screen is just a formatted view of these variables, which is why the game saves to one small string.</p>
+        <div class="relative"><pre>const GENS = [
+  { name:"Apprentice", icon:"⛏️", baseCost: 15,      rate: 0.1  },
+  { name:"Ore Cart",   icon:"🛒", baseCost: 110,     rate: 1    },
+  { name:"Power Drill", icon:"🔩", baseCost: 1200,   rate: 8    },
+  { name:"Excavator",  icon:"🚜", baseCost: 13000,   rate: 47   },
+  { name:"Mine Shaft", icon:"🕳️", baseCost: 140000,  rate: 260  },
+  { name:"Quarry",     icon:"⛰️", baseCost: 1600000, rate: 1400 },
+];
+let ore, earnedThisRun, count, clickLevel, gems;
+
+function freshRun(){          // wiped on prestige (gems survive)
+  ore = 0; earnedThisRun = 0;
+  count = GENS.map(() =&gt; 0);
+  clickLevel = 0;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The tick loop earns over real time</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A clicker must pay you even when you're not clicking, so the heart of the game is a <code>requestAnimationFrame</code> loop. Each frame we measure <code>dt</code> — the real seconds since the last frame — and add <code>production × dt</code>. Multiplying a per-second rate by elapsed seconds makes income frame-rate independent: 60fps or 30fps, you earn the same per real second. This exact trick pays offline time by treating your absence as one giant <code>dt</code>.</p>
+        <div class="relative"><pre>let last = performance.now();
+
+function loop(now){
+  const dt = (now - last) / 1000;   // real seconds elapsed
+  last = now;
+  const gained = perSec() * dt;     // rate x time = ore
+  ore           += gained;
+  earnedThisRun += gained;
+  render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Clicking mints the base resource</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The very first ore comes from your own taps. Each click adds <code>clickPower</code>, which starts at 1 and grows by upgrades. Clicking is the bootstrap: before you own a single generator, tapping the rock is the only income and the only way to afford your first miner. It's also multiplied by the prestige bonus, so it never becomes completely worthless.</p>
+        <div class="relative"><pre>function clickPower(){
+  return (1 + clickLevel) * prestigeMult();   // base 1, +1 per level
+}
+function mine(){
+  const g = clickPower();
+  ore += g; earnedThisRun += g;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Generators auto-produce per second</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The instant you buy a generator it starts digging on its own. Total production per second is simply the sum, over every type, of its rate times how many you own — one Apprentice adds 0.1/s, one Cart 1/s. That single number is what the tick loop multiplies by <code>dt</code> every frame. The whole prestige bonus multiplies it at the end.</p>
+        <div class="relative"><pre>function perSec(){
+  let sum = 0;
+  for (let i = 0; i &lt; GENS.length; i++)
+    sum += GENS[i].rate * count[i];   // rate x how many you own
+  return sum * prestigeMult();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Exponential cost scaling (×1.15)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">If generators cost the same forever, you'd buy infinite ones instantly and the game would end. The golden rule of the genre: each copy costs <strong>15% more</strong> than the last, so the price of the <code>n</code>-th unit is <code>baseCost × 1.15ⁿ</code>. That geometric curve snowballs far faster than your linear income, forcing you to keep unlocking bigger generators instead of spamming the cheapest. Buying just subtracts the current price and increments the count.</p>
+        <div class="relative"><pre>const GROWTH = 1.15;
+
+function genCost(i){
+  return GENS[i].baseCost * Math.pow(GROWTH, count[i]);
+}
+function buyGen(i){
+  const c = genCost(i);
+  if (ore &lt; c) return;      // can't afford
+  ore -= c; count[i]++;      // next one costs 15% more
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">ROI — is a purchase worth it?</h3></div>
+        <p class="text-sm text-slate-600 mb-3">With prices climbing, "what next?" becomes a real decision, and the tool is <strong>payback time</strong>: divide a purchase's cost by the extra ore-per-second it grants and you get how many seconds until it pays for itself. A drill costing 1,200 that adds 8/s pays back in 150s; if a cheaper generator pays back faster, buy that first. Skilled idle play is really just minimizing payback every purchase — the same ROI math businesses use for capital, hiding in a game.</p>
+        <div class="relative"><pre>function paybackSeconds(i){
+  const extraPerSec = GENS[i].rate * prestigeMult();
+  return genCost(i) / extraPerSec;   // cost / income = seconds to break even
+}
+// lower payback = better buy right now</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Compounding — machines buy machines</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The reason idle numbers explode is compounding. Ore from your generators buys more generators, which produce more ore, which buys still more — a feedback loop where the growth rate itself grows. Unlike your fixed click, automated income feeds back into itself. It crawls early, then curves sharply upward as each layer funds the next. That reinvestment loop is why the second half of every run is dramatically faster than the first.</p>
+        <div class="relative"><pre>// the loop that never stops paying:
+//
+//   ore  --buy-->  generators  --perSec()-->  more ore
+//    ^                                           |
+//    +-------------------------------------------+
+//
+// perSec() rises every purchase, so the NEXT purchase
+// arrives sooner, so perSec() rises faster still.</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Prestige — burn it down for a permanent bonus</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Eventually costs outrun income and progress crawls. Prestige is the escape valve: reset the whole run — ore, generators, upgrades all to zero — in exchange for permanent <strong>gems</strong>. Gems are a square-root of what you earned this run, <code>√(earned ÷ 2,500)</code>, so they come from big, diminishing milestones, and each adds <strong>+2%</strong> to all future production forever. You return weaker on paper but with a multiplier that makes the next climb far faster. Knowing <em>when</em> to prestige is the genre's deepest decision.</p>
+        <div class="relative"><pre>function pendingGems(){
+  return Math.floor(Math.sqrt(earnedThisRun / 2500));
+}
+function prestigeMult(){
+  return 1 + gems * 0.02;        // +2% per gem, permanent
+}
+function prestige(){
+  const g = pendingGems();
+  if (g &lt; 1) return;             // need at least one gem
+  gems += g;                     // gems survive...
+  freshRun();                    // ...everything else resets
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Formatting huge numbers (K/M/B/T)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Idle games race past a billion within minutes, and <code>1400000000</code> is unreadable. Every number on screen passes through a formatter that divides by a thousand repeatedly, counting suffixes — K, M, B, T and beyond — and prints two decimals. Below a thousand we show the raw value. This is pure presentation, applied only when drawing, never to the stored numbers, so full precision is preserved underneath.</p>
+        <div class="relative"><pre>function fmt(n){
+  if (n &lt; 1000){
+    return (n &lt; 100 &amp;&amp; n % 1 !== 0) ? n.toFixed(1)
+                                     : Math.floor(n).toString();
+  }
+  const u = ["K","M","B","T","Qa","Qi","Sx"];
+  let i = -1;
+  while (n &gt;= 1000 &amp;&amp; i &lt; u.length - 1){ n /= 1000; i++; }
+  return n.toFixed(2) + u[i];      // 1400000000 -> "1.40B"
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Save, load, and pay offline time</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Persistence is what makes an idle game <em>idle</em>. Autosave the state (plus a timestamp) to <code>localStorage</code> every few seconds. On load, restore it, then compute how many seconds passed while you were gone and grant <code>perSec() × offlineSeconds</code> — capped so a month away doesn't overflow. Now the mine literally earns while the tab is closed, and the delta-time loop keeps earning while it's open.</p>
+        <div class="relative"><pre>const KEY = "idle_mine";
+
+function save(){
+  localStorage.setItem(KEY, JSON.stringify(
+    { ore, earnedThisRun, count, clickLevel, gems, ts: Date.now() }));
+}
+function load(){
+  const s = JSON.parse(localStorage.getItem(KEY) || "null");
+  if (!s){ freshRun(); gems = 0; return; }
+  ({ ore, earnedThisRun, count, clickLevel, gems } = s);
+  const away = Math.min((Date.now() - s.ts) / 1000, 8 * 3600); // cap 8h
+  const paid = perSec() * away;
+  ore += paid; earnedThisRun += paid;    // offline earnings
+}
+setInterval(save, 5000);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 44 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built a full idle / incremental clicker end to end with real economy math, not faked numbers: the entire game as a handful of variables; a <code>requestAnimationFrame</code> loop that pays <code>production × delta-seconds</code> every frame so income is frame-rate independent and earns while you sit idle; clicking as the bootstrap that mints your first ore; generators whose combined output is a simple <code>Σ rate × count</code>; the genre-defining <code>×1.15</code> geometric cost curve that keeps every purchase a decision; payback-time ROI (<code>cost ÷ extra-per-second</code>) as the tool for choosing what to buy; the compounding feedback loop where machines fund more machines; a prestige reset that trades your run for <code>√(earned ÷ 2,500)</code> permanent gems at +2% each; a K/M/B/T formatter applied only at draw time; and <code>localStorage</code> persistence that even pays out offline hours on load. Next: add per-generator upgrade tiers that double a type's output, a golden-ore random bonus click, achievements, or a soft-cap so the curve bends instead of exploding. <strong>👉 Tomorrow — Day 45: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== IDLE MINE ENGINE (vanilla) =====
+const GROWTH = 1.15;
+const GENS = [
+  { name:"Apprentice", icon:"⛏️", baseCost: 15,      rate: 0.1  },
+  { name:"Ore Cart",   icon:"🛒", baseCost: 110,     rate: 1    },
+  { name:"Power Drill",icon:"🔩", baseCost: 1200,    rate: 8    },
+  { name:"Excavator",  icon:"🚜", baseCost: 13000,   rate: 47   },
+  { name:"Mine Shaft", icon:"🕳️", baseCost: 140000,  rate: 260  },
+  { name:"Quarry",     icon:"⛰️", baseCost: 1600000, rate: 1400 },
+];
+const KEY = "gfz_idle_mine_day44";
+
+let ore, earnedThisRun, count, clickLevel, gems, revealed;
+
+function freshRun(){
+  ore = 0; earnedThisRun = 0;
+  count = GENS.map(() => 0);
+  clickLevel = 0;
+  revealed = GENS.map((_, i) => i === 0);
+}
+
+// ---- derived economy ----
+function prestigeMult(){ return 1 + gems * 0.02; }                 // +2% per gem
+function clickPower(){ return (1 + clickLevel) * prestigeMult(); } // base 1
+function genCost(i){ return GENS[i].baseCost * Math.pow(GROWTH, count[i]); }
+function clickUpCost(){ return 50 * Math.pow(8, clickLevel); }
+function perSec(){
+  let sum = 0;
+  for (let i = 0; i < GENS.length; i++) sum += GENS[i].rate * count[i];
+  return sum * prestigeMult();
+}
+function pendingGems(){ return Math.floor(Math.sqrt(earnedThisRun / 2500)); }
+
+// ---- actions ----
+function mine(){ const g = clickPower(); ore += g; earnedThisRun += g; }
+function buyGen(i){ const c = genCost(i); if (ore < c) return; ore -= c; count[i]++; }
+function buyClickUp(){ const c = clickUpCost(); if (ore < c) return; ore -= c; clickLevel++; }
+function prestige(){
+  const g = pendingGems();
+  if (g < 1) return;
+  gems += g;
+  freshRun();
+  save();
+  showIdle("💎 Prestiged! +" + g + " gems — your mine now produces ×" + prestigeMult().toFixed(2) + " forever.");
+}
+
+// ---- number formatting ----
+function fmt(n){
+  if (!isFinite(n)) return "∞";
+  if (n < 1000){
+    return (n < 100 && n % 1 !== 0) ? n.toFixed(1) : Math.floor(n).toString();
+  }
+  const u = ["K","M","B","T","Qa","Qi","Sx","Sp"];
+  let i = -1;
+  while (n >= 1000 && i < u.length - 1){ n /= 1000; i++; }
+  return n.toFixed(2) + u[i];
+}
+
+// ---- persistence + offline earnings ----
+function save(){
+  localStorage.setItem(KEY, JSON.stringify(
+    { ore, earnedThisRun, count, clickLevel, gems, ts: Date.now() }));
+}
+function load(){
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(KEY)); } catch(e){ s = null; }
+  if (!s || !Array.isArray(s.count)){ freshRun(); gems = 0; return; }
+  ore = s.ore || 0; earnedThisRun = s.earnedThisRun || 0;
+  count = s.count; clickLevel = s.clickLevel || 0; gems = s.gems || 0;
+  revealed = GENS.map((_, i) => i === 0 || count[i] > 0 || (count[i-1] || 0) > 0);
+  const away = Math.min((Date.now() - (s.ts || Date.now())) / 1000, 8 * 3600);
+  const paid = perSec() * away;
+  if (paid > 0){
+    ore += paid; earnedThisRun += paid;
+    showIdle("⏳ Welcome back — your mine dug " + fmt(paid) + " ore over " + Math.round(away) + "s away.");
+  }
+}
+function hardReset(){
+  localStorage.removeItem(KEY);
+  freshRun(); gems = 0;
+  showIdle("↺ Save wiped — fresh mine.");
+}
+
+// ---- the game loop: RAF + delta time ----
+let last = performance.now();
+function loop(now){
+  const dt = (now - last) / 1000;   // real seconds since last frame
+  last = now;
+  const gained = perSec() * dt;     // rate x time = ore earned
+  ore += gained; earnedThisRun += gained;
+  render();
+  requestAnimationFrame(loop);
+}
+
+// ---- render (view of the numbers) ----
+const $ = id => document.getElementById(id);
+let rows = [];
+function buildGenRows(){
+  const host = $("gens"); host.innerHTML = ""; rows = [];
+  GENS.forEach((g, i) => {
+    const el = document.createElement("button");
+    el.className = "gen-row w-full text-left bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-emerald-400";
+    el.innerHTML =
+      '<div class="text-2xl">' + g.icon + '</div>' +
+      '<div class="flex-1 min-w-0">' +
+        '<div class="font-bold text-slate-700 text-sm">' + g.name +
+          ' <span class="text-slate-400 font-normal">×<span class="cnt stat">0</span></span></div>' +
+        '<div class="text-xs text-slate-500">makes <span class="out stat">0</span>/s &nbsp;·&nbsp; each +' + fmt(g.rate) + '/s</div>' +
+      '</div>' +
+      '<div class="text-right"><div class="text-xs text-slate-400">cost</div>' +
+        '<div class="buy-btn font-bold text-emerald-600 text-sm">⛏️ <span class="cost stat">0</span></div></div>';
+    el.addEventListener("click", () => { buyGen(i); });
+    host.appendChild(el);
+    rows.push({ el, cnt: el.querySelector(".cnt"), out: el.querySelector(".out"), cost: el.querySelector(".cost") });
+  });
+}
+function render(){
+  $("ore").textContent     = fmt(ore);
+  $("persec").textContent  = fmt(perSec());
+  $("clickpow").textContent= fmt(clickPower());
+  $("gems").textContent    = gems;
+  $("mult").textContent    = "×" + prestigeMult().toFixed(2);
+  $("click-lvl").textContent = clickLevel;
+  $("click-cost").textContent = fmt(clickUpCost());
+  $("click-up").disabled = ore < clickUpCost();
+
+  const pg = pendingGems();
+  $("pending").textContent = pg;
+  $("prestige-btn").disabled = pg < 1;
+
+  for (let i = 0; i < GENS.length; i++){
+    if (!revealed[i] && (i === 0 || count[i-1] > 0 || ore >= GENS[i].baseCost * 0.3)) revealed[i] = true;
+    const r = rows[i], c = genCost(i), afford = ore >= c;
+    r.el.style.display = revealed[i] ? "" : "none";
+    r.cnt.textContent  = count[i];
+    r.out.textContent  = fmt(GENS[i].rate * count[i] * prestigeMult());
+    r.cost.textContent = fmt(c);
+    r.el.classList.toggle("afford", afford);
+    r.el.style.opacity = afford ? "1" : (count[i] === 0 ? ".6" : ".85");
+  }
+}
+
+// ---- UI juice ----
+let idleTimer = null;
+function showIdle(msg){
+  $("idle-msg").textContent = msg;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => { $("idle-msg").textContent = ""; }, 6000);
+}
+function floaty(){
+  const host = $("floaties");
+  const f = document.createElement("div");
+  f.className = "floaty"; f.textContent = "+" + fmt(clickPower());
+  f.style.left = (30 + Math.random() * 40) + "%";
+  f.style.top  = (30 + Math.random() * 20) + "%";
+  host.appendChild(f);
+  setTimeout(() => f.remove(), 900);
+}
+
+// ---- wiring ----
+$("mine-btn").addEventListener("click", () => {
+  mine(); floaty();
+  const b = $("mine-btn"); b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump");
+});
+$("click-up").addEventListener("click", buyClickUp);
+$("prestige-btn").addEventListener("click", () => {
+  if (pendingGems() >= 1 && confirm("Prestige now? This wipes your ore, generators and pick level, but you gain " + pendingGems() + " permanent gems (+" + (pendingGems()*2) + "% forever).")) prestige();
+});
+$("reset-btn").addEventListener("click", () => { if (confirm("Hard reset — wipe the entire save?")) hardReset(); });
+
+document.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return; // only on PLAY tab
+  if (e.code === "Space" || e.key === "Enter"){
+    e.preventDefault();
+    mine(); floaty();
+    const b = $("mine-btn"); b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump");
+  }
+});
+window.addEventListener("beforeunload", save);
+
+// ---- boot ----
+freshRun(); gems = 0;
+buildGenRows();
+load();
+render();
+requestAnimationFrame(loop);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The game is a handful of numbers", why:"There is no world, no physics and no sprites — an idle game is pure economy. The entire state is a few plain variables: how much ore you hold right now, how much you have earned this run (that value alone decides your prestige reward), how many of each generator you own, your click level, and your permanent prestige gems. Everything you see on screen is nothing but a formatted view of these numbers. Because the state is so small it serialises to a single localStorage string and restores in an instant. Master these variables and you understand the whole game.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the ENTIRE game state:<br><br>ore&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= 1.42K&nbsp;&nbsp;(what you hold now)<br>earned&nbsp;&nbsp;&nbsp;= 58.3K&nbsp;&nbsp;(this run -> gems)<br>count[]&nbsp;&nbsp;= [12, 4, 1, 0, 0, 0]<br>clickLevel = 3<br>gems&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= 7&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(permanent)<br><br>the screen is just fmt() of these</div>`, code:`const GENS = [
+  { name:"Apprentice", icon:"⛏️", baseCost: 15,      rate: 0.1  },
+  { name:"Ore Cart",   icon:"🛒", baseCost: 110,     rate: 1    },
+  { name:"Power Drill",icon:"🔩", baseCost: 1200,    rate: 8    },
+  { name:"Excavator",  icon:"🚜", baseCost: 13000,   rate: 47   },
+  { name:"Mine Shaft", icon:"🕳️", baseCost: 140000,  rate: 260  },
+  { name:"Quarry",     icon:"⛰️", baseCost: 1600000, rate: 1400 },
+];
+let ore, earnedThisRun, count, clickLevel, gems;
+
+function freshRun(){        // wiped on prestige, gems survive
+  ore = 0; earnedThisRun = 0;
+  count = GENS.map(() => 0);
+  clickLevel = 0;
+}` },
+
+ { title:"2. The tick loop earns over real time", why:"A clicker has to keep paying you even when you are not clicking, so the heart of the game is a loop driven by requestAnimationFrame. On every frame we measure dt — the real number of seconds that elapsed since the previous frame — and we add production times dt to your ore. Multiplying a per-second rate by elapsed seconds is exactly what makes income smooth and frame-rate independent: whether the browser runs at 60 or 30 frames per second, you earn the same amount per real second. That is the whole secret behind 'it earns while idle' — you are not clicking, but the clock keeps ticking and the loop keeps paying. The very same delta-time idea lets us grant offline earnings by treating the time you were away as one enormous dt.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every animation frame:<br><br>dt = (now - last) / 1000&nbsp;&nbsp;// e.g. 0.016s<br>ore += perSec() * dt<br><br>perSec 50/s, dt 0.016 -> +0.8 ore this frame<br>60 frames later -> +48 ore this second<br><br>same per REAL second at any FPS</div>`, code:`let last = performance.now();
+
+function loop(now){
+  const dt = (now - last) / 1000;   // real seconds elapsed
+  last = now;
+  const gained = perSec() * dt;     // rate x time = ore
+  ore           += gained;
+  earnedThisRun += gained;
+  render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);` },
+
+ { title:"3. Clicking mints the base resource", why:"The very first ore in any run comes from your own clicks. Each click adds clickPower ore, which starts at exactly 1 and grows as you buy pick upgrades. Clicking is the bootstrap of the whole economy: before you own a single generator, tapping the rock is your only source of income and the only way to scrape together enough ore to afford your first Apprentice miner. Later, when generators pour out thousands per second, a single click becomes a rounding error — but early on every tap genuinely matters. Notice the click is also multiplied by the prestige bonus, so even deep into the game it never becomes completely pointless.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click -> ore += clickPower()<br><br>clickLevel 0 -> +1 per tap<br>clickLevel 3 -> +4 per tap<br>with 7 gems (x1.14) -> +4.56 per tap<br><br>the ONLY income before generators exist</div>`, code:`function clickPower(){
+  return (1 + clickLevel) * prestigeMult();  // base 1, +1 per level
+}
+function mine(){
+  const g = clickPower();
+  ore += g; earnedThisRun += g;
+}` },
+
+ { title:"4. Generators auto-produce per second", why:"The moment you buy a generator it starts digging on its own, with no further input from you. The total production per second is simply the sum, over every generator type, of that type's rate multiplied by how many you own — an Apprentice adds 0.1 per second, a Cart adds 1, a Drill 8, and so on up the ladder. This single summed number is exactly what the tick loop multiplies by dt on every frame. The math is deliberately linear within a type: owning ten Carts is precisely ten times the output of one Cart, which keeps the model easy to reason about. All the excitement comes from stacking many different types together and from the prestige multiplier applied at the very end.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">perSec = SUM( rate x count ) x bonus<br><br>12 Apprentice x 0.1 =&nbsp;&nbsp;1.2<br>&nbsp;4 Cart&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; x 1&nbsp;&nbsp; =&nbsp;&nbsp;4.0<br>&nbsp;1 Drill&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;x 8&nbsp;&nbsp; =&nbsp;&nbsp;8.0<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ----<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 13.2 x1.14 = 15.05/s</div>`, code:`function perSec(){
+  let sum = 0;
+  for (let i = 0; i < GENS.length; i++)
+    sum += GENS[i].rate * count[i];   // rate x how many owned
+  return sum * prestigeMult();        // apply permanent bonus
+}` },
+
+ { title:"5. Exponential cost scaling (x1.15)", why:"If a generator cost the same amount forever, you would buy an infinite number of them the instant you could afford one, and the game would be over in seconds. The fix is the single golden rule of every idle game: each copy you buy costs fifteen percent more than the one before it, so the price of the n-th unit is baseCost times 1.15 to the power n. That 1.15 defines a geometric progression, and geometric growth snowballs far faster than the linear savings a generator provides — which is exactly what forces you to stop spamming the cheapest generator and start unlocking bigger, more efficient ones. Fifteen percent is the genre-standard sweet spot: steep enough that stacking one type hits a wall quickly, gentle enough that 'just one more' is always tempting.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">cost(n) = baseCost x 1.15^n<br><br>Apprentice, base 15:<br>1st  15.00<br>2nd  17.25<br>3rd  19.84<br>5th  26.23<br>10th 52.75<br>20th 213.4&nbsp;&nbsp;<- the wall climbs fast</div>`, code:`const GROWTH = 1.15;
+
+function genCost(i){
+  return GENS[i].baseCost * Math.pow(GROWTH, count[i]);
+}
+function buyGen(i){
+  const c = genCost(i);
+  if (ore < c) return;      // can't afford
+  ore -= c; count[i]++;      // next one costs 15% more
+}` },
+
+ { title:"6. ROI — is a purchase worth it?", why:"Once prices are climbing, the question 'what should I buy next?' turns into a genuine decision, and the tool that answers it is payback time. Divide a purchase's cost by the extra ore-per-second it grants and you get the number of seconds until it pays for itself. A Drill that costs 1,200 and adds 8 per second pays back in 150 seconds; if a cheaper generator pays back faster than that, you should buy the cheaper one first. Skilled idle players are, underneath it all, simply minimizing payback time on every single purchase. This is precisely the return-on-investment math that businesses use to weigh capital spending, quietly hiding inside a clicker game — a real economic idea you can feel through play.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">payback = cost / extra-per-second<br><br>Drill&nbsp;&nbsp;&nbsp;&nbsp; 1,200 / 8&nbsp;&nbsp; = 150s<br>Excavator 13,000 / 47&nbsp; = 277s<br><br>lower payback = better buy RIGHT NOW<br>(buy the Drill first)</div>`, code:`function paybackSeconds(i){
+  const extraPerSec = GENS[i].rate * prestigeMult();
+  return genCost(i) / extraPerSec;   // cost / income = break-even seconds
+}
+// compare the three-or-four you can afford,
+// buy the one with the SMALLEST payback` },
+
+ { title:"7. Compounding — machines buy machines", why:"The reason idle numbers eventually explode past anything intuitive is compounding. Ore produced by your generators buys yet more generators, which produce still more ore, which buys still more again — a feedback loop in which the growth rate itself grows over time. Unlike your click, whose value is fixed until you upgrade it, automated income feeds directly back into itself. Early in a run it crawls almost painfully; then it bends and curves sharply upward as each layer of generators funds the next, more expensive layer. Understanding that production is continuously reinvested rather than merely spent is understanding why the second half of every run feels dramatically faster than the first — it is exponential growth you are watching happen in real time.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">&nbsp;&nbsp;+-----------------------------+<br>&nbsp;&nbsp;v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|<br>ore --buy--> generators --make--> ore<br><br>each buy raises perSec,<br>so the NEXT buy comes sooner,<br>so perSec rises FASTER still -> curve</div>`, code:`// the loop that never stops paying:
+//
+//   ore  --buy-->  generators  --perSec()-->  more ore
+//    ^                                           |
+//    +-------------------------------------------+
+//
+// perSec() rises with every purchase, so the next
+// purchase arrives sooner -> growth accelerates.` },
+
+ { title:"8. Prestige — burn it down for a bonus", why:"Eventually the geometric cost curve outruns even your compounding income and progress slows to a crawl. Prestige is the escape valve built for exactly that moment: you reset the entire run — ore, every generator, and all your pick upgrades back to zero — in exchange for permanent gems. The number of gems you receive is a square root of what you earned this run, the floor of the square root of earned divided by twenty-five hundred, so gems arrive as big, satisfying, diminishing milestones rather than a steady trickle. Each gem then adds two percent to all of your future production, forever, across every run to come. You come back weaker on paper but carrying a multiplier that makes the next climb far faster than the last. Judging the right moment to prestige — when the gems you would gain meaningfully beat the ones you already hold — is the single deepest decision in the entire genre.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">gems = floor( sqrt( earnedThisRun / 2,500 ) )<br><br>earned&nbsp;&nbsp;&nbsp;&nbsp; 2,500 ->&nbsp;&nbsp;1 gem<br>earned&nbsp;&nbsp; 250,000 -> 10 gems<br>earned 1,000,000 -> 20 gems<br><br>bonus = 1 + gems x 0.02&nbsp;&nbsp;(permanent)<br>20 gems -> x1.40 to EVERYTHING, forever</div>`, code:`function pendingGems(){
+  return Math.floor(Math.sqrt(earnedThisRun / 2500));
+}
+function prestigeMult(){
+  return 1 + gems * 0.02;        // +2% per gem, permanent
+}
+function prestige(){
+  const g = pendingGems();
+  if (g < 1) return;             // need at least one gem
+  gems += g;                     // gems survive...
+  freshRun();                    // ...ore + generators reset
+}` },
+
+ { title:"9. Formatting huge numbers (K/M/B/T)", why:"Idle games race past a thousand, then a million, then a billion within minutes, and a raw string like 1400000000 is simply unreadable at a glance. So every number that reaches the screen first passes through a formatter that divides the value by a thousand over and over, counting how many times it does so, and attaches the matching suffix — K for thousand, M for million, B for billion, T for trillion and onward — printed with two decimals. Below a thousand we just show the raw value, keeping a decimal place early on so fractional click power like 4.6 is visible rather than rounded away. Crucially this is pure presentation: the formatter is applied only at the moment of drawing and never to the numbers stored in the game state, so full floating-point precision is always preserved underneath the pretty label.", concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">divide by 1000, count the suffix:<br><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;950&nbsp;&nbsp;&nbsp;->&nbsp;&nbsp;"950"<br>&nbsp;&nbsp;&nbsp;&nbsp; 1,400&nbsp;&nbsp;->&nbsp;&nbsp;"1.40K"<br>&nbsp;2,300,000&nbsp;&nbsp;->&nbsp;&nbsp;"2.30M"<br>1,400,000,000 ->&nbsp;&nbsp;"1.40B"<br><br>display only -> real value keeps full precision</div>`, code:`function fmt(n){
+  if (n < 1000){
+    return (n < 100 && n % 1 !== 0) ? n.toFixed(1)
+                                    : Math.floor(n).toString();
+  }
+  const u = ["K","M","B","T","Qa","Qi","Sx"];
+  let i = -1;
+  while (n >= 1000 && i < u.length - 1){ n /= 1000; i++; }
+  return n.toFixed(2) + u[i];      // 1400000000 -> "1.40B"
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3000); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
