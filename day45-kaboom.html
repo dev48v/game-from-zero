@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 45 — Kaboom! (Catch the Mad Bomber's Bombs)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+
+  #game {
+    display:block; width:100%; max-width:600px; aspect-ratio:600/640;
+    border-radius:18px; background:#020617; touch-action:none;
+    box-shadow:0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.10);
+    cursor:none;
+  }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+  .life-dot { display:inline-block; font-size:20px; line-height:1; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 45</div>
+      <h1 class="text-xl font-bold">💣 Kaboom! — A Mad Bomber Patrols the Top of the Sky Dropping Live Bombs, and You Slide a Stack of Three Buckets Left and Right to Catch Every One Before It Hits the Ground; Each Bomb Falls Under Real Gravity so It Accelerates as It Drops, a Rectangle-Overlap Test Decides Catch-or-Miss at the Bucket Rim, Clearing a Whole Wave Speeds the Bomber Up and Rains Bombs Faster for More Points per Catch, and Every Bomb You Miss Explodes, Clears the Screen and Costs You a Bucket — Lose All Three and It's Game Over — Arrow Keys or Mouse to Move, Pure Vanilla JavaScript on One Canvas, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">👁 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-3xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Catch what the Mad Bomber drops.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm">He races back and forth across the sky lobbing bombs; you steer a stack of buckets underneath. Every bomb falls under <strong>real gravity</strong> — it speeds up as it drops. Catch a whole wave and he flies faster and drops harder for bigger points. Miss one and it blows up, wipes the sky, and takes a bucket. Three buckets gone = game over.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-3 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">Score</div>
+          <div class="text-2xl font-black stat" id="hud-score">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">Wave</div>
+          <div class="text-2xl font-black stat" id="hud-wave">1</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">Buckets</div>
+          <div class="text-2xl font-black stat" id="hud-lives">🪣🪣🪣</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">Best</div>
+          <div class="text-2xl font-black stat" id="hud-hi">0</div>
+        </div>
+      </div>
+
+      <div class="flex justify-center">
+        <canvas id="game" width="600" height="640"></canvas>
+      </div>
+
+      <div class="flex items-center justify-center gap-3 mt-4 flex-wrap">
+        <button id="start-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm">▶ Start</button>
+        <div class="text-xs text-slate-500">
+          <span class="keycap">←</span> <span class="keycap">→</span> or <span class="keycap">A</span> <span class="keycap">D</span> or <strong>move the mouse</strong> to steer &nbsp;·&nbsp; <span class="keycap">Space</span> to start / restart
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-4 text-center max-w-2xl mx-auto">
+        No sprites, no engine — the whole game is a bomber object, an array of bombs, and one paddle, drawn on a single canvas by a <code>requestAnimationFrame</code> loop that advances everything by real elapsed seconds. Bombs integrate gravity (<code>v += g·dt</code>), catching is a rectangle-overlap test at the bucket rim, and each cleared wave just turns the difficulty knobs up. Your best score is saved to <code>localStorage</code>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How Kaboom works, step by step</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Kaboom is a canvas game with almost no moving parts: a bomber that patrols left-to-right, an array of bombs that fall under gravity, and one paddle you steer. A single <code>requestAnimationFrame</code> loop advances every object by real elapsed seconds, a rectangle-overlap test at the bucket rim decides catch-or-miss, and clearing a wave just nudges a few difficulty numbers. About 130 lines of vanilla JavaScript, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The whole game is three things on a canvas</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no world and no sprites — just a bomber (one point that slides across the top), an array of bombs (each a point with a downward velocity), and a paddle (the bucket stack you control). Everything on screen is redrawn from these plain variables every frame, plus a handful of counters for score, wave, and how many buckets you have left.</p>
+        <div class="relative"><pre>const cv  = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;      // 600 x 640
+
+const RIM_Y    = H - 120;   // top of the bucket stack = the catch line
+const GROUND_Y = H - 46;    // the floor a missed bomb explodes on
+
+let paddle, bomber, bombs, wave, buckets, score;
+
+function reset(){
+  paddle  = { x: W/2, hw: 52, target: W/2 };  // hw = half-width
+  bomber  = { x: W/2, y: 34, w: 40, vx: 150, dir: 1 };
+  bombs   = [];        // {x, y, vy, r}
+  wave    = 1;
+  buckets = 3;         // three buckets = three lives
+  score   = 0;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The game loop moves everything by real time</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A canvas game is a loop: on every animation frame we measure <code>dt</code> — the real seconds since the last frame — then update every object by that amount and redraw. Multiplying speeds by elapsed seconds makes the game run the same on a 60fps or a 144fps screen. We clamp <code>dt</code> so a hidden tab or a stutter can't teleport a bomb straight through the buckets.</p>
+        <div class="relative"><pre>let last = performance.now();
+
+function loop(now){
+  let dt = (now - last) / 1000;   // real seconds elapsed
+  last = now;
+  if (dt > 0.05) dt = 0.05;       // clamp big gaps (tab switch / lag)
+  update(dt);                     // advance bomber + bombs + paddle
+  draw();                         // repaint the whole canvas
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The bomber patrols and bounces off the walls</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The Mad Bomber is a single x-coordinate moving at <code>vx</code> in a direction (<code>+1</code> or <code>-1</code>). Each frame we add <code>vx · dir · dt</code>. When he reaches either edge we pin him to the wall and flip <code>dir</code>, so he ping-pongs across the top forever. Faster waves just raise <code>vx</code>.</p>
+        <div class="relative"><pre>function moveBomber(dt){
+  bomber.x += bomber.vx * bomber.dir * dt;
+  if (bomber.x < bomber.w/2){         // hit the left wall
+    bomber.x = bomber.w/2; bomber.dir = 1;
+  }
+  if (bomber.x > W - bomber.w/2){     // hit the right wall
+    bomber.x = W - bomber.w/2; bomber.dir = -1;
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Dropping bombs on a timer</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Bombs are spawned by a stopwatch, not by frames — a per-frame spawn would flood the screen at high frame rates. We accumulate <code>dt</code> into <code>dropTimer</code>; once it passes <code>dropInterval</code> we reset it and push a new bomb at the bomber's current position. Shrinking <code>dropInterval</code> in later waves makes the bombs rain faster.</p>
+        <div class="relative"><pre>let dropTimer = 0, dropInterval = 1.0;
+
+function maybeDrop(dt){
+  dropTimer += dt;
+  if (dropTimer >= dropInterval){
+    dropTimer = 0;
+    bombs.push({ x: bomber.x, y: bomber.y + 18,
+                 vy: initVy, r: 11 });   // spawn under the bomber
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Real physics — bombs fall under gravity</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A bomb does not drop at a constant speed; it <em>accelerates</em>, exactly like a real falling object. Each frame gravity adds to its downward velocity (<code>vy += g · dt</code>), then that velocity moves it down (<code>y += vy · dt</code>). This is Euler integration — the same two lines every physics engine uses. Because the bomb starts slow and speeds up, catching it late is far harder than catching it early, which is the whole tension of the game.</p>
+        <div class="relative"><pre>let gravity = 330;     // px per second, per second (acceleration)
+
+function fall(b, dt){
+  b.vy += gravity * dt;   // velocity gains speed each frame
+  b.y  += b.vy   * dt;    // position moves by the new velocity
+}
+// start slow (initVy small) -> ends fast. That is gravity.</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Steering the buckets — keyboard or mouse</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Two control schemes share one paddle. The keyboard moves it at a fixed speed while a key is held (<code>x ± speed · dt</code>). The mouse sets a <code>target</code> x and the paddle eases toward it each frame, so it feels smooth instead of teleporting. Either way we clamp <code>x</code> so the bucket stack can never leave the arena. The mouse target only wins when no arrow key is down.</p>
+        <div class="relative"><pre>function movePaddle(dt){
+  const SPEED = 460;
+  if (keys.left)  paddle.x -= SPEED * dt;
+  if (keys.right) paddle.x += SPEED * dt;
+  if (!keys.left && !keys.right)                 // else follow the mouse
+    paddle.x += (paddle.target - paddle.x) * Math.min(1, dt*18);
+
+  paddle.x = Math.max(paddle.hw,                 // clamp inside the walls
+             Math.min(W - paddle.hw, paddle.x));
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Catch detection — a rectangle-overlap test</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Collision here is simple because the buckets never move vertically. A bomb is <strong>caught</strong> the moment its centre drops past the bucket rim (<code>y ≥ RIM_Y</code>) while its x sits within the paddle's half-width. If it drops all the way to the floor (<code>y − r &gt; GROUND_Y</code>) without ever lining up, it's a <strong>miss</strong>. We walk the bomb array backwards so we can splice out caught/missed bombs safely mid-loop.</p>
+        <div class="relative"><pre>for (let i = bombs.length - 1; i >= 0; i--){
+  const b = bombs[i];
+  fall(b, dt);
+
+  if (b.y >= RIM_Y && Math.abs(b.x - paddle.x) <= paddle.hw + b.r){
+    bombs.splice(i, 1); onCatch();      // rim + x line up -> caught
+  } else if (b.y - b.r > GROUND_Y){
+    bombs.splice(i, 1); onMiss(); break; // reached the floor -> miss
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">A miss explodes and clears the sky</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One dropped bomb sets off every bomb on screen — the classic Kaboom blast — so a miss empties the whole array and costs you a bucket. A short negative timer gives you a beat to breathe before bombs resume. When the last bucket is gone the game ends and the best score is saved. This all-or-nothing punishment is why the game gets frantic.</p>
+        <div class="relative"><pre>function onMiss(){
+  buckets--;              // lose a bucket (a life)
+  bombs = [];             // the blast wipes the screen
+  dropTimer = -0.6;       // brief pause before bombs return
+  if (buckets <= 0){
+    state = "over";
+    if (score > hi){ hi = score; saveHi(); }
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Waves — the difficulty ramp</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Catch enough bombs and the wave clears: the bomber flies faster, gravity gets stronger, bombs drop more often, and each catch is worth more (up to 8 points). One function reads the wave number and sets all four knobs, so difficulty is data, not scattered <code>if</code>s. This is the arcade heartbeat — every clear makes the next one harder and more rewarding.</p>
+        <div class="relative"><pre>function applyWave(){
+  ppb          = Math.min(wave, 8);                  // points per catch
+  groupSize    = 8 + wave * 2;                       // catches to clear
+  bomber.vx    = 130 + wave * 22;                    // patrol speed
+  gravity      = 300 + wave * 60;                    // stronger pull
+  initVy       = 30  + wave * 10;                    // faster start
+  dropInterval = Math.max(0.34, 1.05 - wave * 0.07); // rain faster
+}
+function onCatch(){
+  score += ppb; caughtInGroup++;
+  if (caughtInGroup >= groupSize){ wave++; caughtInGroup = 0; applyWave(); }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Lives, bonus buckets, and drawing it all</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every 1,000 points earns a bucket back (capped at three), rewarding a long clean run. Drawing is just repainting: clear the canvas, fill the sky and ground, stamp the bomber and each bomb with an emoji via <code>fillText</code>, and draw one trapezoid per remaining bucket at the paddle's x. A <code>state</code> flag (<code>ready / playing / over</code>) decides whether to run physics or show an overlay.</p>
+        <div class="relative"><pre>function draw(){
+  ctx.clearRect(0,0,W,H);
+  paintSky(); paintGround();
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "30px serif"; ctx.fillText("😈", bomber.x, bomber.y);
+  ctx.font = "22px serif";
+  bombs.forEach(b => ctx.fillText("💣", b.x, b.y));
+  for (let i = 0; i < buckets; i++) drawBucket(paddle.x, i);  // one per life
+  if (state !== "playing") drawOverlay();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 45 of GameFromZero done.</h3><p class="text-sm text-emerald-700 mt-2">You built Kaboom end to end with real mechanics, not faked ones: the entire game as a bomber, a bomb array and one paddle on a single canvas; a <code>requestAnimationFrame</code> loop that advances everything by real delta-seconds so it runs the same at any frame rate; a bomber that patrols and bounces off the walls; a stopwatch that drops bombs on an interval instead of per-frame; genuine gravity where every bomb accelerates via <code>v += g·dt</code> then <code>y += v·dt</code>; dual keyboard-and-mouse steering with clamping; a rectangle-overlap catch test at the bucket rim and a floor test for the miss; the all-clearing explosion that costs a bucket; a data-driven wave ramp that turns four difficulty knobs at once; and lives, bonus buckets and <code>localStorage</code> high-scores. Next: add a two-tier bucket score bonus, chase the bomber's exact speed curve from the 1981 original, particle explosions, or a paddle that shrinks as you lose buckets. <strong>👉 Tomorrow — Day 46: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== KABOOM ENGINE (vanilla + canvas) =====
+const cv  = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;          // 600 x 640
+
+const RIM_Y     = H - 120;                  // top of bucket stack = catch line
+const GROUND_Y  = H - 46;                   // floor a missed bomb explodes on
+const BUCKET_H  = 15, BUCKET_GAP = 5;
+const HI_KEY    = "gfz_kaboom_day45_hi";
+
+// fixed starfield (computed once so it doesn't flicker)
+const STARS = Array.from({length: 60}, () => ({
+  x: Math.random() * W, y: Math.random() * (RIM_Y - 40),
+  r: Math.random() * 1.4 + 0.3, a: Math.random() * 0.5 + 0.25
+}));
+
+let paddle, bomber, bombs, wave, ppb, groupSize, caughtInGroup,
+    buckets, score, dropTimer, dropInterval, gravity, initVy,
+    state, flash, shake, nextBonus, popups;
+let hi = 0, keys = {};
+
+function loadHi(){ try { return parseInt(localStorage.getItem(HI_KEY)) || 0; } catch(e){ return 0; } }
+function saveHi(){ try { localStorage.setItem(HI_KEY, hi); } catch(e){} }
+
+function applyWave(){
+  ppb          = Math.min(wave, 8);                    // points per caught bomb
+  groupSize    = 8 + wave * 2;                          // catches to clear a wave
+  bomber.vx    = 130 + wave * 22;                       // patrol speed
+  gravity      = 300 + wave * 60;                       // px/s^2 (real accel)
+  initVy       = 30  + wave * 10;                       // initial drop speed
+  dropInterval = Math.max(0.34, 1.05 - wave * 0.07);    // seconds between drops
+}
+
+function reset(){
+  paddle  = { x: W/2, hw: 52, target: W/2 };
+  bomber  = { x: W/2, y: 34, w: 40, vx: 150, dir: 1 };
+  bombs   = [];
+  wave    = 1;
+  caughtInGroup = 0;
+  buckets = 3;
+  score   = 0;
+  dropTimer = 0;
+  state   = "ready";        // ready | playing | over
+  flash = 0; shake = 0;
+  nextBonus = 1000;
+  popups = [];              // little "+N" score pops
+  applyWave();
+}
+
+function start(){
+  if (state === "playing") return;
+  reset();
+  state = "playing";
+}
+
+// ---- events on catch / miss ----
+function onCatch(b){
+  score += ppb;
+  caughtInGroup++;
+  popups.push({ x: b.x, y: RIM_Y, t: 0.7, val: ppb });
+  if (score >= nextBonus){                 // bonus bucket every 1000 pts
+    nextBonus += 1000;
+    if (buckets < 3) buckets++;
+  }
+  if (caughtInGroup >= groupSize){         // wave cleared
+    wave++;
+    caughtInGroup = 0;
+    applyWave();
+    flash = 0.28;                          // green level-up flash
+  }
+}
+function onMiss(){
+  buckets--;
+  bombs = [];              // the blast clears the whole screen
+  dropTimer = -0.6;        // brief pause before bombs resume
+  shake = 0.4;
+  if (buckets <= 0){
+    state = "over";
+    if (score > hi){ hi = score; saveHi(); }
+  }
+}
+
+// ---- update ----
+let last = performance.now();
+function loop(now){
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.05) dt = 0.05;                // clamp big frame gaps
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function update(dt){
+  if (flash > 0) flash = Math.max(0, flash - dt);
+  if (shake > 0) shake = Math.max(0, shake - dt);
+  for (let i = popups.length - 1; i >= 0; i--){
+    popups[i].t -= dt; popups[i].y -= 26 * dt;
+    if (popups[i].t <= 0) popups.splice(i, 1);
+  }
+  if (state !== "playing") return;
+
+  // bomber patrol + wall bounce
+  bomber.x += bomber.vx * bomber.dir * dt;
+  if (bomber.x < bomber.w/2){ bomber.x = bomber.w/2; bomber.dir = 1; }
+  if (bomber.x > W - bomber.w/2){ bomber.x = W - bomber.w/2; bomber.dir = -1; }
+
+  // drop bombs on a timer (not per-frame)
+  dropTimer += dt;
+  if (dropTimer >= dropInterval){
+    dropTimer = 0;
+    bombs.push({ x: bomber.x, y: bomber.y + 18, vy: initVy, r: 11 });
+  }
+
+  // paddle: keyboard velocity OR ease toward mouse target
+  const SPEED = 460;
+  if (keys.left)  paddle.x -= SPEED * dt;
+  if (keys.right) paddle.x += SPEED * dt;
+  if (!keys.left && !keys.right)
+    paddle.x += (paddle.target - paddle.x) * Math.min(1, dt * 18);
+  paddle.x = Math.max(paddle.hw, Math.min(W - paddle.hw, paddle.x));
+
+  // bombs: gravity integration + collision (walk backwards to splice safely)
+  for (let i = bombs.length - 1; i >= 0; i--){
+    const b = bombs[i];
+    b.vy += gravity * dt;      // gravity accelerates the fall
+    b.y  += b.vy * dt;
+
+    if (b.y >= RIM_Y && Math.abs(b.x - paddle.x) <= paddle.hw + b.r){
+      bombs.splice(i, 1); onCatch(b); continue;          // caught at the rim
+    }
+    if (b.y - b.r > GROUND_Y){
+      bombs.splice(i, 1); onMiss(); break;               // hit the floor
+    }
+  }
+  syncHud();
+}
+
+// ---- draw ----
+function paintSky(){
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#020617"); g.addColorStop(1, "#0f172a");
+  ctx.fillStyle = g; ctx.fillRect(-30, -30, W + 60, H + 60);
+  STARS.forEach(s => { ctx.globalAlpha = s.a; ctx.fillStyle = "#e2e8f0";
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill(); });
+  ctx.globalAlpha = 1;
+}
+function paintGround(){
+  ctx.fillStyle = "#064e3b"; ctx.fillRect(-30, GROUND_Y, W + 60, H - GROUND_Y + 30);
+  ctx.fillStyle = "#065f46"; ctx.fillRect(-30, GROUND_Y, W + 60, 4);
+}
+function drawBucket(cx, i){
+  const y = RIM_Y + i * (BUCKET_H + BUCKET_GAP);
+  const topW = paddle.hw * 2 * (1 - i * 0.05);
+  const botW = topW * 0.78;
+  ctx.fillStyle = i === 0 ? "#10b981" : "#059669";
+  ctx.beginPath();
+  ctx.moveTo(cx - topW/2, y);
+  ctx.lineTo(cx + topW/2, y);
+  ctx.lineTo(cx + botW/2, y + BUCKET_H);
+  ctx.lineTo(cx - botW/2, y + BUCKET_H);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#34d399";                   // bright rim
+  ctx.fillRect(cx - topW/2, y - 3, topW, 3);
+}
+function drawOverlay(){
+  ctx.fillStyle = "rgba(2,6,23,.72)";
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center"; ctx.fillStyle = "#fff";
+  if (state === "ready"){
+    ctx.font = "800 40px -apple-system,sans-serif";
+    ctx.fillText("💣 Kaboom!", W/2, H/2 - 40);
+    ctx.font = "18px -apple-system,sans-serif"; ctx.fillStyle = "#a7f3d0";
+    ctx.fillText("Catch the Mad Bomber's bombs.", W/2, H/2 + 4);
+    ctx.fillStyle = "#e2e8f0"; ctx.font = "15px -apple-system,sans-serif";
+    ctx.fillText("← →  /  A D  /  mouse to move", W/2, H/2 + 34);
+    ctx.fillText("Press Space or click to start", W/2, H/2 + 58);
+  } else {
+    ctx.font = "800 44px -apple-system,sans-serif";
+    ctx.fillText("Game Over", W/2, H/2 - 34);
+    ctx.font = "20px -apple-system,sans-serif"; ctx.fillStyle = "#a7f3d0";
+    ctx.fillText("Score " + score + "  ·  Wave " + wave, W/2, H/2 + 4);
+    ctx.fillStyle = "#e2e8f0"; ctx.font = "15px -apple-system,sans-serif";
+    ctx.fillText("Best " + Math.max(hi, score), W/2, H/2 + 34);
+    ctx.fillText("Press Space or click to play again", W/2, H/2 + 62);
+  }
+}
+function draw(){
+  ctx.save();
+  if (shake > 0){ const s = shake * 16;
+    ctx.translate((Math.random()-.5)*s, (Math.random()-.5)*s); }
+  paintSky(); paintGround();
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "30px serif"; ctx.fillText("😈", bomber.x, bomber.y);
+  ctx.font = "22px serif";
+  bombs.forEach(b => ctx.fillText("💣", b.x, b.y));
+  for (let i = 0; i < buckets; i++) drawBucket(paddle.x, i);
+  // score pops
+  ctx.font = "700 16px -apple-system,sans-serif";
+  popups.forEach(p => { ctx.globalAlpha = Math.max(0, p.t / 0.7);
+    ctx.fillStyle = "#6ee7b7"; ctx.fillText("+" + p.val, p.x, p.y); });
+  ctx.globalAlpha = 1;
+  if (flash > 0){ ctx.fillStyle = "rgba(16,185,129," + flash + ")"; ctx.fillRect(0,0,W,H); }
+  ctx.restore();
+  if (state !== "playing") drawOverlay();
+}
+
+// ---- HUD (DOM) ----
+const hud = {
+  score: document.getElementById("hud-score"),
+  wave:  document.getElementById("hud-wave"),
+  lives: document.getElementById("hud-lives"),
+  hi:    document.getElementById("hud-hi"),
+};
+function syncHud(){
+  hud.score.textContent = score;
+  hud.wave.textContent  = wave;
+  hud.lives.textContent = buckets > 0 ? "🪣".repeat(buckets) : "—";
+  hud.hi.textContent    = Math.max(hi, score);
+}
+
+// ---- input ----
+function onPlayTab(){ return !document.getElementById("look").classList.contains("hidden"); }
+
+document.addEventListener("keydown", e => {
+  if (!onPlayTab()) return;
+  if (e.key === "ArrowLeft"  || e.key === "a" || e.key === "A"){ keys.left = true;  e.preventDefault(); }
+  if (e.key === "ArrowRight" || e.key === "d" || e.key === "D"){ keys.right = true; e.preventDefault(); }
+  if (e.code === "Space"){ e.preventDefault(); if (state !== "playing") start(); }
+});
+document.addEventListener("keyup", e => {
+  if (e.key === "ArrowLeft"  || e.key === "a" || e.key === "A") keys.left = false;
+  if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = false;
+});
+
+function pointerX(e){
+  const r = cv.getBoundingClientRect();
+  const cx = (e.touches ? e.touches[0].clientX : e.clientX);
+  return (cx - r.left) * (W / r.width);
+}
+cv.addEventListener("pointermove", e => { paddle.target = pointerX(e); });
+cv.addEventListener("pointerdown", e => { paddle.target = pointerX(e); if (state !== "playing") start(); });
+document.getElementById("start-btn").addEventListener("click", () => { if (state !== "playing") start(); });
+
+// ---- boot ----
+hi = loadHi();
+reset();
+syncHud();
+requestAnimationFrame(loop);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The whole game is three things on a canvas",
+   why:"Kaboom has no tile map, no sprites and no world — it is three plain things drawn on a single canvas. The bomber is one x-coordinate that slides across the top. The bombs are an array, each entry just a position and a downward velocity. The paddle is the bucket stack you steer, stored as an x and a half-width. Everything you see is redrawn from these variables plus a few counters — score, wave, and how many buckets remain. Because the state is this small, the game is easy to reason about and every rule below touches only a handful of numbers.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">the ENTIRE game state:<br><br>bomber&nbsp;&nbsp;= { x, vx, dir }&nbsp;&nbsp;(patrols the top)<br>bombs[]&nbsp;= [ {x,y,vy,r}, ... ]&nbsp;(falling)<br>paddle&nbsp;&nbsp;= { x, hw }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(the buckets)<br>wave&nbsp;&nbsp;&nbsp;&nbsp;= 1&nbsp;&nbsp;buckets = 3<br>score&nbsp;&nbsp;&nbsp;= 0<br><br>draw() is just fillText + trapezoids of these</div>`,
+   code:`const cv  = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;      // 600 x 640
+
+const RIM_Y    = H - 120;   // top of the bucket stack = catch line
+const GROUND_Y = H - 46;    // floor a missed bomb explodes on
+
+function reset(){
+  paddle  = { x: W/2, hw: 52, target: W/2 };
+  bomber  = { x: W/2, y: 34, w: 40, vx: 150, dir: 1 };
+  bombs   = [];        // {x, y, vy, r}
+  wave = 1; buckets = 3; score = 0;
+}` },
+
+ { title:"2. The game loop moves everything by real time",
+   why:"A canvas game is nothing but a loop that repaints fast enough to look like motion. On every animation frame we ask for the current timestamp, subtract the previous one, and get dt — the real number of seconds that passed. We then advance every object by dt and redraw. Multiplying each speed by elapsed seconds is what makes the game frame-rate independent: a 60fps laptop and a 144fps monitor see the bomb fall at the same real speed. We clamp dt to a maximum so that a background tab or a long stutter can't hand us a huge value that teleports a bomb straight through the buckets in a single frame.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every animation frame:<br><br>dt = (now - last) / 1000&nbsp;&nbsp;// e.g. 0.016s<br>if (dt > 0.05) dt = 0.05&nbsp;&nbsp;// clamp lag<br><br>update(dt)&nbsp;&nbsp;->&nbsp;move bomber, bombs, paddle<br>draw()&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;->&nbsp;repaint the canvas<br><br>same real speed at 60 or 144 fps</div>`,
+   code:`let last = performance.now();
+
+function loop(now){
+  let dt = (now - last) / 1000;   // real seconds elapsed
+  last = now;
+  if (dt > 0.05) dt = 0.05;       // clamp big gaps (tab switch / lag)
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);` },
+
+ { title:"3. The bomber patrols and bounces off the walls",
+   why:"The Mad Bomber's movement is the simplest thing in the game: a single x-coordinate travelling at speed vx in a direction that is either +1 (right) or -1 (left). Each frame we add vx times dir times dt to his x. The only rule is the wall bounce — when he reaches the left or right edge we pin him exactly to the wall so he can't drift off-screen, then flip his direction so he heads back the other way. The result is an endless ping-pong across the top of the sky. Later waves make him more dangerous simply by raising vx, so he covers the arena faster and his bombs land in a wider spread.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">&nbsp;<-  😈  ->&nbsp;&nbsp;patrols left/right<br><br>x += vx * dir * dt<br><br>hits left wall&nbsp;&nbsp;-> dir = +1<br>hits right wall -> dir = -1<br><br>wave 1 vx=152&nbsp;&nbsp;wave 5 vx=240&nbsp;&nbsp;(faster)</div>`,
+   code:`function moveBomber(dt){
+  bomber.x += bomber.vx * bomber.dir * dt;
+  if (bomber.x < bomber.w/2){          // hit the left wall
+    bomber.x = bomber.w/2; bomber.dir = 1;
+  }
+  if (bomber.x > W - bomber.w/2){      // hit the right wall
+    bomber.x = W - bomber.w/2; bomber.dir = -1;
+  }
+}` },
+
+ { title:"4. Dropping bombs on a timer",
+   why:"Bombs must appear at a steady real-world pace, so they are spawned by a stopwatch rather than once per frame — a per-frame spawn would dump sixty bombs a second on a fast screen and none on a slow one. We keep a dropTimer that accumulates dt every frame; the instant it crosses dropInterval we reset it to zero and push a fresh bomb into the array at the bomber's current position, just below him. Because the interval is a real number of seconds, the drop rate is identical on every device. Making dropInterval smaller in later waves is all it takes to turn a gentle drizzle of bombs into a downpour.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">dropTimer += dt&nbsp;&nbsp;every frame<br><br>when dropTimer >= dropInterval:<br>&nbsp;&nbsp;reset to 0<br>&nbsp;&nbsp;bombs.push({ x: bomber.x, y, vy, r })<br><br>wave 1 interval 0.98s&nbsp;&nbsp;->&nbsp;wave 8 interval 0.49s<br>(bombs rain twice as fast)</div>`,
+   code:`let dropTimer = 0, dropInterval = 1.0;
+
+function maybeDrop(dt){
+  dropTimer += dt;
+  if (dropTimer >= dropInterval){
+    dropTimer = 0;
+    bombs.push({ x: bomber.x, y: bomber.y + 18,
+                 vy: initVy, r: 11 });   // spawn under the bomber
+  }
+}` },
+
+ { title:"5. Real physics — bombs fall under gravity",
+   why:"This is the heart of the game and the reason it says real physics, not faked numbers. A bomb does not drop at a constant speed; it accelerates exactly like a real falling object. Every frame, gravity adds a little to the bomb's downward velocity — vy += gravity times dt — and then that velocity moves the bomb down — y += vy times dt. Those two lines are Euler integration, the same method a full physics engine uses. Because the bomb starts almost still and speeds up as it falls, a bomb you leave until the last second is dramatically harder to catch than one you meet early. Stronger gravity in later waves means the bombs reach terrifying speeds by the time they arrive.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">gravity ACCELERATES the fall:<br><br>vy += gravity * dt&nbsp;&nbsp;// velocity grows<br>y&nbsp;&nbsp;+= vy&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;* dt&nbsp;&nbsp;// then position moves<br><br>frame 1:&nbsp;&nbsp;slow&nbsp;&nbsp;&nbsp;.<br>frame N:&nbsp;&nbsp;fast&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;💣  <- accelerating</div>`,
+   code:`let gravity = 330;     // px per second, per second (acceleration)
+
+function fall(b, dt){
+  b.vy += gravity * dt;   // velocity gains speed each frame
+  b.y  += b.vy   * dt;    // position moves by the NEW velocity
+}
+// starts slow (initVy small) -> ends fast. That is gravity.` },
+
+ { title:"6. Steering the buckets — keyboard or mouse",
+   why:"One paddle answers to two control schemes at once. When you hold an arrow key (or A / D) the bucket stack moves at a fixed speed, adding speed times dt to its x while the key is down — crisp and predictable. When you use the mouse instead, a pointer handler stores a target x, and each frame the paddle eases a fraction of the way toward that target, so it glides smoothly rather than snapping. The mouse only takes over when no arrow key is held, so the two never fight. Finally we clamp the paddle's x between its half-width and the arena width minus its half-width, guaranteeing the buckets can never slide off either edge no matter how hard you push.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">keyboard (held):&nbsp;&nbsp;x += SPEED * dt<br>mouse (target):&nbsp;&nbsp;x += (target - x) * k&nbsp;&nbsp;(ease)<br><br>then CLAMP:<br>x = max(hw, min(W - hw, x))<br><br>buckets can never leave the walls</div>`,
+   code:`function movePaddle(dt){
+  const SPEED = 460;
+  if (keys.left)  paddle.x -= SPEED * dt;
+  if (keys.right) paddle.x += SPEED * dt;
+  if (!keys.left && !keys.right)                 // else follow the mouse
+    paddle.x += (paddle.target - paddle.x) * Math.min(1, dt*18);
+
+  paddle.x = Math.max(paddle.hw,                 // clamp inside the walls
+             Math.min(W - paddle.hw, paddle.x));
+}` },
+
+ { title:"7. Catch detection — a rectangle-overlap test",
+   why:"Collision is easy here because the buckets never move up or down — the catch line is a fixed height, RIM_Y. A bomb is caught the moment its centre falls to or below that line while its x is inside the paddle's half-width (we add the bomb's radius for a touch of forgiveness). If the bomb instead falls all the way to the floor — its top edge passing GROUND_Y — without ever lining up with the buckets, it is a miss. We test caught before missed each frame, and we walk the bomb array backwards so that splicing a caught or missed bomb out of the array mid-loop never disturbs the indices of the bombs we have not checked yet.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">is the bomb over the buckets at the rim?<br><br>CAUGHT if&nbsp;&nbsp;y >= RIM_Y<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AND |bomb.x - paddle.x| <= hw + r<br><br>MISS&nbsp;&nbsp;if&nbsp;&nbsp;y - r > GROUND_Y&nbsp;&nbsp;(hit the floor)<br><br>loop backwards so splice() is safe</div>`,
+   code:`for (let i = bombs.length - 1; i >= 0; i--){
+  const b = bombs[i];
+  fall(b, dt);
+
+  if (b.y >= RIM_Y && Math.abs(b.x - paddle.x) <= paddle.hw + b.r){
+    bombs.splice(i, 1); onCatch();       // rim + x line up -> caught
+  } else if (b.y - b.r > GROUND_Y){
+    bombs.splice(i, 1); onMiss(); break;  // reached the floor -> miss
+  }
+}` },
+
+ { title:"8. A miss explodes and clears the sky",
+   why:"In Kaboom a single dropped bomb detonates every other bomb on screen — the signature chain explosion — so a miss does more than cost points: it empties the entire bombs array at once. It also costs you one of your three buckets. We set a short negative dropTimer so there is a beat of calm before bombs start falling again, giving you a moment to recover instead of being buried instantly. A quick screen shake sells the blast. When the miss takes your last bucket the state flips to over and the run's score is compared against, and possibly written into, the saved high score. This all-or-nothing punishment is exactly why the late waves feel so tense.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">one bomb hits the ground:<br><br>💥 -> buckets--&nbsp;&nbsp;(lose a life)<br>💥 -> bombs = []&nbsp;&nbsp;(clear the whole screen)<br>💥 -> short pause, then bombs resume<br><br>buckets == 0&nbsp;&nbsp;->&nbsp;GAME OVER + save best</div>`,
+   code:`function onMiss(){
+  buckets--;              // lose a bucket (a life)
+  bombs = [];             // the blast wipes the screen
+  dropTimer = -0.6;       // brief pause before bombs return
+  if (buckets <= 0){
+    state = "over";
+    if (score > hi){ hi = score; saveHi(); }
+  }
+}` },
+
+ { title:"9. Waves — the difficulty ramp",
+   why:"The arcade heartbeat is escalation. You clear a wave by catching a set number of bombs; the moment you do, the wave number ticks up and one function re-reads it to reset every difficulty knob at once — the bomber flies faster, gravity pulls harder, the drop interval shrinks so bombs fall more often, and the points awarded per catch rise, capped at eight. Keeping all of this in a single applyWave function means difficulty is data driven by the wave number, not a tangle of scattered conditionals, so it is trivial to tune. Every clear therefore makes the next stretch both harder and more rewarding, which is the loop that keeps you reaching for one more wave.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">catch groupSize bombs -> wave++<br><br>applyWave() turns FOUR knobs at once:<br>&nbsp;&nbsp;bomber.vx&nbsp;&nbsp;&nbsp;faster<br>&nbsp;&nbsp;gravity&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;stronger<br>&nbsp;&nbsp;dropInterval smaller (more bombs)<br>&nbsp;&nbsp;points/bomb up to 8<br><br>difficulty = data, not scattered ifs</div>`,
+   code:`function applyWave(){
+  ppb          = Math.min(wave, 8);                  // points per catch
+  groupSize    = 8 + wave * 2;                        // catches to clear
+  bomber.vx    = 130 + wave * 22;                     // patrol speed
+  gravity      = 300 + wave * 60;                     // stronger pull
+  initVy       = 30  + wave * 10;                     // faster start
+  dropInterval = Math.max(0.34, 1.05 - wave * 0.07);  // rain faster
+}
+function onCatch(){
+  score += ppb; caughtInGroup++;
+  if (caughtInGroup >= groupSize){ wave++; caughtInGroup = 0; applyWave(); }
+}` },
+
+ { title:"10. Lives, bonus buckets, and drawing it all",
+   why:"Two final systems close the loop. Lives are the three buckets; every 1,000 points earns one back, capped at three, so a long clean streak is rewarded with breathing room — a small comeback mechanic that keeps a good run alive. Drawing is pure repainting: clear the canvas, fill the night sky and the ground strip, stamp the bomber and every bomb with an emoji through fillText, and draw one emerald trapezoid per surviving bucket at the paddle's x. A single state flag — ready, playing, or over — decides whether the frame runs physics or simply dims the screen and shows an overlay. That flag is the whole state machine that ties the start screen, the play, and the game-over card together.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">LIVES: every 1000 pts -> +1 bucket (max 3)<br><br>DRAW each frame:<br>&nbsp;&nbsp;clear -> sky -> ground<br>&nbsp;&nbsp;fillText 😈 (bomber) + 💣 (each bomb)<br>&nbsp;&nbsp;one trapezoid per remaining bucket<br><br>state = ready | playing | over<br>&nbsp;&nbsp;-> run physics, or show an overlay</div>`,
+   code:`function draw(){
+  ctx.clearRect(0,0,W,H);
+  paintSky(); paintGround();
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "30px serif"; ctx.fillText("😈", bomber.x, bomber.y);
+  ctx.font = "22px serif";
+  bombs.forEach(b => ctx.fillText("💣", b.x, b.y));
+  for (let i = 0; i < buckets; i++) drawBucket(paddle.x, i); // one per life
+  if (state !== "playing") drawOverlay();
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-btn"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3500); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
