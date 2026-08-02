@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 51 — Tower Defense</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:800; }
+  #td-canvas {
+    display:block; margin:0 auto; width:100%; max-width:860px; height:auto; border-radius:12px;
+    background:#020617; touch-action:none; cursor:pointer; box-shadow: inset 0 0 40px rgba(0,0,0,.6);
+  }
+  .pb-wrap { position:relative; display:flex; justify-content:center; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* shop cards */
+  .shop {
+    background:#0b1220; border:2px solid #1e293b; border-radius:14px; padding:9px 11px; cursor:pointer;
+    transition:border-color .12s, transform .08s, box-shadow .12s; user-select:none; text-align:left; min-width:132px;
+  }
+  .shop:hover { border-color:#334155; }
+  .shop.sel { border-color:#34d399; box-shadow:0 0 0 3px rgba(52,211,153,.22); }
+  .shop.poor { opacity:.5; }
+  .shop .nm { color:#e2e8f0; font-weight:800; font-size:13px; }
+  .shop .ic { font-size:18px; }
+  .shop .ds { color:#94a3b8; font-size:10.5px; margin-top:2px; }
+  .shop .ct { color:#fde68a; font-weight:800; font-size:12px; font-variant-numeric:tabular-nums; }
+
+  .panel { background:#0b1220; border:1px solid #1e293b; border-radius:14px; }
+  .panel .k { color:#94a3b8; font-size:10px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; }
+  .panel .v { color:#fde68a; font-weight:800; font-variant-numeric:tabular-nums; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 51</div>
+      <h1 class="text-xl font-bold">🏰 Tower Defense — A Steady River of Creeps Snakes Down a Fixed Waypoint Path Toward Your Base While You Spend the Money Their Deaths Drop to Stud the Buildable Grass With Auto-Targeting Turrets: Every Frame Each Enemy Lerps a Little Farther Along the Path and Banks the Corners, Every Tower Scans the Swarm for the One Foe Inside Its Range That Has Travelled Furthest (the Classic "First" Target), Swivels Its Barrel and Fires a Homing Projectile That Chases the Creep and On Impact Deals Damage — Splash for the Cannon, a Chilling Slow for the Frost Tower — a Kill Pays Out Gold You Reinvest to Place More Turrets or Upgrade the Ones You Have, Each Wave Spawns More Enemies With More Hit-Points and More Speed Than the Last, Any Creep That Reaches the End Costs You a Life, and Zero Lives Ends the Run — Place, Upgrade, Sell, Send the Next Wave, Survive Twenty — All in Pure Vanilla JavaScript on One Canvas, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Stud the grass with turrets — stop the creeps before they reach your base.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm">Enemies follow the <strong>path</strong> toward the castle on the right. Pick a tower below, then click a <strong>green tile</strong> to build it — it auto-targets and fires on its own. Kills drop <strong>gold</strong>; spend it on more towers or <strong>upgrade</strong> the ones you have (click a tower). Each wave is bigger, tougher and faster; every creep that leaks costs a <strong>life</strong>. Hit <strong>Send Wave</strong> when you're ready and survive all twenty.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">💰 Gold</div>
+          <div class="text-2xl font-black stat" id="td-gold">120</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">❤️ Lives</div>
+          <div class="text-2xl font-black stat" id="td-lives">20</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🌊 Wave</div>
+          <div class="text-2xl font-black stat" id="td-wave">0/20</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">⭐ Score</div>
+          <div class="text-2xl font-black stat" id="td-score">0</div>
+        </div>
+      </div>
+
+      <!-- game console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-2 console-label" id="td-status">Choose a tower · click a green tile to build · then Send Wave</div>
+        <div class="pb-wrap">
+          <canvas id="td-canvas" width="800" height="520"></canvas>
+        </div>
+
+        <!-- shop + selected panel -->
+        <div class="grid md:grid-cols-3 gap-3 mt-4">
+          <div class="md:col-span-2 flex flex-wrap gap-3" id="td-shop"></div>
+          <div class="panel p-3" id="td-inspect">
+            <div class="k mb-1">Selected tower</div>
+            <div class="text-slate-500 text-xs" id="td-inspect-empty">Click a placed tower to upgrade or sell it.</div>
+            <div id="td-inspect-body" class="hidden">
+              <div class="flex items-center gap-2 mb-2">
+                <span id="ti-ic" class="text-2xl"></span>
+                <div><div id="ti-nm" class="text-slate-100 font-bold text-sm"></div><div id="ti-lv" class="k"></div></div>
+              </div>
+              <div class="grid grid-cols-3 gap-2 mb-2 text-center">
+                <div><div class="k">DMG</div><div class="v" id="ti-dmg">0</div></div>
+                <div><div class="k">RANGE</div><div class="v" id="ti-rng">0</div></div>
+                <div><div class="k">RATE</div><div class="v" id="ti-rate">0</div></div>
+              </div>
+              <div class="flex gap-2">
+                <button id="ti-up"   class="btn flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-2 rounded-lg font-bold text-xs">⬆ Upgrade</button>
+                <button id="ti-sell" class="btn flex-1 bg-slate-700 hover:bg-slate-600 text-white px-2 py-2 rounded-lg font-bold text-xs">💲 Sell</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <button id="td-send"    class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold">🌊 Send Wave</button>
+        <button id="td-auto"    class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2.5 rounded-lg font-bold">▶ Auto-waves</button>
+        <button id="td-pause"   class="btn bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold">⏸ Pause</button>
+        <button id="td-speed"   class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2.5 rounded-lg font-bold">⏩ Speed ×1</button>
+        <button id="td-restart" class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2.5 rounded-lg font-bold">↻ Restart</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        There is no "level" in the code — only a list of <em>waypoints</em>, an array of <em>enemies</em> each remembering how far it has crawled, an array of <em>towers</em> each with a range and a cooldown, and an array of <em>projectiles</em>. Every frame the enemies step along the path, each tower picks the foe furthest along inside its circle and, if its cooldown has elapsed, launches a homing shot; the shot chases its target and on contact subtracts hit-points, kills pay gold, gold builds more towers, and the whole tug-of-war — economy against escalation — runs inside one <code>requestAnimationFrame</code> loop. Lose all your lives and it stops.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How a tower-defense round is just five arrays talking</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A tower-defense game looks like it needs a whole engine — pathfinding, AI, an entity system. It needs none of that. The path is a hand-written list of waypoints. An enemy is a point that remembers which segment it's on and how far it has travelled. A tower is a point with a range and a cooldown. A projectile is a point with a target. Five plain arrays — waypoints, enemies, towers, projectiles, effects — nudged once a frame inside one <code>requestAnimationFrame</code> loop. About 200 lines of vanilla JavaScript on one canvas, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The grid, the path & which tiles you may build on</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The world is a grid of cells. The path is nothing but a list of grid corners — <em>waypoints</em> — that the road turns at. Walk from each waypoint to the next, one cell at a time, and mark those cells as "road" in a set. A tower may be placed on any cell that is on the board, is <em>not</em> road, and is not already occupied. That single set is the entire map.</p>
+        <div class="relative"><pre>const COLS = 20, ROWS = 13, CELL = 40;           // 800 x 520 board
+const WPC = [[0,2],[4,2],[4,10],[9,10],[9,4],    // path corners (col,row)
+             [14,4],[14,10],[17,10],[17,2],[19,2]];
+const center = (c,r) =&gt; ({ x:c*CELL+CELL/2, y:r*CELL+CELL/2 });
+const WP = WPC.map(([c,r]) =&gt; center(c,r));       // waypoints in pixels
+
+const road = new Set();                          // which cells are path
+for (let i = 0; i &lt; WPC.length-1; i++){
+  let [c,r] = WPC[i]; const [tc,tr] = WPC[i+1];
+  const dc = Math.sign(tc-c), dr = Math.sign(tr-r);
+  road.add(c+','+r);
+  while (c !== tc || r !== tr){ c += dc; r += dr; road.add(c+','+r); }
+}
+const buildable = (c,r) =&gt;
+  c&gt;=0 &amp;&amp; r&gt;=0 &amp;&amp; c&lt;COLS &amp;&amp; r&lt;ROWS &amp;&amp; !road.has(c+','+r) &amp;&amp; !occupied.has(c+','+r);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">An enemy walks the waypoints — lerp toward the next corner</h3></div>
+        <p class="text-sm text-slate-600 mb-3">An enemy is a point that knows which <em>segment</em> of the path it is on. Each frame we give it a budget of movement — <code>speed × slow × dt</code> pixels — and spend it walking straight toward the next waypoint. If it reaches that corner with budget left, it advances a segment and keeps going, so it banks corners smoothly. We also add every pixel it moves to <code>dist</code> — its total progress — which the towers use to pick a target. Run off the last waypoint and the creep has <em>leaked</em>.</p>
+        <div class="relative"><pre>function moveEnemy(e, dt){
+  let budget = e.speed * e.slow * dt;
+  while (budget &gt; 0 &amp;&amp; e.seg &lt; WP.length-1){
+    const t = WP[e.seg+1];
+    const dx = t.x-e.x, dy = t.y-e.y, d = Math.hypot(dx,dy);
+    if (d &lt;= budget){                       // reached this corner
+      e.x = t.x; e.y = t.y; budget -= d; e.dist += d; e.seg++;
+    } else {                                // move partway along the segment
+      e.x += dx/d*budget; e.y += dy/d*budget; e.dist += budget; budget = 0;
+    }
+  }
+  if (e.seg &gt;= WP.length-1) e.leaked = true; // reached the base
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">A tower auto-targets — range check + "first" selection</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A tower does two things a frame: pick a target and, if ready, shoot. Picking is a loop: of all enemies whose distance is inside the tower's <code>range</code>, keep the one with the greatest <code>dist</code> — the creep <em>furthest along the path</em>, closest to your base. That is the classic <strong>"first"</strong> targeting most TD players want (swap the comparison for nearest, lowest-HP, or strongest). A cooldown timer <code>cd</code> counts down every frame; when it hits zero and there's a target, fire and reset it.</p>
+        <div class="relative"><pre>function updateTower(tw, dt){
+  tw.cd -= dt;
+  let target = null, best = -1;
+  for (const e of enemies){
+    if (e.dead || e.leaked) continue;
+    if (Math.hypot(e.x-tw.x, e.y-tw.y) &lt;= tw.range &amp;&amp; e.dist &gt; best){
+      best = e.dist; target = e;            // "first" = furthest along the path
+    }
+  }
+  if (target){
+    tw.angle = Math.atan2(target.y-tw.y, target.x-tw.x);   // swivel the barrel
+    if (tw.cd &lt;= 0){ fire(tw, target); tw.cd = tw.fireRate; }
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Projectiles home to the target, then deal damage on contact</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Firing pushes a projectile that <em>remembers its target object</em>, not a fixed point — so it curves to follow a moving creep. Each frame it steps toward the target; when the gap closes to within the enemy's radius it's a hit. A hit subtracts damage; a cannon shell also damages every enemy inside its <em>splash</em> radius; a frost bolt sets the target's <code>slow</code> factor and a timer. If the target dies mid-flight the projectile simply fizzles.</p>
+        <div class="relative"><pre>function fire(tw, target){
+  projectiles.push({ x:tw.x, y:tw.y, target, speed:tw.projSpeed,
+                     damage:tw.damage, splash:tw.splash, slowF:tw.slowF });
+}
+function updateProjectile(p, dt){
+  const t = p.target;
+  if (!t || t.dead || t.leaked){ p.dead = true; return; }   // target gone
+  const dx = t.x-p.x, dy = t.y-p.y, d = Math.hypot(dx,dy) || 1e-6;
+  if (d &lt;= p.speed*dt + t.r){                                // contact
+    hurt(t, p.damage);
+    if (p.splash) for (const e of enemies)                   // cannon splash
+      if (e !== t &amp;&amp; Math.hypot(e.x-t.x,e.y-t.y) &lt;= p.splash) hurt(e, p.damage*0.6);
+    if (p.slowF &lt; 1){ t.slow = Math.min(t.slow, p.slowF); t.slowT = 1.4; } // frost
+    p.dead = true;
+  } else { p.x += dx/d*p.speed*dt; p.y += dy/d*p.speed*dt; }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The economy — a kill pays gold, gold buys towers</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Damage is a subtraction; death is the payout. When an enemy's hit-points cross zero it's flagged dead and its <code>reward</code> is added to your gold. Building spends gold: only if you can afford the tower <em>and</em> the tile is buildable does the purchase go through — deduct the cost, drop the tower, mark the cell occupied. Upgrading and selling are the same ledger in reverse. That loop — kills fund towers, towers make kills — is the whole game of it.</p>
+        <div class="relative"><pre>function hurt(e, dmg){
+  if (e.dead) return;
+  e.hp -= dmg;
+  if (e.hp &lt;= 0){ e.dead = true; gold += e.reward; score += e.reward; } // payout
+}
+function buy(type, c, r){
+  const def = TOWER_DEFS[type];
+  if (gold &lt; def.cost || !buildable(c,r)) return false;               // gate
+  gold -= def.cost;
+  towers.push({ type, ...def, x:c*CELL+CELL/2, y:r*CELL+CELL/2,
+                col:c, row:r, level:1, cd:0, angle:0, invested:def.cost });
+  occupied.add(c+','+r);
+  return true;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Waves escalate — a spawn queue that grows and hardens</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A wave is just a list of enemies to release, one every <code>spawnInterval</code> seconds. Wave <em>N</em> makes a longer list, mixes in fast runners and armoured tanks, drops a boss every fifth wave, and multiplies every creep's hit-points by an exponential <code>scale</code> so later waves genuinely bite. When the queue is empty and the last creep is gone, the wave is cleared, you bank a bonus, and the next one waits for your click.</p>
+        <div class="relative"><pre>function buildWave(n){
+  const scale = Math.pow(1.14, n-1), list = [];        // exponential difficulty
+  const count = 6 + Math.floor(n*1.5);
+  for (let i = 0; i &lt; count; i++){
+    let type = 'grunt';
+    if (n &gt;= 2 &amp;&amp; i%3 === 1) type = 'fast';
+    if (n &gt;= 3 &amp;&amp; i%5 === 4) type = 'tank';
+    list.push({ type, scale });
+  }
+  if (n % 5 === 0) list.push({ type:'boss', scale });  // boss every 5th wave
+  return list;
+}
+function spawn(item){
+  const d = ENEMY_DEFS[item.type], hp = Math.round(d.hp*item.scale);
+  enemies.push({ ...d, x:WP[0].x, y:WP[0].y, seg:0, dist:0,
+                 hp, maxHp:hp, slow:1, slowT:0, dead:false, leaked:false });
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Lives, game-over & the loop that ties it together</h3></div>
+        <p class="text-sm text-slate-600 mb-3">One <code>step(dt)</code> runs the whole simulation in order: spawn from the queue, move the enemies (a leak costs a life and, at zero, ends the run), aim and fire every tower, advance the projectiles, then sweep out everything flagged dead. The <code>requestAnimationFrame</code> loop measures real elapsed time, runs <code>step</code> once (or twice at ×2 speed), and redraws. Nothing here is an engine — it's five arrays and a clock.</p>
+        <div class="relative"><pre>function step(dt){
+  if (waveActive) spawnFromQueue(dt);
+  for (const e of enemies){
+    if (e.slowT &gt; 0 &amp;&amp; (e.slowT -= dt) &lt;= 0) e.slow = 1;    // frost wears off
+    moveEnemy(e, dt);
+    if (e.leaked){ e.dead = true; if ((lives -= e.leakCost) &lt;= 0) over(); }
+  }
+  for (const tw of towers)       updateTower(tw, dt);
+  for (const p  of projectiles)  updateProjectile(p, dt);
+  enemies     = enemies.filter(e =&gt; !e.dead);              // sweep the dead
+  projectiles = projectiles.filter(p =&gt; !p.dead);
+  if (waveActive &amp;&amp; !spawnQueue.length &amp;&amp; !enemies.length) waveCleared();
+}
+let last = performance.now();
+function loop(now){
+  let dt = Math.min((now-last)/1000, 0.033); last = now;
+  if (running &amp;&amp; !paused) for (let s = 0; s &lt; speed; s++) step(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 51 of GameFromZero done — the tower-defense classic.</h3><p class="text-sm text-emerald-700 mt-2">You built a whole tower-defense game with no engine underneath — just five plain arrays and a clock. The <em>path</em> is a hand-written list of waypoints; an <em>enemy</em> is a point that lerps toward the next corner and remembers how far it has travelled; a <em>tower</em> is a point with a range and a cooldown that each frame scans for the creep furthest along and, when ready, fires; a <em>projectile</em> homes onto its target object and on contact subtracts hit-points — splash for the cannon, a slow for the frost. A kill pays gold, gold builds and upgrades towers, and the waves grow longer, faster and tougher on an exponential curve until one side breaks. All of it runs in one <code>requestAnimationFrame</code> loop, dt-scaled so ×2 speed is just calling <code>step</code> twice. Next: add flying enemies that ignore the path, a maze you build yourself so the creeps must weave, damage-over-time and armour types, or an A* pathfinder so the road isn't fixed at all. <strong>👉 Tomorrow — Day 52: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== TOWER DEFENSE ENGINE (vanilla) =====
+const canvas = document.getElementById("td-canvas");
+const ctx = canvas.getContext("2d");
+
+// ---- map: grid + path ----
+const COLS = 20, ROWS = 13, CELL = 40;                 // 800 x 520
+const W = COLS * CELL, H = ROWS * CELL;
+const WPC = [[0,2],[4,2],[4,10],[9,10],[9,4],[14,4],[14,10],[17,10],[17,2],[19,2]];
+const center = (c,r) => ({ x: c*CELL + CELL/2, y: r*CELL + CELL/2 });
+const WP = WPC.map(([c,r]) => center(c,r));
+const BASE = WP[WP.length-1];
+
+const road = new Set();
+for (let i = 0; i < WPC.length-1; i++){
+  let [c,r] = WPC[i]; const [tc,tr] = WPC[i+1];
+  const dc = Math.sign(tc-c), dr = Math.sign(tr-r);
+  road.add(c+','+r);
+  while (c !== tc || r !== tr){ c += dc; r += dr; road.add(c+','+r); }
+}
+const occupied = new Set();
+const cellKey = (c,r) => c+','+r;
+const buildable = (c,r) => c>=0 && r>=0 && c<COLS && r<ROWS && !road.has(cellKey(c,r)) && !occupied.has(cellKey(c,r));
+
+// ---- definitions ----
+const TOWER_DEFS = {
+  arrow:  { name:"Archer", icon:"🏹", cost:50,  range:108, fireRate:0.42, damage:9,  projSpeed:470, splash:0,  slowF:1,    color:"#34d399", proj:"#a7f3d0", desc:"Fast single shots" },
+  cannon: { name:"Cannon", icon:"💣", cost:110, range:104, fireRate:1.15, damage:28, projSpeed:310, splash:52, slowF:1,    color:"#fb923c", proj:"#fed7aa", desc:"Slow area splash" },
+  frost:  { name:"Frost",  icon:"❄️", cost:80,  range:98,  fireRate:0.7,  damage:5,  projSpeed:430, splash:0,  slowF:0.5,  color:"#38bdf8", proj:"#bae6fd", desc:"Chills & slows" },
+};
+const ENEMY_DEFS = {
+  grunt: { name:"Grunt",  hp:26,  speed:52, reward:6,  r:11, color:"#f87171", leakCost:1 },
+  fast:  { name:"Runner", hp:16,  speed:98, reward:7,  r:9,  color:"#facc15", leakCost:1 },
+  tank:  { name:"Tank",   hp:95,  speed:32, reward:15, r:15, color:"#c084fc", leakCost:1 },
+  boss:  { name:"Boss",   hp:520, speed:28, reward:90, r:22, color:"#fb7185", leakCost:5 },
+};
+const MAX_WAVES = 20;
+
+// ---- state ----
+let enemies, towers, projectiles, effects;
+let gold, lives, score, currentWave;
+let waveActive, spawnQueue, spawnTimer, spawnInterval, nextWaveTimer;
+let running, paused, speed, autoWave, state;
+let buildType, selected, hover;
+
+function reset(){
+  enemies = []; towers = []; projectiles = []; effects = [];
+  occupied.clear();
+  gold = 120; lives = 20; score = 0; currentWave = 0;
+  waveActive = false; spawnQueue = []; spawnTimer = 0; spawnInterval = 0.8; nextWaveTimer = 0;
+  running = true; paused = false; speed = 1; autoWave = false; state = "ready";
+  buildType = null; selected = null; hover = null;
+  speedBtn.textContent = "⏩ Speed ×1";
+  autoBtn.classList.remove("toggle-on"); autoBtn.textContent = "▶ Auto-waves";
+  pauseBtn.textContent = "⏸ Pause";
+  buildShop(); refreshInspect(); updateHUD();
+}
+
+// ---- waves ----
+function buildWave(n){
+  const scale = Math.pow(1.14, n-1), list = [];
+  const count = 6 + Math.floor(n*1.5);
+  for (let i = 0; i < count; i++){
+    let type = "grunt";
+    if (n >= 2 && i%3 === 1) type = "fast";
+    if (n >= 3 && i%5 === 4) type = "tank";
+    list.push({ type, scale });
+  }
+  if (n % 5 === 0) list.push({ type:"boss", scale });
+  return list;
+}
+function startWave(){
+  if (waveActive || state === "gameover" || state === "victory") return;
+  currentWave++;
+  spawnQueue = buildWave(currentWave);
+  spawnInterval = Math.max(0.35, 0.85 - currentWave*0.02);
+  spawnTimer = 0; waveActive = true; nextWaveTimer = 0; state = "wave";
+  updateHUD();
+}
+function spawn(item){
+  const d = ENEMY_DEFS[item.type];
+  const hp = Math.round(d.hp * item.scale);
+  enemies.push({ type:item.type, name:d.name, x:WP[0].x, y:WP[0].y, seg:0, dist:0,
+                 hp, maxHp:hp, speed:d.speed, r:d.r, color:d.color, leakCost:d.leakCost,
+                 reward:d.reward + Math.floor(currentWave/4), slow:1, slowT:0,
+                 dead:false, leaked:false, flash:0 });
+}
+function spawnFromQueue(dt){
+  if (spawnQueue.length){
+    spawnTimer -= dt;
+    if (spawnTimer <= 0){ spawn(spawnQueue.shift()); spawnTimer = spawnInterval; }
+  }
+}
+function waveCleared(){
+  waveActive = false; state = "between";
+  const bonus = 20 + currentWave*5;
+  gold += bonus;
+  if (currentWave >= MAX_WAVES){ state = "victory"; }
+  else if (autoWave){ nextWaveTimer = 3; }
+  updateHUD();
+}
+function over(){ state = "gameover"; lives = 0; }
+
+// ---- enemy movement ----
+function moveEnemy(e, dt){
+  let budget = e.speed * e.slow * dt;
+  while (budget > 0 && e.seg < WP.length-1){
+    const t = WP[e.seg+1];
+    const dx = t.x-e.x, dy = t.y-e.y, d = Math.hypot(dx,dy);
+    if (d <= budget){ e.x = t.x; e.y = t.y; budget -= d; e.dist += d; e.seg++; }
+    else { e.x += dx/d*budget; e.y += dy/d*budget; e.dist += budget; budget = 0; }
+  }
+  if (e.seg >= WP.length-1) e.leaked = true;
+}
+
+// ---- damage & economy ----
+function hurt(e, dmg){
+  if (e.dead) return;
+  e.hp -= dmg; e.flash = 0.07;
+  if (e.hp <= 0){
+    e.dead = true; gold += e.reward; score += e.reward;
+    effects.push({ x:e.x, y:e.y, t:0, dur:0.35, max:e.r+8, type:"die", color:e.color });
+  }
+}
+
+// ---- towers ----
+function updateTower(tw, dt){
+  tw.cd -= dt;
+  let target = null, best = -1;
+  for (const e of enemies){
+    if (e.dead || e.leaked) continue;
+    if (Math.hypot(e.x-tw.x, e.y-tw.y) <= tw.range && e.dist > best){ best = e.dist; target = e; }
+  }
+  if (target){
+    tw.angle = Math.atan2(target.y-tw.y, target.x-tw.x);
+    if (tw.cd <= 0){ fire(tw, target); tw.cd = tw.fireRate; }
+  }
+}
+function fire(tw, target){
+  projectiles.push({ x:tw.x, y:tw.y, target, speed:tw.projSpeed, damage:tw.damage,
+                     splash:tw.splash, slowF:tw.slowF, color:tw.proj, type:tw.type, dead:false });
+  effects.push({ x:tw.x, y:tw.y, t:0, dur:0.09, max:9, type:"muzzle", color:tw.proj, angle:tw.angle });
+}
+function updateProjectile(p, dt){
+  const t = p.target;
+  if (!t || t.dead || t.leaked){ p.dead = true; return; }
+  const dx = t.x-p.x, dy = t.y-p.y, d = Math.hypot(dx,dy) || 1e-6;
+  if (d <= p.speed*dt + t.r){
+    hurt(t, p.damage);
+    if (p.splash){
+      effects.push({ x:t.x, y:t.y, t:0, dur:0.3, max:p.splash, type:"boom", color:p.color });
+      for (const e of enemies)
+        if (e !== t && !e.dead && Math.hypot(e.x-t.x, e.y-t.y) <= p.splash) hurt(e, Math.round(p.damage*0.6));
+    } else {
+      effects.push({ x:p.x, y:p.y, t:0, dur:0.18, max:7, type:"spark", color:p.color });
+    }
+    if (p.slowF < 1){ t.slow = Math.min(t.slow, p.slowF); t.slowT = 1.4; }
+    p.dead = true;
+  } else {
+    p.x += dx/d*p.speed*dt; p.y += dy/d*p.speed*dt; p.angle = Math.atan2(dy,dx);
+  }
+}
+
+// ---- one simulation step ----
+function step(dt){
+  if (!waveActive && nextWaveTimer > 0){
+    nextWaveTimer -= dt;
+    if (nextWaveTimer <= 0){ nextWaveTimer = 0; startWave(); }
+  }
+  if (waveActive) spawnFromQueue(dt);
+
+  for (const e of enemies){
+    if (e.dead) continue;
+    if (e.slowT > 0){ e.slowT -= dt; if (e.slowT <= 0) e.slow = 1; }
+    if (e.flash > 0) e.flash -= dt;
+    moveEnemy(e, dt);
+    if (e.leaked){ e.dead = true; lives -= e.leakCost; if (lives <= 0){ lives = 0; over(); } }
+  }
+  for (const tw of towers) updateTower(tw, dt);
+  for (const p of projectiles) updateProjectile(p, dt);
+  for (const ef of effects){ ef.t += dt / ef.dur; if (ef.t >= 1) ef.dead = true; }
+
+  enemies = enemies.filter(e => !e.dead);
+  projectiles = projectiles.filter(p => !p.dead);
+  effects = effects.filter(ef => !ef.dead);
+
+  if (waveActive && !spawnQueue.length && !enemies.length) waveCleared();
+  if (state === "gameover" || state === "victory"){ /* freeze on next draw */ }
+}
+
+// ---- drawing ----
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function drawMap(){
+  // grass checker
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++){
+    ctx.fillStyle = (c+r)%2 ? "#0c2016" : "#0e2519";
+    ctx.fillRect(c*CELL, r*CELL, CELL, CELL);
+  }
+  // subtle grid
+  ctx.strokeStyle = "rgba(148,163,184,.05)"; ctx.lineWidth = 1;
+  for (let c = 0; c <= COLS; c++){ ctx.beginPath(); ctx.moveTo(c*CELL,0); ctx.lineTo(c*CELL,H); ctx.stroke(); }
+  for (let r = 0; r <= ROWS; r++){ ctx.beginPath(); ctx.moveTo(0,r*CELL); ctx.lineTo(W,r*CELL); ctx.stroke(); }
+  // road
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.strokeStyle = "#3a2f22"; ctx.lineWidth = CELL*0.86;
+  ctx.beginPath(); ctx.moveTo(WP[0].x, WP[0].y); for (const w of WP) ctx.lineTo(w.x, w.y); ctx.stroke();
+  ctx.strokeStyle = "#5b4a35"; ctx.lineWidth = CELL*0.66;
+  ctx.beginPath(); ctx.moveTo(WP[0].x, WP[0].y); for (const w of WP) ctx.lineTo(w.x, w.y); ctx.stroke();
+  ctx.strokeStyle = "rgba(203,178,120,.5)"; ctx.lineWidth = 2.5; ctx.setLineDash([9,11]);
+  ctx.beginPath(); ctx.moveTo(WP[0].x, WP[0].y); for (const w of WP) ctx.lineTo(w.x, w.y); ctx.stroke();
+  ctx.setLineDash([]);
+  // spawn marker
+  ctx.fillStyle = "rgba(248,113,113,.85)"; ctx.font = "20px system-ui,sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("☠", WP[0].x+4, WP[0].y);
+  // base / castle
+  ctx.fillStyle = "#0f766e"; roundRect(BASE.x-16, BASE.y-16, 32, 32, 6); ctx.fill();
+  ctx.strokeStyle = "#5eead4"; ctx.lineWidth = 2; roundRect(BASE.x-16, BASE.y-16, 32, 32, 6); ctx.stroke();
+  ctx.font = "20px system-ui,sans-serif"; ctx.fillText("🏰", BASE.x, BASE.y+1);
+}
+
+function drawRange(x,y,range,ok){
+  ctx.beginPath(); ctx.arc(x,y,range,0,7);
+  ctx.fillStyle = ok ? "rgba(52,211,153,.10)" : "rgba(248,113,113,.10)";
+  ctx.fill();
+  ctx.strokeStyle = ok ? "rgba(52,211,153,.6)" : "rgba(248,113,113,.6)"; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+function drawTower(tw){
+  const d = TOWER_DEFS[tw.type];
+  roundRect(tw.x-15, tw.y-15, 30, 30, 7); ctx.fillStyle = "#111c2e"; ctx.fill();
+  ctx.strokeStyle = d.color; ctx.lineWidth = 2; ctx.stroke();
+  ctx.save(); ctx.translate(tw.x, tw.y); ctx.rotate(tw.angle || 0);
+  ctx.fillStyle = d.color; roundRect(0, -3.5, 17, 7, 2.5); ctx.fill();
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(tw.x, tw.y, 9, 0, 7); ctx.fillStyle = d.color; ctx.fill();
+  ctx.beginPath(); ctx.arc(tw.x, tw.y, 4.5, 0, 7); ctx.fillStyle = "#0b1220"; ctx.fill();
+  // level pips
+  for (let i = 0; i < tw.level; i++){
+    ctx.beginPath(); ctx.arc(tw.x-6+i*6, tw.y+20, 2.2, 0, 7); ctx.fillStyle = "#fde68a"; ctx.fill();
+  }
+}
+
+function drawEnemy(e){
+  ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 7);
+  ctx.fillStyle = e.flash > 0 ? "#ffffff" : e.color; ctx.fill();
+  ctx.lineWidth = 2.5; ctx.strokeStyle = e.slow < 1 ? "#38bdf8" : "rgba(0,0,0,.45)"; ctx.stroke();
+  if (e.type === "boss"){ ctx.fillStyle = "#7f1d1d"; ctx.font = "16px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("♛", e.x, e.y); }
+  // hp bar
+  const w = e.r*2.1, f = Math.max(0, e.hp/e.maxHp);
+  ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(e.x-w/2, e.y-e.r-8, w, 4);
+  ctx.fillStyle = f > 0.5 ? "#4ade80" : f > 0.25 ? "#facc15" : "#f87171";
+  ctx.fillRect(e.x-w/2, e.y-e.r-8, w*f, 4);
+}
+
+function drawProjectile(p){
+  if (p.type === "cannon"){
+    ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fillStyle = p.color; ctx.fill();
+    ctx.strokeStyle = "#7c2d12"; ctx.lineWidth = 1.5; ctx.stroke();
+  } else if (p.type === "frost"){
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate((p.angle||0));
+    ctx.fillStyle = p.color; roundRect(-4, -1.5, 8, 3, 1.5); ctx.fill(); ctx.restore();
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, 7); ctx.fillStyle = "#e0f2fe"; ctx.fill();
+  } else {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate((p.angle||0));
+    ctx.fillStyle = p.color; roundRect(-5, -1.5, 10, 3, 1.5); ctx.fill(); ctx.restore();
+  }
+}
+
+function drawEffect(ef){
+  if (ef.type === "boom"){
+    ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.max*ef.t, 0, 7);
+    ctx.fillStyle = "rgba(251,146,60," + (0.4*(1-ef.t)) + ")"; ctx.fill();
+    ctx.strokeStyle = "rgba(254,215,170," + (0.9*(1-ef.t)) + ")"; ctx.lineWidth = 2; ctx.stroke();
+  } else if (ef.type === "die"){
+    ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.max*ef.t, 0, 7);
+    ctx.strokeStyle = ef.color; ctx.globalAlpha = 1-ef.t; ctx.lineWidth = 2.5; ctx.stroke(); ctx.globalAlpha = 1;
+  } else if (ef.type === "spark"){
+    ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.max*(1-ef.t), 0, 7);
+    ctx.fillStyle = ef.color; ctx.globalAlpha = 1-ef.t; ctx.fill(); ctx.globalAlpha = 1;
+  } else if (ef.type === "muzzle"){
+    ctx.save(); ctx.translate(ef.x, ef.y); ctx.rotate(ef.angle||0);
+    ctx.fillStyle = ef.color; ctx.globalAlpha = 1-ef.t;
+    ctx.beginPath(); ctx.arc(16, 0, ef.max*(1-ef.t)+2, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1; ctx.restore();
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawMap();
+  // range under towers for selected
+  if (selected) drawRange(selected.x, selected.y, selected.range, true);
+  for (const tw of towers) drawTower(tw);
+  for (const e of enemies) drawEnemy(e);
+  for (const p of projectiles) drawProjectile(p);
+  for (const ef of effects) drawEffect(ef);
+
+  // build ghost
+  if (buildType && hover && !(state==="gameover"||state==="victory")){
+    const { col, row } = hover;
+    const ok = buildable(col, row) && gold >= TOWER_DEFS[buildType].cost;
+    const x = col*CELL+CELL/2, y = row*CELL+CELL/2;
+    drawRange(x, y, TOWER_DEFS[buildType].range, ok);
+    ctx.globalAlpha = 0.75;
+    roundRect(x-15, y-15, 30, 30, 7);
+    ctx.fillStyle = ok ? "rgba(52,211,153,.35)" : "rgba(248,113,113,.35)"; ctx.fill();
+    ctx.strokeStyle = ok ? "#34d399" : "#f87171"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = "16px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff"; ctx.fillText(TOWER_DEFS[buildType].icon, x, y+1);
+    ctx.globalAlpha = 1;
+  }
+
+  // overlays
+  if (paused && state !== "gameover" && state !== "victory") veil("⏸ PAUSED", "#a7f3d0");
+  if (state === "gameover") veil("💀 GAME OVER", "#fca5a5", "Reached wave " + currentWave + " · Score " + score + " — press Restart");
+  if (state === "victory")  veil("🏆 VICTORY!", "#6ee7b7", "All 20 waves cleared · Score " + score + " — press Restart");
+}
+function veil(title, color, sub){
+  ctx.fillStyle = "rgba(2,6,23,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = color; ctx.font = "bold 40px system-ui,sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(title, W/2, H/2 - (sub?14:0));
+  if (sub){ ctx.fillStyle = "#e2e8f0"; ctx.font = "600 15px system-ui,sans-serif"; ctx.fillText(sub, W/2, H/2 + 22); }
+}
+
+// ---- HUD / shop / inspect ----
+const goldEl = document.getElementById("td-gold"), livesEl = document.getElementById("td-lives");
+const waveEl = document.getElementById("td-wave"), scoreEl = document.getElementById("td-score");
+const statusEl = document.getElementById("td-status");
+const sendBtn = document.getElementById("td-send"), autoBtn = document.getElementById("td-auto");
+const pauseBtn = document.getElementById("td-pause"), speedBtn = document.getElementById("td-speed");
+const restartBtn = document.getElementById("td-restart");
+const shopEl = document.getElementById("td-shop");
+
+function updateHUD(){
+  goldEl.textContent = gold;
+  livesEl.textContent = lives;
+  waveEl.textContent = currentWave + "/" + MAX_WAVES;
+  scoreEl.textContent = score;
+  sendBtn.disabled = waveActive || state === "gameover" || state === "victory";
+  // status line
+  if (state === "gameover") statusEl.textContent = "💀 Game over at wave " + currentWave + " — press Restart";
+  else if (state === "victory") statusEl.textContent = "🏆 You survived all 20 waves! — press Restart";
+  else if (waveActive) statusEl.textContent = "Wave " + currentWave + " of " + MAX_WAVES + " · " + (spawnQueue.length + enemies.length) + " enemies left";
+  else if (nextWaveTimer > 0) statusEl.textContent = "Wave cleared! Next wave in " + Math.ceil(nextWaveTimer) + "s…";
+  else if (currentWave === 0) statusEl.textContent = "Choose a tower · click a green tile to build · then Send Wave";
+  else statusEl.textContent = "Wave " + currentWave + " cleared — build up, then Send Wave " + (currentWave+1);
+  // shop affordability
+  [...shopEl.children].forEach(el => {
+    const t = el.dataset.type;
+    el.classList.toggle("poor", gold < TOWER_DEFS[t].cost);
+    el.classList.toggle("sel", buildType === t);
+  });
+}
+
+function buildShop(){
+  shopEl.innerHTML = "";
+  for (const [type, d] of Object.entries(TOWER_DEFS)){
+    const el = document.createElement("div");
+    el.className = "shop"; el.dataset.type = type;
+    el.innerHTML = '<div class="flex items-center justify-between"><span class="nm"><span class="ic">'+d.icon+'</span> '+d.name+'</span><span class="ct">$'+d.cost+'</span></div><div class="ds">'+d.desc+'</div>';
+    el.onclick = () => { buildType = (buildType === type) ? null : type; selected = null; refreshInspect(); updateHUD(); };
+    shopEl.appendChild(el);
+  }
+}
+
+const inspectEmpty = document.getElementById("td-inspect-empty");
+const inspectBody = document.getElementById("td-inspect-body");
+function upgradeCost(tw){ return Math.round(TOWER_DEFS[tw.type].cost * 0.8 * tw.level); }
+function refreshInspect(){
+  if (!selected){ inspectEmpty.classList.remove("hidden"); inspectBody.classList.add("hidden"); return; }
+  inspectEmpty.classList.add("hidden"); inspectBody.classList.remove("hidden");
+  const d = TOWER_DEFS[selected.type];
+  document.getElementById("ti-ic").textContent = d.icon;
+  document.getElementById("ti-nm").textContent = d.name;
+  document.getElementById("ti-lv").textContent = "Level " + selected.level + (selected.level>=3?" · MAX":"");
+  document.getElementById("ti-dmg").textContent = selected.splash ? selected.damage+"💥" : (selected.slowF<1 ? selected.damage+"❄" : selected.damage);
+  document.getElementById("ti-rng").textContent = Math.round(selected.range);
+  document.getElementById("ti-rate").textContent = (1/selected.fireRate).toFixed(1)+"/s";
+  const up = document.getElementById("ti-up");
+  if (selected.level >= 3){ up.textContent = "MAX LEVEL"; up.disabled = true; }
+  else { const c = upgradeCost(selected); up.textContent = "⬆ Upgrade $"+c; up.disabled = gold < c; }
+  document.getElementById("ti-sell").textContent = "💲 Sell $" + Math.round(selected.invested*0.7);
+}
+document.getElementById("ti-up").onclick = () => {
+  if (!selected || selected.level >= 3) return;
+  const c = upgradeCost(selected);
+  if (gold < c) return;
+  gold -= c; selected.invested += c; selected.level++;
+  selected.damage = Math.round(selected.damage * 1.55);
+  selected.range = selected.range * 1.12;
+  selected.fireRate = selected.fireRate * 0.86;
+  if (selected.splash) selected.splash = selected.splash * 1.15;
+  refreshInspect(); updateHUD();
+};
+document.getElementById("ti-sell").onclick = () => {
+  if (!selected) return;
+  gold += Math.round(selected.invested * 0.7);
+  occupied.delete(cellKey(selected.col, selected.row));
+  towers = towers.filter(t => t !== selected);
+  selected = null; refreshInspect(); updateHUD();
+};
+
+// ---- input ----
+function cellFromEvent(clientX, clientY){
+  const rc = canvas.getBoundingClientRect();
+  const x = (clientX - rc.left) / rc.width * W;
+  const y = (clientY - rc.top) / rc.height * H;
+  return { col: Math.floor(x/CELL), row: Math.floor(y/CELL), x, y };
+}
+function towerAt(col, row){ return towers.find(t => t.col === col && t.row === row) || null; }
+
+function tryPlace(col, row){
+  if (!buildType) return;
+  const d = TOWER_DEFS[buildType];
+  if (!buildable(col, row)){ flashStatus("Can't build there — pick a green tile"); return; }
+  if (gold < d.cost){ flashStatus("Not enough gold for "+d.name); return; }
+  gold -= d.cost;
+  towers.push({ type:buildType, name:d.name, x:col*CELL+CELL/2, y:row*CELL+CELL/2, col, row,
+                range:d.range, fireRate:d.fireRate, damage:d.damage, projSpeed:d.projSpeed,
+                splash:d.splash, slowF:d.slowF, color:d.color, proj:d.proj, level:1, cd:0, angle:0, invested:d.cost });
+  occupied.add(cellKey(col, row));
+  updateHUD();
+}
+let flashTimer = null;
+function flashStatus(msg){
+  statusEl.textContent = msg; statusEl.style.color = "#fca5a5";
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { statusEl.style.color = ""; updateHUD(); }, 1400);
+}
+
+canvas.addEventListener("mousemove", e => { hover = cellFromEvent(e.clientX, e.clientY); });
+canvas.addEventListener("mouseleave", () => { hover = null; });
+canvas.addEventListener("click", e => {
+  const { col, row } = cellFromEvent(e.clientX, e.clientY);
+  const tw = towerAt(col, row);
+  if (tw){ selected = tw; buildType = null; refreshInspect(); updateHUD(); return; }
+  if (buildType){ tryPlace(col, row); }
+  else { selected = null; refreshInspect(); }
+});
+canvas.addEventListener("contextmenu", e => { e.preventDefault(); buildType = null; selected = null; refreshInspect(); updateHUD(); });
+canvas.addEventListener("touchstart", e => {
+  e.preventDefault();
+  const t = e.touches[0]; const cell = cellFromEvent(t.clientX, t.clientY); hover = cell;
+  const tw = towerAt(cell.col, cell.row);
+  if (tw){ selected = tw; buildType = null; refreshInspect(); updateHUD(); return; }
+  if (buildType){ tryPlace(cell.col, cell.row); } else { selected = null; refreshInspect(); }
+}, { passive:false });
+window.addEventListener("keydown", e => {
+  if (e.key === "Escape"){ buildType = null; selected = null; refreshInspect(); updateHUD(); }
+  else if (e.key === "1"){ buildType = "arrow"; selected = null; refreshInspect(); updateHUD(); }
+  else if (e.key === "2"){ buildType = "cannon"; selected = null; refreshInspect(); updateHUD(); }
+  else if (e.key === "3"){ buildType = "frost"; selected = null; refreshInspect(); updateHUD(); }
+  else if (e.key === " "){ e.preventDefault(); if (!sendBtn.disabled) startWave(); }
+  else if (e.key.toLowerCase() === "p"){ paused = !paused; pauseBtn.textContent = paused ? "▶ Resume" : "⏸ Pause"; }
+});
+
+// ---- buttons ----
+sendBtn.onclick = () => startWave();
+autoBtn.onclick = () => {
+  autoWave = !autoWave; autoBtn.classList.toggle("toggle-on", autoWave);
+  autoBtn.textContent = autoWave ? "⏹ Auto: ON" : "▶ Auto-waves";
+  if (autoWave && !waveActive && state !== "gameover" && state !== "victory" && nextWaveTimer <= 0) startWave();
+};
+pauseBtn.onclick = () => { paused = !paused; pauseBtn.textContent = paused ? "▶ Resume" : "⏸ Pause"; };
+speedBtn.onclick = () => { speed = speed === 1 ? 2 : 1; speedBtn.textContent = "⏩ Speed ×" + speed; };
+restartBtn.onclick = () => reset();
+
+// ---- main loop ----
+let last = performance.now();
+function loop(now){
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.033) dt = 0.033;
+  if (running && !paused && state !== "gameover" && state !== "victory"){
+    for (let s = 0; s < speed; s++) step(dt);
+  }
+  draw();
+  updateHUD();
+  requestAnimationFrame(loop);
+}
+
+// ---- boot ----
+reset();
+requestAnimationFrame(loop);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The grid, the path & the buildable tiles",
+   why:"A tower-defense map looks like it needs a level editor and a pathfinder, but here it is only a grid and a hand-written list of corners. The path is those corners — waypoints — and to know which cells count as road you simply walk from each corner to the next, one cell at a time, dropping every cell into a set. A tower may be built on any cell that is on the board, is not in that road set, and is not already taken. No pathfinding, no tilemap file: the map is one Set and one array of points, and everything else in the game reads from them.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">waypoints = [ (0,2) (4,2) (4,10) (9,10) … (19,2) ]<br><br>walk corner→corner → road = { "4,2","4,3",… }<br><br>buildable(c,r) = on board &amp;&amp; not road &amp;&amp; not taken</div>`,
+   code:`const COLS=20, ROWS=13, CELL=40;
+const WPC=[[0,2],[4,2],[4,10],[9,10],[9,4],[14,4],[14,10],[17,10],[17,2],[19,2]];
+const WP = WPC.map(([c,r]) => ({x:c*CELL+20, y:r*CELL+20}));
+
+const road = new Set();
+for (let i=0;i<WPC.length-1;i++){
+  let [c,r]=WPC[i]; const [tc,tr]=WPC[i+1];
+  const dc=Math.sign(tc-c), dr=Math.sign(tr-r);
+  road.add(c+','+r);
+  while (c!==tc||r!==tr){ c+=dc; r+=dr; road.add(c+','+r); }
+}
+const buildable=(c,r)=> c>=0&&r>=0&&c<COLS&&r<ROWS
+                       && !road.has(c+','+r) && !occupied.has(c+','+r);` },
+
+ { title:"2. Enemies follow the waypoints — lerp between corners",
+   why:"An enemy is a point that remembers which segment of the path it stands on. Each frame it is handed a budget of movement — its speed times any slow effect times the elapsed time — and it spends that budget walking in a straight line toward the next corner. Reach the corner with budget to spare and it advances a segment and keeps spending, so it turns corners in a single frame with no snap. Every pixel it moves is also added to a running total, its progress along the path, and when it walks off the final waypoint it has leaked into your base. That is the whole 'AI' — no navigation mesh, just lerp toward the next point.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">budget = speed × slow × dt<br><br>walk toward WP[seg+1]; reach it → seg++<br><br>e.dist += pixels moved&nbsp;&nbsp;(progress)<br>off the last corner → leaked</div>`,
+   code:`function moveEnemy(e, dt){
+  let budget = e.speed * e.slow * dt;
+  while (budget > 0 && e.seg < WP.length-1){
+    const t = WP[e.seg+1];
+    const dx=t.x-e.x, dy=t.y-e.y, d=Math.hypot(dx,dy);
+    if (d <= budget){ e.x=t.x; e.y=t.y; budget-=d; e.dist+=d; e.seg++; }
+    else { e.x+=dx/d*budget; e.y+=dy/d*budget; e.dist+=budget; budget=0; }
+  }
+  if (e.seg >= WP.length-1) e.leaked = true;
+}` },
+
+ { title:"3. Towers auto-target — range check + \"first\"",
+   why:"Every frame a tower runs one small loop over the enemies. It keeps only those inside its range circle — a plain distance test — and among them chooses the single creep with the greatest progress along the path: the one nearest your base, the 'first' target that classic tower defense fires at. Swap that one comparison and you get every other policy players argue about — nearest to the tower, lowest hit-points, highest hit-points, last. A cooldown counts down each frame; the instant it reaches zero and a target exists, the tower fires and the cooldown resets, which is exactly what makes a fast tower feel fast and a cannon feel heavy.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each enemy in range:<br>&nbsp;&nbsp;keep the one with the biggest e.dist<br>&nbsp;&nbsp;( = furthest along = "first" )<br><br>cd -= dt; if (cd<=0 && target) fire();</div>`,
+   code:`function updateTower(tw, dt){
+  tw.cd -= dt;
+  let target=null, best=-1;
+  for (const e of enemies){
+    if (e.dead||e.leaked) continue;
+    if (Math.hypot(e.x-tw.x,e.y-tw.y) <= tw.range && e.dist > best){
+      best = e.dist; target = e;          // "first" target
+    }
+  }
+  if (target){
+    tw.angle = Math.atan2(target.y-tw.y, target.x-tw.x);
+    if (tw.cd <= 0){ fire(tw, target); tw.cd = tw.fireRate; }
+  }
+}` },
+
+ { title:"4. Projectiles home in, then hit (splash / slow)",
+   why:"A shot is a point that keeps a reference to its target enemy — the whole object, not a frozen coordinate — so each frame it re-reads where that creep is now and steps toward it, curving to follow a runner. When the gap shrinks to within the enemy's radius it is a hit: subtract the damage. A cannon shell then damages every enemy inside its splash radius, so a tight clump takes area damage; a frost bolt instead drops the target's slow factor and starts a timer that thaws it later. If the target dies before the shot lands, the projectile just fizzles out. Homing-by-reference is why nothing ever misses a live target and why splash and slow are three extra lines, not a new system.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">p.target = the enemy OBJECT (re-read each frame)<br>step toward it → gap < radius → HIT<br><br>hit: hp -= dmg<br>cannon: also hurt everyone in splash radius<br>frost: target.slow = 0.5 for a while</div>`,
+   code:`function updateProjectile(p, dt){
+  const t = p.target;
+  if (!t || t.dead || t.leaked){ p.dead=true; return; }
+  const dx=t.x-p.x, dy=t.y-p.y, d=Math.hypot(dx,dy)||1e-6;
+  if (d <= p.speed*dt + t.r){                 // contact
+    hurt(t, p.damage);
+    if (p.splash) for (const e of enemies)
+      if (e!==t && Math.hypot(e.x-t.x,e.y-t.y)<=p.splash) hurt(e, p.damage*0.6);
+    if (p.slowF < 1){ t.slow=Math.min(t.slow,p.slowF); t.slowT=1.4; }
+    p.dead = true;
+  } else { p.x+=dx/d*p.speed*dt; p.y+=dy/d*p.speed*dt; }
+}` },
+
+ { title:"5. The economy — kills pay, gold builds",
+   why:"The tug-of-war of tower defense is a single shared number: gold. Damage is a subtraction; the payout is what happens when hit-points cross zero — the enemy is flagged dead and its bounty is added to your gold, which is also your score. Spending is gated: a purchase only goes through if you can afford the tower and the tile is legal, and only then is the cost deducted and the tower dropped onto the board. Upgrading spends more for bigger numbers; selling refunds part of everything you sank in. Kills fund towers, towers make kills — get ahead of the curve and you compound, fall behind and the creeps bury you.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">hp <= 0 → dead → gold += reward<br><br>build: gold>=cost && buildable → gold -= cost<br>upgrade: pay more → bigger dmg / range / rate<br>sell: gold += 70% of what you invested</div>`,
+   code:`function hurt(e, dmg){
+  if (e.dead) return;
+  e.hp -= dmg;
+  if (e.hp <= 0){ e.dead=true; gold += e.reward; score += e.reward; }
+}
+function buy(type, c, r){
+  const def = TOWER_DEFS[type];
+  if (gold < def.cost || !buildable(c,r)) return false;
+  gold -= def.cost;
+  towers.push({ type, ...def, col:c, row:r, level:1, cd:0, invested:def.cost });
+  occupied.add(c+','+r);
+  return true;
+}` },
+
+ { title:"6. Waves escalate — a growing, hardening spawn queue",
+   why:"A wave is just a list of enemies queued to be released one at a time. Wave N builds a longer list than N−1, threads in fast runners and armoured tanks as the numbers climb, drops a boss every fifth wave, and multiplies every creep's hit-points by an exponential scale so a tower that shredded wave three struggles by wave twelve. Spawning is a timer: release the next queued enemy, wait the interval, repeat, and shrink that interval as waves rise so later swarms arrive in a torrent. When the queue empties and the last creep is dead, the wave is cleared, you bank a bonus, and the next one waits for your go — the beat of build, brace, send.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">wave N: count = 6 + 1.5N enemies<br>scale = 1.14^(N-1)  → hp climbs exponentially<br>fast + tanks mixed in, boss every 5th wave<br><br>release one every spawnInterval seconds</div>`,
+   code:`function buildWave(n){
+  const scale = Math.pow(1.14, n-1), list=[];
+  const count = 6 + Math.floor(n*1.5);
+  for (let i=0;i<count;i++){
+    let type='grunt';
+    if (n>=2 && i%3===1) type='fast';
+    if (n>=3 && i%5===4) type='tank';
+    list.push({ type, scale });
+  }
+  if (n%5===0) list.push({ type:'boss', scale });
+  return list;
+}` },
+
+ { title:"7. Lives, game-over & the one loop",
+   why:"One step function runs the whole world in order each tick: release any due spawns, move every enemy — a leak costs lives and hitting zero ends the run — then aim and fire every tower, advance every projectile, expire the little visual effects, and finally sweep out everything flagged dead in a single filter. The requestAnimationFrame loop measures the real time since the last frame, clamps it so a background tab can't teleport the creeps, runs step once (or twice at double speed), and redraws. There is no engine anywhere in this — just five arrays, a shared pot of gold, and a clock. That is a complete tower-defense game.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">step(dt): spawn · move+leak · towers · shots · sweep<br>leak → lives -= cost → 0 = game over<br><br>rAF: dt = clamp(now-last); step ×speed; draw()<br>five arrays + gold + a clock = the whole game</div>`,
+   code:`function step(dt){
+  if (waveActive) spawnFromQueue(dt);
+  for (const e of enemies){
+    if (e.slowT>0 && (e.slowT-=dt)<=0) e.slow=1;
+    moveEnemy(e, dt);
+    if (e.leaked){ e.dead=true; if ((lives-=e.leakCost)<=0) over(); }
+  }
+  for (const tw of towers)      updateTower(tw, dt);
+  for (const p  of projectiles) updateProjectile(p, dt);
+  enemies     = enemies.filter(e => !e.dead);
+  projectiles = projectiles.filter(p => !p.dead);
+  if (waveActive && !spawnQueue.length && !enemies.length) waveCleared();
+}
+function loop(now){
+  let dt = Math.min((now-last)/1000, 0.033); last = now;
+  if (running && !paused) for (let s=0;s<speed;s++) step(dt);
+  draw(); requestAnimationFrame(loop);
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3500); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
