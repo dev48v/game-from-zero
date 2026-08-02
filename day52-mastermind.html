@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 52 — Mastermind</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+
+  /* ===== mastermind ===== */
+  .mm-wrap { display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .mm-secret-wrap { width:100%; display:flex; justify-content:center; border-bottom:2px dashed #1e293b; padding-bottom:12px; margin-bottom:2px; }
+  .mm-board { display:flex; flex-direction:column; gap:7px; }
+  .mm-row { display:flex; align-items:center; gap:12px; padding:5px 12px; border-radius:12px;
+            background:#0b1220; border:1px solid #1e293b; }
+  .mm-row.active { border-color:#34d399; box-shadow:0 0 0 3px rgba(52,211,153,.18); }
+  .mm-secret { background:#07130f; border-color:#0f766e; }
+  .mm-secret.win { box-shadow:0 0 0 3px rgba(52,211,153,.35); }
+  .mm-rownum { width:24px; text-align:center; color:#64748b; font-weight:800; font-size:12px; font-variant-numeric:tabular-nums; }
+  .mm-holes { display:flex; gap:8px; }
+  .mm-hole { width:34px; height:34px; border-radius:50%; border:2px solid #334155; background:#0f172a;
+             box-shadow: inset 0 2px 4px rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center;
+             color:#5eead4; font-weight:800; font-size:17px; }
+  .mm-hole.empty { border-style:dashed; }
+  .mm-hole.filled { border-color:rgba(255,255,255,.4); box-shadow: inset 0 3px 6px rgba(255,255,255,.22), 0 2px 6px rgba(0,0,0,.4); }
+  .mm-hole.editable { cursor:pointer; transition:transform .08s; }
+  .mm-hole.editable:hover { transform:scale(1.09); }
+  .mm-slabel { color:#5eead4; font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; margin-left:4px; }
+  .mm-fb { display:grid; grid-template-columns:repeat(2,12px); grid-auto-rows:12px; gap:3px; margin-left:2px; }
+  .mm-fbdot { width:12px; height:12px; border-radius:50%; }
+  .mm-fbdot.black { background:#1e293b; border:2px solid #cbd5e1; }
+  .mm-fbdot.white { background:#f8fafc; border:2px solid #cbd5e1; }
+  .mm-fbdot.none  { background:rgba(148,163,184,.07); border:1px solid #1e293b; }
+  .mm-legend { display:flex; gap:20px; font-size:12px; color:#94a3b8; align-items:center; }
+  .mm-legend span { display:inline-flex; align-items:center; gap:7px; }
+  .mm-legend .mm-fbdot { width:13px; height:13px; }
+  .mm-palette { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; padding-bottom:6px; }
+  .mm-swatch { width:40px; height:40px; border-radius:50%; border:3px solid transparent; cursor:pointer;
+               position:relative; transition:transform .08s; box-shadow: inset 0 3px 6px rgba(255,255,255,.25), 0 2px 6px rgba(0,0,0,.4); }
+  .mm-swatch:hover { transform:scale(1.1); }
+  .mm-swatch.armed { border-color:#fff; box-shadow:0 0 0 3px rgba(52,211,153,.55), inset 0 3px 6px rgba(255,255,255,.25); }
+  .mm-swatch .num { position:absolute; bottom:-15px; left:50%; transform:translateX(-50%); font-size:10px; color:#64748b; font-weight:700; }
+  .mm-flash { color:#fca5a5 !important; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 52</div>
+      <h1 class="text-xl font-bold">🟣 Mastermind — A Hidden Row of Four Coloured Pegs Sits Behind the Shield and Every Guess You Submit Is Graded by Just Two Numbers: a Black Peg for Each Peg That Is the Right Colour in the Right Hole, and a White Peg for Each Peg That Is the Right Colour but Sitting in the Wrong Hole — the Whole Subtlety Being the Duplicate-Safe Two-Pass Count (First Sweep Marks the Exact Hits and Removes Them From Both Sides, Then a Second Sweep Matches What's Left Purely by Colour so No Single Peg Is Ever Counted Twice, Which Is the One Rule Naïve Implementations Get Wrong) — and From Those Two Little Tallies Alone You Deduce the Whole Code in Ten Tries, Narrowing 1296 Possibilities Down by Pure Logic, or Flip Sides Entirely and Set a Code Yourself for the Computer to Crack With Knuth's Minimax Five-Guess Algorithm — All in Pure Vanilla JavaScript, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Crack the hidden four-colour code — in ten guesses.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm">A secret row of four coloured pegs is hidden behind the shield. Pick a colour, click the holes of your <strong>active row</strong> to build a guess, then hit <strong>Check</strong>. Each guess is scored with pegs: a <strong>black peg</strong> for every peg that is the right colour <em>and</em> in the right spot, a <strong>white peg</strong> for every peg that is the right colour but in the <em>wrong</em> spot. Colours can repeat, and the score is duplicate-safe. Read the pegs, deduce the code, and crack it before you run out of tries — or flip to <strong>AI breaks</strong> and watch the computer solve <em>your</em> code with Knuth's method.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🎯 Tries left</div>
+          <div class="text-2xl font-black stat" id="mm-left">10</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🔎 Guesses</div>
+          <div class="text-2xl font-black stat" id="mm-used">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🎨 Colours</div>
+          <div class="text-2xl font-black stat" id="mm-colors">6</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🧩 Mode</div>
+          <div class="text-2xl font-black stat" id="mm-modep">You</div>
+        </div>
+      </div>
+
+      <!-- board console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="mm-status">Pick a colour · click the holes of your row · then Check</div>
+        <div class="mm-wrap">
+          <div class="mm-secret-wrap">
+            <div class="mm-row mm-secret" id="mm-secret"></div>
+          </div>
+          <div class="mm-board" id="mm-board"></div>
+          <div class="mm-legend">
+            <span><span class="mm-fbdot black"></span> right colour &amp; spot</span>
+            <span><span class="mm-fbdot white"></span> right colour, wrong spot</span>
+          </div>
+          <div class="mm-palette" id="mm-palette"></div>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <button id="mm-check"  class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold">✅ Check</button>
+        <button id="mm-clear"  class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2.5 rounded-lg font-bold">⌫ Clear row</button>
+        <button id="mm-reveal" class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2.5 rounded-lg font-bold">💡 Give up</button>
+        <button id="mm-new"    class="btn bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+      <div class="mt-3 flex items-center justify-center gap-3 flex-wrap">
+        <button id="mm-mode"  class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm">🧩 Mode: You break</button>
+        <button id="mm-dup"   class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm">Duplicates: ON</button>
+        <button id="mm-color" class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm">Colours: 6</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        There is no board object anywhere in the code — the secret is an array of four numbers, each guess is an array of four numbers, and the whole game turns on one tiny scoring function. It walks the guess against the code twice: the first pass counts the pegs that match in colour <em>and</em> position and quietly removes them from both sides; the second pass counts, among only what's left, how many colours still appear on both sides. Those two counts — <span class="keycap">black</span> and <span class="keycap">white</span> — are every clue you ever get. <span class="keycap">1</span>–<span class="keycap">6</span> pick a colour, <span class="keycap">⌫</span> undo, <span class="keycap">Enter</span> checks.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How two little numbers hold the whole code</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Mastermind looks like it needs a rules engine; it needs a grade-school counting trick. The secret is an array of four numbers. A guess is an array of four numbers. The entire game is one scoring function that turns a guess into two tallies — blacks and whites — plus a little UI to place pegs and a loop that runs out of tries. About 150 lines of vanilla JavaScript, no libraries, no canvas even. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Colours are just numbers — the whole state is two arrays</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Forget "red" and "blue" — a colour is an <em>index</em>, 0 to 5. That one decision makes everything downstream trivial: the secret code is an array of four indices, a guess is an array of four indices, and comparing them is comparing numbers. The palette is the only place a colour ever becomes a real hex value, for drawing. Keep the game logic in integers.</p>
+        <div class="relative"><pre>const COLORS = [                                  // index → paint
+  {name:"Red",hex:"#ef4444"}, {name:"Orange",hex:"#f97316"},
+  {name:"Yellow",hex:"#eab308"}, {name:"Green",hex:"#22c55e"},
+  {name:"Blue",hex:"#3b82f6"}, {name:"Purple",hex:"#a855f7"},
+];
+const CODE_LEN = 4;          // pegs per row
+let colorCount = 6;          // how many colours are in play
+let maxRows    = 10;         // guesses allowed
+
+let secret  = [];            // the hidden code, e.g. [4,0,4,2]
+let rows    = [];            // submitted guesses + their scores
+let current = [null,null,null,null];  // the row you're editing
+let armed   = 0;             // colour picked from the palette</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The heart: a duplicate-safe two-pass score</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the only clever function in the game, and the one everybody gets wrong on the first try. <strong>Pass one</strong>: walk both rows together and count every hole where the colour matches exactly — that's a black peg — and for the holes that <em>don't</em> match, tally the leftover colours on each side. <strong>Pass two</strong>: for each colour, the white pegs it earns is the smaller of "how many the guess has left" and "how many the code has left". Because exact matches are removed first and each side is only counted by its remainder, no peg is ever double-counted — that's what makes duplicates correct.</p>
+        <div class="relative"><pre>function scorePegs(guess, code){
+  let black = 0;
+  const codeLeft = {}, guessLeft = {};        // leftover colour tallies
+  for (let i = 0; i &lt; code.length; i++){
+    if (guess[i] === code[i]) black++;         // exact hit → black
+    else {                                     // otherwise bank the colours
+      codeLeft [code[i]]  = (codeLeft [code[i]]  || 0) + 1;
+      guessLeft[guess[i]] = (guessLeft[guess[i]] || 0) + 1;
+    }
+  }
+  let white = 0;
+  for (const c in guessLeft)                    // match the remainders by colour
+    white += Math.min(guessLeft[c], codeLeft[c] || 0);
+  return { black, white };
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Placing pegs — fill the active row</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Building a guess is just writing indices into the <code>current</code> array. Click a palette swatch to <em>arm</em> a colour, click a hole to drop it there, right-click to clear a hole. Number keys are the fast path — they arm a colour <em>and</em> drop it into the leftmost empty hole so you can type a guess. Backspace lifts the last peg. None of this touches the code; it only edits one array of four numbers.</p>
+        <div class="relative"><pre>function placeAt(i){ current[i] = armed; render(); }   // click a hole
+function clearAt(i){ current[i] = null;  render(); }   // right-click
+
+function fillNext(colorIdx){                            // number-key fast path
+  armed = colorIdx;
+  const i = current.indexOf(null);
+  if (i !== -1) current[i] = colorIdx;
+  render();
+}
+function removeLast(){
+  for (let i = current.length-1; i &gt;= 0; i--)
+    if (current[i] !== null){ current[i] = null; break; }
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Submit a guess — score, then win or lose</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Checking is three lines of decision. Refuse the guess if any hole is still empty. Otherwise score it against the secret and push the row with its two peg counts. Four black pegs means every peg is right in place — you've cracked it. If not and you've used your last row, the game is lost and the code is revealed. Reset the editable row and let the player read the new clue.</p>
+        <div class="relative"><pre>function check(){
+  if (current.some(c =&gt; c === null)) return flash("Fill all four holes");
+  const { black, white } = scorePegs(current, secret);
+  rows.push({ guess: current.slice(), black, white });
+  if (black === CODE_LEN)      phase = "won";           // all pegs exact
+  else if (rows.length &gt;= maxRows) phase = "lost";      // out of tries
+  current = Array(CODE_LEN).fill(null);
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Draw the board — rows of holes and peg feedback</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The board is pure derived HTML: for each of the ten rows, either a submitted guess with its black/white pegs, the one active editable row, or an empty row waiting. A peg-hole is a coloured circle; the feedback is a little 2×2 of dots — black first, then white, then empty. Rebuild the whole thing from state on every change; there is so little of it that re-rendering costs nothing and there's no stale UI to chase.</p>
+        <div class="relative"><pre>function feedback(black, white){
+  let dots = "";
+  for (let i = 0; i &lt; CODE_LEN; i++){
+    const cls = i &lt; black ? "black" : i &lt; black+white ? "white" : "none";
+    dots += `&lt;div class="mm-fbdot ${cls}"&gt;&lt;/div&gt;`;
+  }
+  return `&lt;div class="mm-fb"&gt;${dots}&lt;/div&gt;`;
+}
+function hole(idx, editable){
+  if (idx === null) return `&lt;div class="mm-hole empty"&gt;&lt;/div&gt;`;
+  return `&lt;div class="mm-hole filled" style="background:${COLORS[idx].hex}"&gt;&lt;/div&gt;`;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">A fresh secret — random code, new game</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Starting a round is choosing a secret. Pick four random colour indices; if you've turned duplicates off, reject any colour already used so every peg is distinct. Then wipe the rows, reset the editable buffer, and set the phase to playing. That's the entire reset — because the game <em>is</em> those few variables, resetting them is the same as building a whole new board.</p>
+        <div class="relative"><pre>function makeSecret(){
+  const s = [];
+  while (s.length &lt; CODE_LEN){
+    const c = Math.floor(Math.random() * colorCount);
+    if (allowDup || !s.includes(c)) s.push(c);         // distinct if no-dup
+  }
+  return s;
+}
+function newGame(){
+  secret  = makeSecret();
+  rows    = [];
+  current = Array(CODE_LEN).fill(null);
+  phase   = "play";
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Flip sides — the AI codebreaker (Knuth's minimax)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The same score function that grades <em>you</em> lets the computer break <em>your</em> code. Start with the set of all 1296 possible codes. After each guess, keep only the codes that would have produced the exact same black/white score — the rest are logically impossible. To choose the next guess, Knuth's rule is minimax: for every candidate guess, look at how the remaining set would split across all possible scores, and pick the guess whose <em>largest</em> resulting group is smallest — the guess that guarantees the biggest cut no matter what the feedback turns out to be. It cracks any 4×6 code in five guesses or fewer.</p>
+        <div class="relative"><pre>let S = allCodes(CODE_LEN, colorCount);   // every possibility, all 1296
+let guess = [0,0,1,1];                     // Knuth's proven opener
+
+function aiStep(){
+  const { black, white } = scorePegs(guess, secret);
+  rows.push({ guess: guess.slice(), black, white });
+  if (black === CODE_LEN) return;                       // solved
+  S = S.filter(c =&gt; {                                    // drop the impossible
+    const s = scorePegs(guess, c);
+    return s.black === black &amp;&amp; s.white === white;
+  });
+  let bestWorst = Infinity;                              // minimax pick
+  for (const g of allCodes(CODE_LEN, colorCount)){
+    const buckets = {};
+    for (const c of S){ const k = scorePegs(g,c); buckets[k.black+"-"+k.white] = (buckets[k.black+"-"+k.white]||0)+1; }
+    const worst = Math.max(...Object.values(buckets));   // worst-case group
+    if (worst &lt; bestWorst){ bestWorst = worst; guess = g; }
+  }
+  setTimeout(aiStep, 700);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 52 of GameFromZero done — the code-breaking classic.</h3><p class="text-sm text-emerald-700 mt-2">You built the whole of Mastermind with no rules engine underneath — a <em>secret</em> that is four numbers, a <em>guess</em> that is four numbers, and one scoring function that grades them in two passes: an exact-match sweep for the black pegs, then a leftover-colour count for the whites, so duplicate colours are handled correctly and no peg is ever counted twice. Those two little tallies are the only information in the game, and from them you deduce a code hiding among 1296 possibilities. Turn it around and the same function powers Knuth's minimax solver, which cracks any code in five guesses by always choosing the guess that shrinks the worst-case remaining set the most. Next: add a 5th and 6th peg for a harder variant, a "no clue which peg is which" super-Mastermind, a hint that plays one optimal guess for you, or a two-player pass-and-play. <strong>👉 Tomorrow — Day 53: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== MASTERMIND ENGINE (vanilla) =====
+const COLORS = [
+  {name:"Red",    hex:"#ef4444"},
+  {name:"Orange", hex:"#f97316"},
+  {name:"Yellow", hex:"#eab308"},
+  {name:"Green",  hex:"#22c55e"},
+  {name:"Blue",   hex:"#3b82f6"},
+  {name:"Purple", hex:"#a855f7"},
+  {name:"Cyan",   hex:"#06b6d4"},
+  {name:"Pink",   hex:"#ec4899"},
+];
+const CODE_LEN = 4;
+const MAX_ROWS = 10;
+
+// ---- state ----
+let colorCount = 6;
+let allowDup   = true;
+let mode       = "break";     // "break" = you guess ; "make" = AI guesses your code
+let phase      = "play";      // play | set | ai | won | lost
+let gaveUp     = false;
+let secret     = [];
+let rows       = [];          // { guess:[...], black, white }
+let current    = [];          // editable buffer (guess in break, secret in make-set)
+let armed      = 0;
+
+// ---- feedback: duplicate-safe two-pass score ----
+function scorePegs(guess, code){
+  let black = 0;
+  const codeLeft = {}, guessLeft = {};
+  for (let i = 0; i < code.length; i++){
+    if (guess[i] === code[i]) black++;
+    else {
+      codeLeft [code[i]]  = (codeLeft [code[i]]  || 0) + 1;
+      guessLeft[guess[i]] = (guessLeft[guess[i]] || 0) + 1;
+    }
+  }
+  let white = 0;
+  for (const c in guessLeft) white += Math.min(guessLeft[c], codeLeft[c] || 0);
+  return { black, white };
+}
+
+// ---- secret / new game ----
+function makeSecret(){
+  const s = [];
+  while (s.length < CODE_LEN){
+    const c = Math.floor(Math.random() * colorCount);
+    if (allowDup || !s.includes(c)) s.push(c);
+  }
+  return s;
+}
+function newGame(){
+  gaveUp = false; rows = []; current = Array(CODE_LEN).fill(null);
+  if (armed >= colorCount) armed = 0;
+  if (mode === "break"){ secret = makeSecret(); phase = "play"; }
+  else { secret = []; phase = "set"; }
+  render();
+}
+
+// ---- editing the active row ----
+function editable(){ return phase === "play" || phase === "set"; }
+function placeAt(i){ if (!editable()) return; current[i] = armed; render(); }
+function clearAt(i){ if (!editable()) return; current[i] = null; render(); }
+function fillNext(colorIdx){
+  if (colorIdx >= colorCount) return;
+  armed = colorIdx;
+  if (editable()){ const i = current.indexOf(null); if (i !== -1) current[i] = colorIdx; }
+  render();
+}
+function removeLast(){
+  if (!editable()) return;
+  for (let i = current.length - 1; i >= 0; i--) if (current[i] !== null){ current[i] = null; break; }
+  render();
+}
+
+// ---- submit / start ----
+function onCheck(){
+  if (phase === "set"){ startAI(); return; }
+  if (phase !== "play") return;
+  if (current.some(c => c === null)){ flash("Fill all " + CODE_LEN + " holes first"); return; }
+  const { black, white } = scorePegs(current, secret);
+  rows.push({ guess: current.slice(), black, white });
+  if (black === CODE_LEN) phase = "won";
+  else if (rows.length >= MAX_ROWS) phase = "lost";
+  current = Array(CODE_LEN).fill(null);
+  render();
+}
+function giveUp(){
+  if (mode !== "break" || phase !== "play") return;
+  gaveUp = true; phase = "lost"; render();
+}
+
+// ---- AI codebreaker (Knuth minimax) ----
+function allCodes(len, colors){
+  let list = [[]];
+  for (let p = 0; p < len; p++){
+    const next = [];
+    for (const c of list) for (let k = 0; k < colors; k++) next.push(c.concat(k));
+    list = next;
+  }
+  return list;
+}
+function firstGuess(){ const g = []; for (let i = 0; i < CODE_LEN; i++) g.push(i < CODE_LEN/2 ? 0 : 1); return g; }
+function aiPick(S, allSet){
+  if (S.length <= 1) return S[0] || allSet[0];
+  const pool = allSet.length <= 1300 ? allSet : S;
+  const Skeys = new Set(S.map(c => c.join(",")));
+  let best = null, bestWorst = Infinity, bestInS = false;
+  for (const g of pool){
+    const counts = new Map();
+    for (const c of S){
+      const t = scorePegs(g, c);
+      const k = t.black * 8 + t.white;
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    let worst = 0;
+    for (const v of counts.values()) if (v > worst) worst = v;
+    const inS = Skeys.has(g.join(","));
+    if (worst < bestWorst || (worst === bestWorst && inS && !bestInS)){
+      bestWorst = worst; best = g; bestInS = inS;
+    }
+  }
+  return best;
+}
+function startAI(){
+  if (current.some(c => c === null)){ flash("Set the full secret code first"); return; }
+  // AI search space always allows duplicates so it can solve any code you set
+  secret = current.slice();
+  current = Array(CODE_LEN).fill(null);
+  rows = []; phase = "ai"; render();
+  const allSet = allCodes(CODE_LEN, colorCount);
+  const ref = { S: allSet.slice(), all: allSet };
+  setTimeout(() => aiStep(firstGuess(), ref), 350);
+}
+function aiStep(guess, ref){
+  const { black, white } = scorePegs(guess, secret);
+  rows.push({ guess: guess.slice(), black, white, ai:true });
+  if (black === CODE_LEN){ phase = "won"; render(); return; }
+  if (rows.length >= MAX_ROWS){ phase = "lost"; render(); return; }
+  ref.S = ref.S.filter(c => { const t = scorePegs(guess, c); return t.black === black && t.white === white; });
+  render();
+  const next = aiPick(ref.S, ref.all);
+  setTimeout(() => aiStep(next, ref), 700);
+}
+
+// ===== rendering =====
+const boardEl   = document.getElementById("mm-board");
+const secretEl  = document.getElementById("mm-secret");
+const paletteEl = document.getElementById("mm-palette");
+const statusEl  = document.getElementById("mm-status");
+const leftEl    = document.getElementById("mm-left");
+const usedEl    = document.getElementById("mm-used");
+const colorsEl  = document.getElementById("mm-colors");
+const modepEl   = document.getElementById("mm-modep");
+
+function holeHTML(idx, opts){
+  opts = opts || {};
+  const ed = opts.editable ? ' editable" data-hole="' + opts.i + '"' : '"';
+  if (idx === null || idx === undefined) return '<div class="mm-hole empty' + (opts.editable ? ed : '"') + '></div>';
+  const hex = COLORS[idx].hex;
+  return '<div class="mm-hole filled' + (opts.editable ? ed : '"') +
+         ' style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.55), ' + hex + ' 46%);"></div>';
+}
+function feedbackHTML(black, white){
+  let dots = "";
+  for (let i = 0; i < CODE_LEN; i++){
+    const cls = i < black ? "black" : i < black + white ? "white" : "none";
+    dots += '<div class="mm-fbdot ' + cls + '"></div>';
+  }
+  return '<div class="mm-fb">' + dots + '</div>';
+}
+function rowHTML(num, holes, fb, active){
+  return '<div class="mm-row' + (active ? ' active' : '') + '">' +
+           '<div class="mm-rownum">' + num + '</div>' +
+           '<div class="mm-holes">' + holes + '</div>' + fb + '</div>';
+}
+
+function renderSecret(){
+  let holes, label;
+  if (mode === "break"){
+    if (phase === "won" || phase === "lost"){
+      holes = secret.map(c => holeHTML(c, {})).join("");
+      label = '<span class="mm-slabel">the code</span>';
+    } else {
+      holes = Array(CODE_LEN).fill(0).map(() => '<div class="mm-hole">?</div>').join("");
+      label = '<span class="mm-slabel">secret</span>';
+    }
+  } else {
+    if (phase === "set"){
+      holes = current.map((c, i) => holeHTML(c, {editable:true, i:i})).join("");
+      label = '<span class="mm-slabel">set your code</span>';
+    } else {
+      holes = secret.map(c => holeHTML(c, {})).join("");
+      label = '<span class="mm-slabel">your code</span>';
+    }
+  }
+  secretEl.className = "mm-row mm-secret" + (phase === "won" ? " win" : "");
+  secretEl.innerHTML = '<div class="mm-rownum">🔒</div><div class="mm-holes">' + holes + '</div>' + label;
+}
+
+function renderBoard(){
+  let html = "";
+  const editRow = (mode === "break" && phase === "play") ? rows.length : -1;
+  for (let i = 0; i < MAX_ROWS; i++){
+    let holes, fb, active = false;
+    if (i < rows.length){
+      holes = rows[i].guess.map(c => holeHTML(c, {})).join("");
+      fb = feedbackHTML(rows[i].black, rows[i].white);
+    } else if (i === editRow){
+      holes = current.map((c, k) => holeHTML(c, {editable:true, i:k})).join("");
+      fb = feedbackHTML(0, 0); active = true;
+    } else {
+      holes = Array(CODE_LEN).fill(null).map(() => holeHTML(null, {})).join("");
+      fb = feedbackHTML(0, 0);
+      if (mode === "make" && phase === "ai" && i === rows.length) active = true;
+    }
+    html += rowHTML(i + 1, holes, fb, active);
+  }
+  boardEl.innerHTML = html;
+}
+
+function renderPalette(){
+  let h = "";
+  for (let i = 0; i < colorCount; i++){
+    const hex = COLORS[i].hex;
+    h += '<button class="mm-swatch' + (armed === i ? ' armed' : '') + '" data-col="' + i + '" title="' +
+         COLORS[i].name + ' (' + (i+1) + ')" style="background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.6), ' +
+         hex + ' 46%);"><span class="num">' + (i+1) + '</span></button>';
+  }
+  paletteEl.innerHTML = h;
+}
+
+function updateStatus(){
+  let msg = "", color = "#a7f3d0";
+  if (phase === "set")       msg = "Set a secret code above, then press Start AI Solve";
+  else if (phase === "ai")   msg = "🤖 AI is cracking your code with Knuth's method…";
+  else if (phase === "won")  { msg = mode === "break" ? "🏆 Cracked it in " + rows.length + " guess" + (rows.length===1?"":"es") + "!" : "🤖 AI cracked your code in " + rows.length + " guesses"; color = "#6ee7b7"; }
+  else if (phase === "lost") { msg = gaveUp ? "🏳️ You gave up — here was the code" : "💀 Out of guesses — the code is revealed"; color = "#fca5a5"; }
+  else                       msg = "Guess the " + CODE_LEN + " hidden colours — " + (MAX_ROWS - rows.length) + " tries left";
+  statusEl.textContent = msg; statusEl.style.color = color;
+}
+
+function updateHUD(){
+  leftEl.textContent   = Math.max(0, MAX_ROWS - rows.length);
+  usedEl.textContent   = rows.length;
+  colorsEl.textContent = colorCount;
+  modepEl.textContent  = mode === "break" ? "You" : "AI";
+  const over = phase === "won" || phase === "lost" || phase === "ai";
+  checkBtn.disabled  = over;
+  checkBtn.textContent = phase === "set" ? "🤖 Start AI Solve" : "✅ Check";
+  clearBtn.disabled  = !editable();
+  revealBtn.disabled = !(mode === "break" && phase === "play");
+  revealBtn.style.display = mode === "break" ? "" : "none";
+  modeBtn.textContent  = mode === "break" ? "🧩 Mode: You break" : "🤖 Mode: AI breaks";
+  dupBtn.textContent   = "Duplicates: " + (allowDup ? "ON" : "OFF");
+  dupBtn.classList.toggle("toggle-on", allowDup);
+  colorBtn.textContent = "Colours: " + colorCount;
+}
+
+let flashT = null;
+function flash(msg){
+  statusEl.textContent = msg; statusEl.classList.add("mm-flash");
+  clearTimeout(flashT);
+  flashT = setTimeout(() => { statusEl.classList.remove("mm-flash"); updateStatus(); }, 1300);
+}
+
+function render(){ renderSecret(); renderBoard(); renderPalette(); updateHUD(); updateStatus(); }
+
+// ===== controls =====
+const checkBtn  = document.getElementById("mm-check");
+const clearBtn  = document.getElementById("mm-clear");
+const revealBtn = document.getElementById("mm-reveal");
+const newBtn    = document.getElementById("mm-new");
+const modeBtn   = document.getElementById("mm-mode");
+const dupBtn    = document.getElementById("mm-dup");
+const colorBtn  = document.getElementById("mm-color");
+
+function placeHandler(e){ const h = e.target.closest(".mm-hole.editable"); if (!h) return; placeAt(+h.dataset.hole); }
+function clearHandler(e){ const h = e.target.closest(".mm-hole.editable"); if (!h) return; e.preventDefault(); clearAt(+h.dataset.hole); }
+
+boardEl.addEventListener("click", placeHandler);
+boardEl.addEventListener("contextmenu", clearHandler);
+secretEl.addEventListener("click", placeHandler);
+secretEl.addEventListener("contextmenu", clearHandler);
+paletteEl.addEventListener("click", e => { const s = e.target.closest(".mm-swatch"); if (!s) return; armed = +s.dataset.col; renderPalette(); });
+
+checkBtn.onclick  = onCheck;
+clearBtn.onclick  = () => { if (editable()){ current = Array(CODE_LEN).fill(null); render(); } };
+revealBtn.onclick = giveUp;
+newBtn.onclick    = newGame;
+modeBtn.onclick   = () => { mode = mode === "break" ? "make" : "break"; newGame(); };
+dupBtn.onclick    = () => { allowDup = !allowDup; newGame(); };
+colorBtn.onclick  = () => { colorCount = colorCount === 6 ? 8 : 6; if (armed >= colorCount) armed = 0; newGame(); };
+
+window.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  if (e.key >= "1" && e.key <= "8"){ const n = +e.key - 1; if (n < colorCount) fillNext(n); }
+  else if (e.key === "Backspace"){ e.preventDefault(); removeLast(); }
+  else if (e.key === "Enter"){ e.preventDefault(); onCheck(); }
+  else if (e.key.toLowerCase() === "n"){ newGame(); }
+});
+
+// ===== boot =====
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is just arrays of numbers",
+   why:"Mastermind feels like it needs a notion of 'colour' and 'peg', but the moment you make a colour an index — 0 to 5 — it all collapses into arithmetic. The hidden code is an array of four numbers. Your guess is an array of four numbers. Every submitted row is that array plus the two peg counts it earned. There is no board object, no grid, no rules table anywhere: the entire game state is one secret array, a list of past guesses, and the row you're currently editing.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">colours → indices: Red=0 Orange=1 … Purple=5<br><br>secret = [4, 0, 4, 2]&nbsp;&nbsp;(hidden)<br>guess&nbsp;&nbsp;= [0, 4, 4, 5]&nbsp;&nbsp;(yours)<br><br>compare numbers → two peg counts</div>`,
+   code:`const COLORS = ["Red","Orange","Yellow","Green","Blue","Purple"];
+const CODE_LEN = 4;
+
+let secret  = [4,0,4,2];        // the hidden code (an array of indices)
+let rows    = [];               // submitted guesses + their scores
+let current = [null,null,null,null];   // the row you're editing` },
+
+ { title:"2. Black pegs — the exact-match pass",
+   why:"The first and easier half of scoring: how many pegs are the right colour AND in the right hole. Walk both arrays together, position by position, and count the holes where they're equal. Those are your black pegs — the strongest clue, because a black peg pins a colour to a place. Everything that does NOT match here is set aside for the second pass; crucially, an exact match is 'used up' and can never also earn a white peg, which is the whole reason we handle it first and separately.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">secret = [4, 0, 4, 2]<br>guess&nbsp;&nbsp;= [4, 4, 1, 2]<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↑&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↑<br>position 0 ✓ and position 3 ✓ → 2 black<br>positions 1 &amp; 2 → set aside for pass two</div>`,
+   code:`let black = 0;
+const codeLeft = {}, guessLeft = {};
+for (let i = 0; i < code.length; i++){
+  if (guess[i] === code[i]) black++;          // exact hit
+  else {                                       // bank leftovers for pass two
+    codeLeft [code[i]]  = (codeLeft [code[i]]  || 0) + 1;
+    guessLeft[guess[i]] = (guessLeft[guess[i]] || 0) + 1;
+  }
+}` },
+
+ { title:"3. White pegs — count the leftovers (the duplicate gotcha)",
+   why:"White pegs are the right colour in the wrong hole — but only counted among what the exact pass left behind. That's why we banked the leftover colours from each side. Now for every colour, the whites it earns is the smaller of how many the guess still has and how many the code still has. Taking the minimum is the entire trick: it stops a single code peg from answering two guess pegs of the same colour, and stops two code pegs from being over-claimed by one. Skip this and duplicate colours give nonsense scores — it's the bug every first attempt ships.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">leftovers → code:{0:1} guess:{4:1}<br>colour 4: min(guess 1, code 0) = 0<br>colour 0: min(guess 0, code 1) = 0<br><br>min() = no peg counted twice ⇐ the gotcha</div>`,
+   code:`let white = 0;
+for (const c in guessLeft)
+  white += Math.min(guessLeft[c], codeLeft[c] || 0);   // ← the min() is the fix
+
+return { black, white };   // two numbers = every clue you ever get` },
+
+ { title:"4. Deduce — attempts, win & lose",
+   why:"With the score function done, the game loop is almost nothing. Submit a full guess, score it, and store the row. Four black pegs means every peg is right in the right place — you've cracked the code and won. Otherwise, if that was your last allowed row, you're out of tries and the code is revealed. Between those, all you do is read the pegs and reason: a black-heavy score means you're close on positions, whites mean right colours you've misplaced, and a zero on a colour rules it out of the code entirely.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">submit → score → push row<br><br>black === 4&nbsp;&nbsp;→ WIN 🏆<br>rows === 10 &amp; not solved → LOSE 💀<br><br>otherwise: read the pegs, deduce, guess again</div>`,
+   code:`function check(){
+  if (current.some(c => c === null)) return;   // must be full
+  const { black, white } = scorePegs(current, secret);
+  rows.push({ guess: current.slice(), black, white });
+  if (black === CODE_LEN)          phase = "won";    // all four exact
+  else if (rows.length >= maxRows) phase = "lost";   // out of tries
+  current = Array(CODE_LEN).fill(null);
+}` },
+
+ { title:"5. The search space — 1296 possibilities",
+   why:"Why is deducing the code even possible? Because the space is finite and small. With four pegs and six colours, allowing repeats, there are 6 × 6 × 6 × 6 = 1296 possible codes. Every guess's black/white score partitions that space: after you see a score, only the codes that WOULD produce that same score against your guess are still possible; the rest are logically eliminated. Good play is really information theory — pick guesses whose scores slice the remaining 1296 into the smallest possible surviving group, and the space collapses fast.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">6 colours ^ 4 pegs = 6⁴ = 1296 codes<br><br>each score keeps only codes that would<br>give that same (black, white) vs your guess<br><br>1296 → a few hundred → a handful → 1</div>`,
+   code:`function allCodes(len, colors){          // build every possibility
+  let list = [[]];
+  for (let p = 0; p < len; p++){
+    const next = [];
+    for (const c of list) for (let k = 0; k < colors; k++) next.push(c.concat(k));
+    list = next;
+  }
+  return list;                            // length = colors ** len = 1296
+}` },
+
+ { title:"6. Knuth's five-guess — minimax",
+   why:"In 1977 Donald Knuth proved you can always win 4×6 Mastermind in five guesses or fewer, with a strategy simple enough to run here. Keep the set of still-possible codes. To choose your next guess, imagine playing every candidate against that whole set and tally how the remaining codes would split across all possible scores. Each candidate's 'cost' is the size of its LARGEST resulting group — the worst case. Pick the candidate whose worst case is smallest: minimax. It guarantees the biggest guaranteed cut no matter what feedback comes back. That's exactly what the AI-breaks mode runs on the code you set.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for every candidate guess g:<br>&nbsp;&nbsp;split the possible set by the score g gives<br>&nbsp;&nbsp;cost(g) = size of the BIGGEST group<br><br>play the g with the smallest cost (minimax)<br>opener [0,0,1,1] → solved in ≤ 5</div>`,
+   code:`let S = allCodes(4, 6);                 // 1296 possibilities
+let guess = [0,0,1,1];                  // Knuth's proven opening guess
+// after each score, drop everything impossible:
+S = S.filter(c => sameScore(scorePegs(guess,c), lastScore));
+// then minimax the next guess:
+let best = null, bestWorst = Infinity;
+for (const g of allCodes(4,6)){
+  const buckets = {};
+  for (const c of S){ const k = key(scorePegs(g,c)); buckets[k] = (buckets[k]||0)+1; }
+  const worst = Math.max(...Object.values(buckets));   // worst-case group
+  if (worst < bestWorst){ bestWorst = worst; best = g; }
+}
+guess = best;` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s,i)=>{ const bn=document.createElement("button"); bn.className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML=`<div class="font-semibold">${s.title}</div>`; bn.onclick=()=>showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep=i; const s=STEPS[i];
+  document.getElementById("concept").innerHTML=`<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML=`<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent=s.code;
+  stepsEl.querySelectorAll("button").forEach((bn,idx)=>{ bn.className = idx===i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick=()=>showStep(Math.max(0,curStep-1)); nextB.onclick=()=>showStep(Math.min(STEPS.length-1,curStep+1));
+let tm=null; autoB.onclick=()=>{ if(tm){clearInterval(tm);tm=null;autoB.textContent="▶ Auto-play";return;} autoB.textContent="⏸ Pause"; showStep(0); tm=setInterval(()=>{ if(curStep>=STEPS.length-1){clearInterval(tm);tm=null;autoB.textContent="▶ Replay";return;} showStep(curStep+1); },3500); };
+showStep(0);
+
+function copy(btn){ const pre=btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o=btn.textContent; btn.textContent="✓ Copied!"; setTimeout(()=>btn.textContent=o,1500); }
+</script>
+</body>
+</html>
