@@ -54,6 +54,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 45 — Kaboom! (Catch the Mad Bomber's Bombs)](https://dev48v.infy.uk/game/day45-kaboom.html) — `day45-kaboom.html`
 - [GameFromZero · Day 51 — Tower Defense](https://dev48v.infy.uk/game/day51-tower-defense.html) — `day51-tower-defense.html`
 - [GameFromZero · Day 52 — Mastermind](https://dev48v.infy.uk/game/day52-mastermind.html) — `day52-mastermind.html`
+- [GameFromZero · Day 53 — Bomberman](https://dev48v.infy.uk/game/day53-bomberman.html) — `day53-bomberman.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

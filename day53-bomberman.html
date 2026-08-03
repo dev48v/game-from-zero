@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 53 — Bomberman</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+
+  /* ===== bomberman ===== */
+  .bm-wrap { display:flex; justify-content:center; }
+  #bm-canvas {
+    display:block; width:100%; max-width:600px; height:auto; border-radius:12px;
+    background:#0a1512; touch-action:none; image-rendering:pixelated;
+    box-shadow: inset 0 0 40px rgba(0,0,0,.55);
+  }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 53</div>
+      <h1 class="text-xl font-bold">💥 Bomberman — You Are One Little Bomber Loose in an Odd-Sized Walled Arena Studded With the Genre's Signature Checkerboard of Indestructible Stone Pillars (Every Even Row and Even Column, So the Board Can Never Fully Close Up) and Flooded Between Them With Destructible Soft Crates; You Walk the Corridors One Tile at a Time and Drop Bombs That Sit and Tick for Two Seconds Before Bursting Into a Four-Way Cross of Fire That Ray-Casts Outward From the Bomb Cell Along Each Axis — Punching Straight Through Empty Floor Up to Your Blast Range, Vaporising the First Soft Crate It Meets and Stopping Dead There, and Halting Instantly at Any Stone Pillar Which It Can Neither Pass Nor Break — and if That Cross of Fire Ever Kisses a Second Bomb It Sets It Off Early in a Chain Reaction; Prowling the Same Maze Are Hunter Enemies That Breadth-First Search the Open Cells Every Step to Path Straight at You, So Survival Is a Game of Herding Them Into a Corridor and Timing a Bomb So the Blast Lands on Them and Not on You — Clear Every Hunter to Win, Get Caught by a Body or a Flame to Lose — All in Pure Vanilla JavaScript on One Canvas, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Blow up the crates, trap the hunters, don't stand in your own fire.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm">You are the white bomber in the top-left corner. Walk with the <strong>arrow keys</strong> or <strong>WASD</strong>, drop a bomb with <strong>Space</strong>. A bomb ticks for two seconds, then bursts into a cross of fire that reaches a few tiles in each direction — it smashes the brown <strong>soft crates</strong> (and stops at the one it breaks), but a grey <strong>stone pillar</strong> stops it cold and can never be destroyed. The blast kills anything it touches, <em>including you</em>. Purple <strong>hunters</strong> path straight toward you through the corridors — herd them into a dead end, lay a bomb, and step away. Clear every hunter to win; get caught by a hunter or a flame and it's over.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">👾 Hunters left</div>
+          <div class="text-2xl font-black stat" id="bm-enemies">3</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">💣 Bombs ready</div>
+          <div class="text-2xl font-black stat" id="bm-bombs">1</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">💥 Blast range</div>
+          <div class="text-2xl font-black stat" id="bm-range">2</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🎮 State</div>
+          <div class="text-2xl font-black stat" id="bm-state">Play</div>
+        </div>
+      </div>
+
+      <!-- board console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="bm-status">Arrow keys / WASD to move · Space to drop a bomb</div>
+        <div class="bm-wrap">
+          <canvas id="bm-canvas" width="540" height="468"></canvas>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <button id="bm-pause" class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold">⏸ Pause</button>
+        <button id="bm-new"   class="btn bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+      <div class="mt-3 flex items-center justify-center gap-3 flex-wrap">
+        <button id="bm-en"  class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm">👾 Hunters: 3</button>
+        <button id="bm-rg"  class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm">💥 Range: 2</button>
+        <button id="bm-bm"  class="btn bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm">💣 Max bombs: 1</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        There is no physics engine and no sprite framework here — the whole arena is a 15&times;13 grid of integers where <span class="keycap">0</span> is floor, <span class="keycap">1</span> is unbreakable stone and <span class="keycap">2</span> is a soft crate. A bomb is a cell plus a two-second countdown; the explosion is a ray-cast that walks outward from that cell, one tile per step, stopping at stone and breaking a single crate. The hunters run a breadth-first search across the floor cells to find the shortest path to your tile and take its first step. <span class="keycap">←↑↓→</span> or <span class="keycap">WASD</span> move, <span class="keycap">Space</span> bombs, <span class="keycap">P</span> pauses, <span class="keycap">N</span> is a new game.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How a grid of integers becomes a bomb maze</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Bomberman looks like it needs sprites, collision physics and enemy scripting; it needs a 2D array of integers and three ideas — a countdown, a ray-cast, and a breadth-first search. The board is one grid where 0 is floor, 1 is stone, 2 is a crate. A bomb is a cell with a fuse. An explosion walks outward from that cell and stops at walls. An enemy floods the floor to find you. Everything else is drawing. About 250 lines of vanilla JavaScript on one canvas, no libraries. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The arena is a 2D array of integers</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Forget tiles and sprites — the whole board is <code>grid[row][col]</code> holding one of three numbers: <strong>0</strong> floor you can walk on, <strong>1</strong> stone you can't pass or break, <strong>2</strong> a soft crate you can blow up. The classic Bomberman layout is not random: the outer ring is stone, and inside there is an unbreakable pillar on every cell whose row <em>and</em> column are both even. That checkerboard is the whole reason the board can never seal shut — the odd rows and columns are always open lanes.</p>
+        <div class="relative"><pre>const COLS = 15, ROWS = 13;      // odd sizes → the classic pillar grid
+const EMPTY = 0, HARD = 1, SOFT = 2;
+let grid = [];
+
+function buildGrid(){
+  grid = [];
+  for (let r = 0; r &lt; ROWS; r++){
+    grid[r] = [];
+    for (let c = 0; c &lt; COLS; c++){
+      const border = r === 0 || c === 0 || r === ROWS-1 || c === COLS-1;
+      const pillar = r % 2 === 0 &amp;&amp; c % 2 === 0;   // even row AND even col
+      grid[r][c] = (border || pillar) ? HARD : EMPTY;
+    }
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Scatter crates — but keep the corners safe</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Fill the open floor with soft crates at random, roughly three cells in four, so the maze is dense but the odd lanes give it structure. The one rule that stops the game being unfair: never brick a spawn shut. Reserve each of the four corners <em>and</em> the two cells next to each corner as guaranteed floor, so the bomber and every hunter start with a way out. Because crates are destructible, the rest of the board opens up as you play.</p>
+        <div class="relative"><pre>function scatterCrates(reserved){
+  for (let r = 0; r &lt; ROWS; r++)
+    for (let c = 0; c &lt; COLS; c++)
+      if (grid[r][c] === EMPTY &amp;&amp; !reserved.has(c + "," + r) &amp;&amp; Math.random() &lt; 0.75)
+        grid[r][c] = SOFT;                       // brown breakable crate
+}
+// reserved = the 4 corners + each corner's two orthogonal neighbours,
+// so nobody is ever boxed in at spawn.</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Move one tile at a time — you can never enter a wall or a bomb</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Everyone — the bomber and the hunters — lives on a cell and tweens smoothly to the next one. All of movement collapses into a single predicate: <code>canEnter</code>. A target cell is enterable only if it is on the board, it is floor (not stone, not a crate), and it has no bomb sitting on it. That last clause is the neat trick for standing on your own freshly-dropped bomb: you're never <em>entering</em> the cell you're already on, so you can walk off it, but neither you nor a hunter can ever walk back <em>onto</em> a bomb.</p>
+        <div class="relative"><pre>function inBounds(c, r){ return c &gt;= 0 &amp;&amp; c &lt; COLS &amp;&amp; r &gt;= 0 &amp;&amp; r &lt; ROWS; }
+function bombAt(c, r){ return bombs.find(b =&gt; b.col === c &amp;&amp; b.row === r); }
+
+function canEnter(c, r){
+  return inBounds(c, r) &amp;&amp; grid[r][c] === EMPTY &amp;&amp; !bombAt(c, r);
+}
+function startMove(e, dc, dr){                   // begin a tween to the neighbour
+  if (e.moving || !canEnter(e.col + dc, e.row + dr)) return false;
+  e.tc = e.col + dc; e.tr = e.row + dr;          // target cell
+  e.moving = true; e.t = 0; e.dir = { dc, dr };
+  return true;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">A bomb is a cell with a countdown</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Dropping a bomb is pushing one object — a cell, a two-second fuse, and the blast range you carry. You can only drop while you have a bomb in reserve (max bombs minus the ones already ticking) and only if there isn't one on your tile already. Every frame each fuse loses the elapsed time; when it hits zero the bomb explodes. The bomb becomes solid the instant you step off it, because <code>canEnter</code> already refuses any cell with a bomb on it.</p>
+        <div class="relative"><pre>const FUSE = 2.0;                                 // seconds before it blows
+let bombs = [];
+
+function dropBomb(){
+  const cell = occupantCell(player);
+  if (bombs.length &gt;= maxBombs || bombAt(cell.c, cell.r)) return;
+  bombs.push({ col: cell.c, row: cell.r, timer: FUSE, range: bombRange });
+}
+function tickBombs(dt){
+  for (const b of bombs) b.timer -= dt;
+  for (const b of bombs) if (b.timer &lt;= 0) explode(b);   // fuse burned out
+  bombs = bombs.filter(b =&gt; !b.exploded);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The explosion — a ray-cast in four directions</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the heart of Bomberman. Light the bomb's own cell, then shoot a ray down each of the four directions, one tile at a time, up to the blast range. Each step asks the tile ahead one question. Off the board or <strong>stone</strong>? Stop — the arm ends here, nothing behind it burns. A <strong>crate</strong>? Break it into floor, set that one tile alight, and stop — the blast destroys exactly one crate per arm and goes no further. Otherwise it's floor: set it alight and keep going. And if a lit tile holds another bomb, detonate it too — that single recursive line is the whole chain reaction.</p>
+        <div class="relative"><pre>function explode(b){
+  if (b.exploded) return;
+  b.exploded = true;
+  addFire(b.col, b.row);                          // the bomb's own cell
+  for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    for (let i = 1; i &lt;= b.range; i++){
+      const c = b.col + dc*i, r = b.row + dr*i;
+      if (!inBounds(c, r) || grid[r][c] === HARD) break;   // stone blocks it
+      if (grid[r][c] === SOFT){ grid[r][c] = EMPTY; addFire(c, r); break; }
+      addFire(c, r);                              // empty floor: burn + continue
+      const chained = bombAt(c, r);
+      if (chained &amp;&amp; !chained.exploded) explode(chained);   // chain reaction
+    }
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Hunters that chase — breadth-first search</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A hunter isn't scripted with "if player is left, go left" — it actually pathfinds. Every time it needs a move it runs a breadth-first search from its own cell across the floor tiles, recording where it first reached each cell, until it touches the bomber's tile. Then it walks that chain of parents back to find the very first step of the shortest path and takes just that one step. BFS on a 15&times;13 grid is instant, and because it re-plans every step, the hunter follows you around corners. A pinch of random wander keeps it beatable.</p>
+        <div class="relative"><pre>function bfsStep(sc, sr, tc, tr){
+  const q = [[sc, sr]], prev = {}, seen = new Set([sc + "," + sr]);
+  let found = false;
+  while (q.length){
+    const [c, r] = q.shift();
+    if (c === tc &amp;&amp; r === tr){ found = true; break; }
+    for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nc = c+dc, nr = r+dr, k = nc + "," + nr;
+      if (seen.has(k) || !inBounds(nc,nr) || grid[nr][nc] !== EMPTY || bombAt(nc,nr)) continue;
+      seen.add(k); prev[k] = [c, r]; q.push([nc, nr]);   // remember who found it
+    }
+  }
+  if (!found) return null;
+  let cur = [tc, tr];                               // walk parents back to the start
+  while (prev[cur[0]+","+cur[1]]){
+    const p = prev[cur[0]+","+cur[1]];
+    if (p[0] === sc &amp;&amp; p[1] === sr) return [cur[0]-sc, cur[1]-sr];  // first step
+    cur = p;
+  }
+  return null;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Win, lose, and the game loop</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every frame after moving everyone: any hunter standing on a burning tile is removed from the array; if the bomber is on a burning tile, or a hunter shares his cell, the game is lost; and if the hunter array is empty, you've won. That's the entire outcome logic — three checks against the fire set and the enemy list. Wrap it in one <code>requestAnimationFrame</code> loop that measures the real elapsed time so fuses and movement run at the same speed on every machine.</p>
+        <div class="relative"><pre>function resolve(){
+  const p = occupantCell(player);
+  enemies = enemies.filter(e =&gt; !fireAt(occupantCell(e)));   // flames kill hunters
+  if (fireAt(p)) return lose("caught in the blast");
+  for (const e of enemies)
+    if (occupantCell(e).c === p.c &amp;&amp; occupantCell(e).r === p.r) return lose("a hunter got you");
+  if (enemies.length === 0) win();
+}
+function loop(ts){
+  const now = ts / 1000, dt = Math.min(0.05, now - last); last = now;
+  if (phase === "play"){ update(dt); resolve(); }
+  render();
+  requestAnimationFrame(loop);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 53 of GameFromZero done — the maze-bomber classic.</h3><p class="text-sm text-emerald-700 mt-2">You built the whole of Bomberman with no physics engine and no sprite framework — a 15&times;13 grid of integers where 0 is floor, 1 is unbreakable stone laid out on the classic even-row-even-column checkerboard, and 2 is a destructible crate. A bomb is nothing but a cell and a two-second countdown; the explosion is a ray-cast that walks outward along each axis, punching through floor, breaking exactly one crate per arm, halting at stone, and chaining into any bomb it lights. The hunters aren't scripted — they breadth-first search the open floor every step to path straight at you. Three checks against the fire set decide win and lose. Next: add power-ups that drop from broken crates (bigger range, extra bombs, the kick that punts a bomb across the board), a second human player on the same keyboard, destructible-crate reveal animations, or a smarter enemy that flees your fresh bombs. <strong>👉 Tomorrow — Day 54: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== BOMBERMAN ENGINE (vanilla) =====
+const COLS = 15, ROWS = 13, TILE = 36;
+const EMPTY = 0, HARD = 1, SOFT = 2;
+const FUSE = 2.0, FIRE_TIME = 0.5;
+const DIR4 = [[1,0],[-1,0],[0,1],[0,-1]];
+const PLAYER_DUR = 0.155, ENEMY_DUR = 0.34;
+
+const canvas = document.getElementById("bm-canvas");
+const ctx = canvas.getContext("2d");
+canvas.width = COLS * TILE; canvas.height = ROWS * TILE;
+
+// ---- settings ----
+let enemyCount = 3;
+let bombRange  = 2;
+let maxBombs   = 1;
+
+// ---- state ----
+let grid = [];
+let player, enemies, bombs, fires;
+let phase = "play";           // play | paused | won | lost
+let overMsg = "";
+let last = 0;
+const held = [];              // pressed direction keys, in order
+
+// ---- grid helpers ----
+function inBounds(c, r){ return c >= 0 && c < COLS && r >= 0 && r < ROWS; }
+function bombAt(c, r){ for (const b of bombs) if (b.col === c && b.row === r) return b; return null; }
+function canEnter(c, r){ return inBounds(c, r) && grid[r][c] === EMPTY && !bombAt(c, r); }
+function key(c, r){ return c + "," + r; }
+function fireAt(cell){ return fires[key(cell.c, cell.r)] !== undefined; }
+
+// ---- build the classic board ----
+function buildGrid(reserved){
+  grid = [];
+  for (let r = 0; r < ROWS; r++){
+    grid[r] = [];
+    for (let c = 0; c < COLS; c++){
+      const border = r === 0 || c === 0 || r === ROWS - 1 || c === COLS - 1;
+      const pillar = r % 2 === 0 && c % 2 === 0;
+      grid[r][c] = (border || pillar) ? HARD : EMPTY;
+    }
+  }
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (grid[r][c] === EMPTY && !reserved.has(key(c, r)) && Math.random() < 0.75)
+        grid[r][c] = SOFT;
+}
+
+// corners + their two orthogonal neighbours are guaranteed floor
+function safeZone(c, r, set){
+  set.add(key(c, r));
+  set.add(key(c + (c === 1 ? 1 : -1), r));
+  set.add(key(c, r + (r === 1 ? 1 : -1)));
+}
+
+// ---- entities ----
+function makeEntity(c, r, kind, dur){
+  return { col: c, row: r, tc: c, tr: r, t: 0, moving: false, dir: { dc: 0, dr: 0 }, kind, dur, wander: 0.16 };
+}
+function occupantCell(e){ return e.t < 0.5 ? { c: e.col, r: e.row } : { c: e.tc, r: e.tr }; }
+function ease(t){ return t * t * (3 - 2 * t); }
+function lerp(a, b, t){ return a + (b - a) * t; }
+function px(e){ return { x: lerp(e.col, e.tc, ease(e.t)) * TILE + TILE / 2, y: lerp(e.row, e.tr, ease(e.t)) * TILE + TILE / 2 }; }
+
+function startMove(e, dc, dr){
+  if (e.moving) return false;
+  e.dir = { dc, dr };
+  if (!canEnter(e.col + dc, e.row + dr)) return false;
+  e.tc = e.col + dc; e.tr = e.row + dr; e.moving = true; e.t = 0;
+  return true;
+}
+function stepEntity(e, dt){
+  if (!e.moving) return;
+  e.t += dt / e.dur;
+  if (e.t >= 1){ e.col = e.tc; e.row = e.tr; e.t = 0; e.moving = false; }
+}
+
+// ---- new game ----
+function newGame(){
+  const reserved = new Set();
+  const corners = [[1,1],[COLS-2,1],[1,ROWS-2],[COLS-2,ROWS-2]];
+  corners.forEach(([c, r]) => safeZone(c, r, reserved));
+  buildGrid(reserved);
+
+  player = makeEntity(1, 1, "player", PLAYER_DUR);
+  enemies = [];
+  const spawnOrder = [[COLS-2, ROWS-2], [COLS-2, 1], [1, ROWS-2], [COLS-2, Math.floor(ROWS/2)], [1, Math.floor(ROWS/2)]];
+  for (let i = 0; i < enemyCount; i++){
+    const [c, r] = spawnOrder[i % spawnOrder.length];
+    enemies.push(makeEntity(c, r, "enemy", ENEMY_DUR));
+  }
+  bombs = [];
+  fires = {};
+  held.length = 0;
+  phase = "play"; overMsg = "";
+  render(); updateHUD();
+}
+
+// ---- player input ----
+function desiredDir(){ return held.length ? held[held.length - 1] : null; }
+function handleInput(){
+  if (player.moving) return;
+  const d = desiredDir();
+  if (!d) return;
+  startMove(player, d[0], d[1]);
+}
+function dropBomb(){
+  if (phase !== "play") return;
+  const cell = occupantCell(player);
+  if (bombs.length >= maxBombs || bombAt(cell.c, cell.r)) return;
+  bombs.push({ col: cell.c, row: cell.r, timer: FUSE, range: bombRange, exploded: false });
+}
+
+// ---- bombs + fire ----
+function addFire(c, r){ fires[key(c, r)] = FIRE_TIME; }
+function explode(b){
+  if (b.exploded) return;
+  b.exploded = true;
+  addFire(b.col, b.row);
+  for (const [dc, dr] of DIR4){
+    for (let i = 1; i <= b.range; i++){
+      const c = b.col + dc * i, r = b.row + dr * i;
+      if (!inBounds(c, r) || grid[r][c] === HARD) break;
+      if (grid[r][c] === SOFT){ grid[r][c] = EMPTY; addFire(c, r); break; }
+      addFire(c, r);
+      const chained = bombAt(c, r);
+      if (chained && !chained.exploded) explode(chained);
+    }
+  }
+}
+function tickBombs(dt){
+  for (const b of bombs) b.timer -= dt;
+  for (const b of bombs) if (b.timer <= 0 && !b.exploded) explode(b);
+  bombs = bombs.filter(b => !b.exploded);
+}
+function tickFires(dt){
+  for (const k in fires){ fires[k] -= dt; if (fires[k] <= 0) delete fires[k]; }
+}
+
+// ---- enemy AI: breadth-first chase ----
+function bfsStep(sc, sr, tc, tr){
+  if (sc === tc && sr === tr) return null;
+  const q = [[sc, sr]], prev = {}, seen = new Set([key(sc, sr)]);
+  let found = false;
+  while (q.length){
+    const [c, r] = q.shift();
+    if (c === tc && r === tr){ found = true; break; }
+    for (const [dc, dr] of DIR4){
+      const nc = c + dc, nr = r + dr, k = key(nc, nr);
+      if (seen.has(k) || !inBounds(nc, nr) || grid[nr][nc] !== EMPTY || bombAt(nc, nr)) continue;
+      seen.add(k); prev[k] = [c, r]; q.push([nc, nr]);
+    }
+  }
+  if (!found) return null;
+  let cur = [tc, tr];
+  while (prev[key(cur[0], cur[1])]){
+    const p = prev[key(cur[0], cur[1])];
+    if (p[0] === sc && p[1] === sr) return [cur[0] - sc, cur[1] - sr];
+    cur = p;
+  }
+  return null;
+}
+function randStep(e){
+  const opts = DIR4.filter(([dc, dr]) => canEnter(e.col + dc, e.row + dr));
+  return opts.length ? opts[Math.floor(Math.random() * opts.length)] : null;
+}
+function decideEnemy(e){
+  if (e.moving) return;
+  const p = occupantCell(player);
+  let step = bfsStep(e.col, e.row, p.c, p.r);
+  if (!step || Math.random() < e.wander) step = randStep(e) || step;
+  if (step) startMove(e, step[0], step[1]);
+}
+
+// ---- resolve outcomes ----
+function lose(msg){ phase = "lost"; overMsg = msg; }
+function win(){ phase = "won"; overMsg = "All hunters cleared!"; }
+function resolve(){
+  const p = occupantCell(player);
+  enemies = enemies.filter(e => !fireAt(occupantCell(e)));
+  if (fireAt(p)){ lose("Caught in the blast"); return; }
+  for (const e of enemies){ const ec = occupantCell(e); if (ec.c === p.c && ec.r === p.r){ lose("A hunter got you"); return; } }
+  if (enemies.length === 0) win();
+}
+
+// ---- per-frame update ----
+function update(dt){
+  handleInput();
+  stepEntity(player, dt);
+  for (const e of enemies){ decideEnemy(e); stepEntity(e, dt); }
+  tickBombs(dt);
+  tickFires(dt);
+}
+
+// ===== rendering =====
+function drawFloor(){
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++){
+      ctx.fillStyle = (r + c) % 2 === 0 ? "#12351f" : "#0f2c1a";
+      ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+    }
+}
+function drawHard(c, r){
+  const x = c * TILE, y = r * TILE;
+  ctx.fillStyle = "#475569"; ctx.fillRect(x, y, TILE, TILE);
+  ctx.fillStyle = "#64748b"; ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 8);
+  ctx.fillStyle = "#334155"; ctx.fillRect(x + 2, y + TILE - 8, TILE - 4, 6);
+  ctx.fillStyle = "#94a3b8"; ctx.fillRect(x + 3, y + 3, TILE - 6, 4);
+}
+function drawSoft(c, r){
+  const x = c * TILE, y = r * TILE;
+  ctx.fillStyle = "#7c4a2d"; ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+  ctx.fillStyle = "#5c3620";
+  ctx.fillRect(x + 1, y + TILE / 2 - 1, TILE - 2, 2);
+  ctx.fillRect(x + TILE / 3, y + 1, 2, TILE / 2 - 2);
+  ctx.fillRect(x + 2 * TILE / 3, y + TILE / 2 + 1, 2, TILE / 2 - 3);
+  ctx.fillStyle = "rgba(255,255,255,.10)"; ctx.fillRect(x + 2, y + 2, TILE - 4, 3);
+}
+function drawBomb(b){
+  const x = b.col * TILE + TILE / 2, y = b.row * TILE + TILE / 2;
+  const pulse = 1 + 0.10 * Math.sin(b.timer * 12);
+  const rad = TILE * 0.34 * pulse;
+  ctx.fillStyle = "#0b1220";
+  ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.35)";
+  ctx.beginPath(); ctx.arc(x - rad * 0.3, y - rad * 0.3, rad * 0.28, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#a16207"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y - rad); ctx.quadraticCurveTo(x + 6, y - rad - 6, x + 9, y - rad - 4); ctx.stroke();
+  ctx.fillStyle = (Math.floor(b.timer * 8) % 2 === 0) ? "#fde047" : "#f97316";
+  ctx.beginPath(); ctx.arc(x + 10, y - rad - 5, 3, 0, Math.PI * 2); ctx.fill();
+}
+function drawFire(c, r, life){
+  const x = c * TILE, y = r * TILE;
+  const a = Math.max(0.2, life / FIRE_TIME);
+  ctx.save();
+  ctx.globalAlpha = a;
+  const g = ctx.createRadialGradient(x + TILE / 2, y + TILE / 2, 2, x + TILE / 2, y + TILE / 2, TILE * 0.7);
+  g.addColorStop(0, "#fef9c3"); g.addColorStop(0.4, "#fb923c"); g.addColorStop(1, "#b91c1c");
+  ctx.fillStyle = g; ctx.fillRect(x, y, TILE, TILE);
+  ctx.globalAlpha = a * 0.9;
+  ctx.fillStyle = "#fde047";
+  ctx.beginPath(); ctx.arc(x + TILE / 2, y + TILE / 2, TILE * (0.18 + 0.05 * Math.sin(life * 30)), 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawPlayer(){
+  const p = px(player), x = p.x, y = p.y, R = TILE * 0.36;
+  ctx.fillStyle = "rgba(0,0,0,.3)";
+  ctx.beginPath(); ctx.ellipse(x, y + R * 0.9, R * 0.8, R * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#e2e8f0";
+  ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#38bdf8";
+  ctx.beginPath(); ctx.arc(x, y - R * 0.35, R * 0.9, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = "#0ea5e9"; ctx.fillRect(x - R, y - R * 0.42, R * 2, 3);
+  // eyes look toward move direction
+  const ex = player.dir.dc * R * 0.22, ey = player.dir.dr * R * 0.22;
+  ctx.fillStyle = "#0f172a";
+  ctx.beginPath(); ctx.arc(x - R * 0.3 + ex, y + R * 0.12 + ey, R * 0.14, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + R * 0.3 + ex, y + R * 0.12 + ey, R * 0.14, 0, Math.PI * 2); ctx.fill();
+}
+function drawEnemy(e){
+  const p = px(e), x = p.x, y = p.y, R = TILE * 0.34;
+  ctx.fillStyle = "rgba(0,0,0,.3)";
+  ctx.beginPath(); ctx.ellipse(x, y + R * 0.95, R * 0.8, R * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#a855f7";
+  ctx.beginPath();
+  ctx.arc(x, y, R, Math.PI, 0);
+  const teeth = 4;
+  for (let i = 0; i <= teeth; i++){
+    const tx = x + R - (i * 2 * R / teeth);
+    ctx.lineTo(tx, y + R * (i % 2 === 0 ? 0.55 : 0.9));
+  }
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#faf5ff";
+  ctx.beginPath(); ctx.arc(x - R * 0.32, y - R * 0.1, R * 0.24, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + R * 0.32, y - R * 0.1, R * 0.24, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#3b0764";
+  ctx.beginPath(); ctx.arc(x - R * 0.28, y - R * 0.06, R * 0.11, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + R * 0.36, y - R * 0.06, R * 0.11, 0, Math.PI * 2); ctx.fill();
+}
+function drawOverlay(){
+  if (phase !== "won" && phase !== "lost" && phase !== "paused") return;
+  ctx.fillStyle = "rgba(2,6,23,.72)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.textAlign = "center";
+  ctx.fillStyle = phase === "won" ? "#6ee7b7" : phase === "lost" ? "#fca5a5" : "#fde68a";
+  ctx.font = "bold 46px -apple-system, sans-serif";
+  const big = phase === "won" ? "YOU WIN!" : phase === "lost" ? "BOOM — you're out" : "PAUSED";
+  ctx.fillText(big, canvas.width / 2, canvas.height / 2 - 6);
+  ctx.fillStyle = "#e2e8f0"; ctx.font = "16px -apple-system, sans-serif";
+  const sub = phase === "paused" ? "Press P to resume" : overMsg + " — press N or ↻ New game";
+  ctx.fillText(sub, canvas.width / 2, canvas.height / 2 + 28);
+}
+function render(){
+  drawFloor();
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++){
+      if (grid[r][c] === HARD) drawHard(c, r);
+      else if (grid[r][c] === SOFT) drawSoft(c, r);
+    }
+  for (const b of bombs) drawBomb(b);
+  for (const k in fires){ const [c, r] = k.split(",").map(Number); drawFire(c, r, fires[k]); }
+  // draw entities sorted by y so lower ones overlap correctly
+  const ents = [player].concat(enemies).sort((a, b) => px(a).y - px(b).y);
+  for (const e of ents){ if (e.kind === "player") drawPlayer(); else drawEnemy(e); }
+  drawOverlay();
+}
+
+// ===== HUD =====
+const enemiesEl = document.getElementById("bm-enemies");
+const bombsEl   = document.getElementById("bm-bombs");
+const rangeEl   = document.getElementById("bm-range");
+const stateEl   = document.getElementById("bm-state");
+const statusEl  = document.getElementById("bm-status");
+function updateHUD(){
+  enemiesEl.textContent = enemies ? enemies.length : enemyCount;
+  bombsEl.textContent   = Math.max(0, maxBombs - (bombs ? bombs.length : 0));
+  rangeEl.textContent   = bombRange;
+  stateEl.textContent   = phase === "play" ? "Play" : phase === "paused" ? "Pause" : phase === "won" ? "Win" : "Lost";
+  let msg = "Arrow keys / WASD to move · Space to drop a bomb", col = "#a7f3d0";
+  if (phase === "won"){ msg = "🏆 You cleared every hunter — press New game"; col = "#6ee7b7"; }
+  else if (phase === "lost"){ msg = "💀 " + overMsg + " — press New game"; col = "#fca5a5"; }
+  else if (phase === "paused"){ msg = "⏸ Paused — press P or the button to resume"; col = "#fde68a"; }
+  statusEl.textContent = msg; statusEl.style.color = col;
+}
+
+// ===== controls =====
+const pauseBtn = document.getElementById("bm-pause");
+const newBtn   = document.getElementById("bm-new");
+const enBtn    = document.getElementById("bm-en");
+const rgBtn    = document.getElementById("bm-rg");
+const bmBtn    = document.getElementById("bm-bm");
+
+function togglePause(){
+  if (phase === "play") phase = "paused";
+  else if (phase === "paused") phase = "play";
+  updateHUD();
+}
+pauseBtn.onclick = () => { togglePause(); pauseBtn.textContent = phase === "paused" ? "▶ Resume" : "⏸ Pause"; };
+newBtn.onclick   = () => { newGame(); pauseBtn.textContent = "⏸ Pause"; };
+enBtn.onclick    = () => { enemyCount = enemyCount === 3 ? 5 : enemyCount === 5 ? 1 : 3; enBtn.textContent = "👾 Hunters: " + enemyCount; newGame(); };
+rgBtn.onclick    = () => { bombRange = bombRange === 2 ? 3 : bombRange === 3 ? 4 : 2; rgBtn.textContent = "💥 Range: " + bombRange; newGame(); };
+bmBtn.onclick    = () => { maxBombs = maxBombs === 1 ? 2 : maxBombs === 2 ? 3 : 1; bmBtn.textContent = "💣 Max bombs: " + maxBombs; newGame(); };
+
+const KEYMAP = {
+  ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0],
+  w: [0,-1], s: [0,1], a: [-1,0], d: [1,0]
+};
+function lookHidden(){ return document.getElementById("look").classList.contains("hidden"); }
+window.addEventListener("keydown", e => {
+  if (lookHidden()) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (KEYMAP[k]){ e.preventDefault(); if (!held.some(h => h === KEYMAP[k])) held.push(KEYMAP[k]); }
+  else if (k === " " || e.code === "Space"){ e.preventDefault(); if (!e.repeat) dropBomb(); }
+  else if (k === "p"){ e.preventDefault(); togglePause(); pauseBtn.textContent = phase === "paused" ? "▶ Resume" : "⏸ Pause"; }
+  else if (k === "n"){ e.preventDefault(); newGame(); pauseBtn.textContent = "⏸ Pause"; }
+});
+window.addEventListener("keyup", e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (KEYMAP[k]){ const i = held.indexOf(KEYMAP[k]); if (i >= 0) held.splice(i, 1); }
+});
+
+// ===== game loop =====
+function loop(ts){
+  const now = ts / 1000;
+  let dt = now - last; last = now;
+  if (dt > 0.05) dt = 0.05;
+  if (phase === "play"){ update(dt); resolve(); }
+  render(); updateHUD();
+  requestAnimationFrame(loop);
+}
+
+// ===== boot =====
+newGame();
+requestAnimationFrame(ts => { last = ts / 1000; loop(ts); });
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The arena is a 2D array of integers",
+   why:"Bomberman feels like it needs sprites and tile maps, but the whole board is one grid of numbers. Each cell holds a 0 for walkable floor, a 1 for indestructible stone, or a 2 for a destructible crate. The classic layout isn't decoration: the outer ring is stone, and there is a stone pillar on every cell whose row AND column are both even. That even-even checkerboard is why the board can never seal shut — the odd-numbered rows and columns are always clear lanes you can travel.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">grid[row][col] &isin; { 0 floor, 1 stone, 2 crate }<br><br>border ring = stone<br>row even &amp; col even = stone pillar<br><br>1 . 1 . 1 . 1<br>. . . . . . .<br>1 . 1 . 1 . 1<br>. . . . . . .<br><br>odd lanes are always open</div>`,
+   code:`const COLS = 15, ROWS = 13;         // odd sizes → the pillar grid
+const EMPTY = 0, HARD = 1, SOFT = 2;
+
+for (let r = 0; r < ROWS; r++)
+  for (let c = 0; c < COLS; c++){
+    const border = r===0 || c===0 || r===ROWS-1 || c===COLS-1;
+    const pillar = r % 2 === 0 && c % 2 === 0;   // even row AND even col
+    grid[r][c] = (border || pillar) ? HARD : EMPTY;
+  }` },
+
+ { title:"2. Move a tile at a time — one predicate does it all",
+   why:"The bomber and every hunter live on a cell and slide smoothly to the next. Every movement question — can the player go left? can a hunter chase up? — funnels into a single test called canEnter: the target must be on the board, it must be floor (not stone, not a crate), and it must have no bomb on it. That final clause is a small piece of genius: you are never entering the cell you already stand on, so you can walk off your own fresh bomb, but nothing can ever walk back onto a bomb cell.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">canEnter(c, r) =<br>&nbsp;&nbsp;on the board<br>&nbsp;&nbsp;AND grid[r][c] === floor<br>&nbsp;&nbsp;AND no bomb sitting there<br><br>you stand on your bomb → can leave<br>but never re-enter it ⇐ the trick</div>`,
+   code:`function canEnter(c, r){
+  return inBounds(c, r) && grid[r][c] === EMPTY && !bombAt(c, r);
+}
+function startMove(e, dc, dr){
+  if (e.moving || !canEnter(e.col+dc, e.row+dr)) return false;
+  e.tc = e.col + dc; e.tr = e.row + dr;   // tween toward the neighbour
+  e.moving = true; e.t = 0;
+  return true;
+}` },
+
+ { title:"3. A bomb is a cell plus a countdown",
+   why:"Dropping a bomb pushes one small object: which cell it sits on, a two-second fuse, and the blast range you're carrying. You can only drop if you still have a bomb in reserve and there isn't one on your tile. Each frame every fuse loses the elapsed real time; the instant it reaches zero the bomb explodes. Nothing about the bomb is special until then — it's just a number counting down, and canEnter already makes it solid the moment you step away.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">bomb = { col, row, timer: 2.0, range }<br><br>every frame:&nbsp;&nbsp;timer -= dt<br>timer &le; 0&nbsp;&nbsp;→&nbsp;&nbsp;explode!<br><br>drop only if bombsOut &lt; maxBombs</div>`,
+   code:`const FUSE = 2.0;
+function dropBomb(){
+  const cell = occupantCell(player);
+  if (bombs.length >= maxBombs || bombAt(cell.c, cell.r)) return;
+  bombs.push({ col: cell.c, row: cell.r, timer: FUSE, range: bombRange });
+}
+function tickBombs(dt){
+  for (const b of bombs) b.timer -= dt;
+  for (const b of bombs) if (b.timer <= 0) explode(b);
+}` },
+
+ { title:"4. The explosion — a ray-cast in four directions",
+   why:"This is the heart of the whole game. Light the bomb's own cell, then fire a ray outward along each of the four directions, one tile per step, up to the blast range. Every step asks the tile ahead a single question. Stone or off the board? Stop — this arm ends and nothing behind it burns. A crate? Break it into floor, set that one tile alight, and stop — each arm destroys exactly one crate and no more. Floor? Set it alight and keep walking. And if a burning tile holds another bomb, detonate it too: that one recursive call is the entire chain reaction.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🔥<br>🔥🔥💣🔥🔥&nbsp;&nbsp;(range 2)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🔥<br><br>stone → arm stops, keeps nothing behind<br>crate → break ONE, stop<br>bomb on a burning tile → chain!</div>`,
+   code:`function explode(b){
+  addFire(b.col, b.row);                       // the bomb's own cell
+  for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    for (let i = 1; i <= b.range; i++){
+      const c = b.col+dc*i, r = b.row+dr*i;
+      if (!inBounds(c,r) || grid[r][c] === HARD) break;      // stone stops it
+      if (grid[r][c] === SOFT){ grid[r][c]=EMPTY; addFire(c,r); break; }
+      addFire(c, r);                            // floor: burn + keep going
+      const other = bombAt(c, r);
+      if (other) explode(other);                // chain reaction
+    }
+  }
+}` },
+
+ { title:"5. Hunters that actually pathfind — BFS",
+   why:"A hunter is not scripted with 'if the player is to my left, step left'. It genuinely searches. Each time it needs a move it runs a breadth-first search from its own cell out across the floor tiles, recording for every cell which neighbour first reached it, until the wave touches the bomber's tile. Then it walks that parent-chain back from the player to itself to recover the very first step of the shortest path, and takes only that step. BFS on a tiny 15×13 grid is instant, and because it re-plans every single step it tracks you around corners. A little random wander keeps it from being unbeatable.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">flood out from the hunter across floor<br>record who first reached each cell<br>stop when the wave hits the player<br><br>walk parents back → the FIRST step<br>take that one step, re-plan next tick</div>`,
+   code:`function bfsStep(sc, sr, tc, tr){
+  const q = [[sc,sr]], prev = {}, seen = new Set([sc+","+sr]);
+  while (q.length){
+    const [c, r] = q.shift();
+    if (c===tc && r===tr) break;               // reached the player
+    for (const [dc, dr] of DIR4){
+      const nc=c+dc, nr=r+dr, k=nc+","+nr;
+      if (seen.has(k) || grid[nr][nc] !== EMPTY || bombAt(nc,nr)) continue;
+      seen.add(k); prev[k] = [c, r]; q.push([nc, nr]);
+    }
+  }
+  // walk prev[] back from (tc,tr) to (sc,sr) → return the first step
+}` },
+
+ { title:"6. Win, lose, and one game loop",
+   why:"Every frame, after everyone has moved, three checks decide the outcome against the set of currently-burning tiles. Any hunter standing on fire is filtered out of the enemy array. If the bomber is standing on fire, or a hunter is sharing the bomber's cell, the round is lost. If the enemy array is empty, you've won. That's the whole of it — no score tables, no state machine. Wrap update, resolve and render in a single requestAnimationFrame loop that measures the real delta-time so fuses and footsteps run at the same pace on every machine.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">hunter on a burning tile → remove it<br>bomber on a burning tile → LOSE 💀<br>hunter shares your cell → LOSE 💀<br>no hunters left → WIN 🏆<br><br>update → resolve → render, every frame</div>`,
+   code:`function resolve(){
+  const p = occupantCell(player);
+  enemies = enemies.filter(e => !fireAt(occupantCell(e)));
+  if (fireAt(p)) return lose("caught in the blast");
+  for (const e of enemies)
+    if (sameCell(occupantCell(e), p)) return lose("a hunter got you");
+  if (enemies.length === 0) win();
+}
+function loop(ts){
+  const dt = Math.min(0.05, ts/1000 - last); last = ts/1000;
+  if (phase === "play"){ update(dt); resolve(); }
+  render();
+  requestAnimationFrame(loop);
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>
