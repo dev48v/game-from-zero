@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 54 — Yahtzee</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+
+  /* ===== yahtzee ===== */
+  .yz-wrap { display:flex; flex-direction:column; gap:18px; align-items:center; }
+  .yz-dice { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; min-height:62px; }
+  .yz-die {
+    width:62px; height:62px; border-radius:14px;
+    background:linear-gradient(145deg,#f8fafc,#cbd5e1);
+    box-shadow: inset 0 2px 3px rgba(255,255,255,.7), 0 5px 11px rgba(0,0,0,.45);
+    display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+    padding:10px; position:relative; transition:transform .1s, box-shadow .15s;
+  }
+  .yz-die.blank { background:#0b1220; box-shadow: inset 0 0 14px rgba(0,0,0,.6); border:2px dashed #1e293b; }
+  .yz-die.rollable { cursor:pointer; }
+  .yz-die.rollable:hover { transform:translateY(-3px); }
+  .yz-die.held { transform:translateY(-9px); box-shadow: 0 0 0 3px #34d399, 0 9px 17px rgba(16,185,129,.4); }
+  .yz-pip { width:11px; height:11px; border-radius:50%; align-self:center; justify-self:center; }
+  .yz-pip.on { background:#0f172a; box-shadow: inset 0 1px 1px rgba(255,255,255,.25); }
+  .yz-die.held .yz-pip.on { background:#065f46; }
+  .yz-hold-tag { position:absolute; top:-10px; left:50%; transform:translateX(-50%); font-size:9px; font-weight:800;
+                 letter-spacing:.1em; color:#065f46; background:#6ee7b7; padding:1px 7px; border-radius:6px; }
+
+  .yz-sheet { display:grid; grid-template-columns:1fr 1fr; gap:14px; width:100%; }
+  @media (max-width:640px){ .yz-sheet { grid-template-columns:1fr; } }
+  .yz-col { background:#0b1220; border:1px solid #1e293b; border-radius:14px; overflow:hidden; }
+  .yz-col h4 { color:#5eead4; font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+               padding:9px 12px; border-bottom:1px solid #1e293b; background:#07130f; }
+  .yz-row { display:flex; align-items:center; justify-content:space-between; gap:10px;
+            padding:7px 12px; border-bottom:1px solid rgba(30,41,59,.6); font-size:13px; color:#cbd5e1; }
+  .yz-row .lbl { display:flex; flex-direction:column; line-height:1.2; }
+  .yz-row .lbl small { color:#64748b; font-size:10px; margin-top:1px; }
+  .yz-row .val { min-width:46px; text-align:center; font-weight:800; font-variant-numeric:tabular-nums;
+                 padding:4px 0; border-radius:8px; color:#475569; }
+  .yz-row.open { cursor:pointer; }
+  .yz-row.open:hover { background:rgba(52,211,153,.09); }
+  .yz-row.open .val.preview { color:#34d399; background:rgba(52,211,153,.13); }
+  .yz-row.open .val.zero { color:#64748b; background:rgba(148,163,184,.06); }
+  .yz-row.filled { color:#94a3b8; }
+  .yz-row.filled .val { color:#e2e8f0; background:#1e293b; }
+  .yz-subtotal { display:flex; align-items:center; justify-content:space-between;
+                 padding:9px 12px; font-size:12px; font-weight:800; color:#a7f3d0;
+                 background:#07130f; border-top:1px solid #1e293b; font-variant-numeric:tabular-nums; }
+  .yz-subtotal.hit { color:#6ee7b7; }
+  .yz-subtotal.grand { font-size:14px; color:#e2e8f0; }
+
+  .yz-over { position:absolute; inset:0; background:rgba(2,6,23,.88); border-radius:19px;
+             display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; z-index:5; text-align:center; padding:20px; }
+  .yz-over h3 { font-size:40px; font-weight:900; color:#6ee7b7; }
+  .yz-over .score { font-size:20px; color:#e2e8f0; font-weight:800; }
+  .yz-over .brk { font-size:13px; color:#94a3b8; }
+  .hidden { display:none; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 54</div>
+      <h1 class="text-xl font-bold">🎲 Yahtzee — Five Ordinary Dice and a Thirteen-Box Scorecard, and the Whole Game Is the Gamble in Between: Every Turn You Throw All Five, Then Get Two More Throws in Which You Freeze the Dice You Like and Re-Roll Only the Rest, Chasing One of the Thirteen Combinations — the Six Upper Boxes That Simply Sum Your 1s, 2s, 3s, 4s, 5s and 6s (and Hand You a Fat +35 Bonus the Moment That Upper Half Reaches 63, Which Is Exactly Three-of-Each), Plus the Seven Lower Boxes: Three- and Four-of-a-Kind That Bank the Sum of All Five Dice, the Fixed-Value Full House Worth 25, Small Straight 30, Large Straight 40, the Five-of-a-Kind Yahtzee Worth a Full 50, and Chance Which Just Takes Whatever You've Got — but Here's the Vice That Grips: You Must Spend Exactly One Box Every Single Turn Whether the Dice Cooperated or Not, So a Wasted Roll Means Crossing Off a Zero, and After Thirteen Turns Every Box Is Full and the Grand Total Is Locked — All Scored Live From One Tiny Counts-of-Each-Face Array, in Pure Vanilla JavaScript, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Roll, hold, gamble the re-rolls — fill all thirteen boxes.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm">Each turn you get up to <strong>three rolls</strong>. Hit <strong>Roll</strong> to throw all five dice, then <strong>click any die to hold it</strong> and roll again to re-throw only the ones you left loose — twice more. When you like your hand (or run out of rolls), <strong>click a scorecard box</strong> to bank it: the green number on each open box is the <strong>live preview</strong> of what it would score right now. You must fill exactly one box per turn, so sometimes you'll cross off a zero. Land three-of-each in the upper half to reach 63 and grab the <strong>+35 bonus</strong>. After thirteen turns every box is full and your grand total is locked.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🎯 Turn</div>
+          <div class="text-2xl font-black stat" id="yz-turn">1/13</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🎲 Rolls left</div>
+          <div class="text-2xl font-black stat" id="yz-rolls">3</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">⬆️ Upper</div>
+          <div class="text-2xl font-black stat" id="yz-upper">0/63</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🏆 Total</div>
+          <div class="text-2xl font-black stat" id="yz-total">0</div>
+        </div>
+      </div>
+
+      <!-- board console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="yz-status">Press Roll to throw all five dice</div>
+        <div class="yz-wrap">
+          <div class="yz-dice" id="yz-dice"></div>
+          <div class="yz-sheet" id="yz-sheet"></div>
+        </div>
+        <div id="yz-over" class="yz-over hidden">
+          <h3>GAME OVER</h3>
+          <div class="score" id="yz-over-score">You scored 0 points</div>
+          <div class="brk" id="yz-over-brk"></div>
+          <button id="yz-again" class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold mt-2">↻ Play again</button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <button id="yz-roll" class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-2.5 rounded-lg font-bold">🎲 Roll dice</button>
+        <button id="yz-new"  class="btn bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        There is no dice-physics engine and barely any game state — five integers 1–6, five held flags, a rolls-left counter, and a scorecard object mapping each of thirteen boxes to a number or <span class="keycap">null</span>. Every category, from "sum of the 4s" to "large straight", is scored the same way: tally how many of each face you rolled into a little <span class="keycap">counts[1..6]</span> array, then answer one question about it. The +35 upper bonus is a single <span class="keycap">&ge; 63</span> test. <span class="keycap">Space</span> rolls, <span class="keycap">1</span>–<span class="keycap">5</span> hold a die, <span class="keycap">N</span> starts a new game.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How five dice and one counts-array become thirteen scores</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Yahtzee looks like thirteen unrelated scoring rules, but they all read from the same one-line helper: a <code>counts[1..6]</code> array of how many of each face you rolled. Once you have that, "sum of the 5s" and "is this a full house?" are each one expression. The rest is a three-roll turn, a hold-and-reroll toggle, one-box-per-turn bookkeeping, and a grand total with a single bonus test. About 180 lines of vanilla JavaScript, no libraries, no canvas. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The whole game is five ints and a scorecard object</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no board and no dice objects — the state is tiny. Five integers hold the dice faces, five booleans say which ones you're keeping, a counter tracks how many of your three rolls remain, and the scorecard is a plain object mapping each of the thirteen box names to a number once you've scored it or <code>null</code> while it's still open. Everything else in the game is a function that reads these few variables.</p>
+        <div class="relative"><pre>const CATS = ["ones","twos","threes","fours","fives","sixes",
+  "threeKind","fourKind","fullHouse","smallStraight",
+  "largeStraight","yahtzee","chance"];        // the 13 boxes
+
+let dice     = [null,null,null,null,null];   // the five faces, 1..6
+let held     = [false,false,false,false,false]; // which you keep on re-roll
+let rollsLeft = 3;                            // three throws per turn
+let hasRolled = false;                        // rolled at least once this turn?
+let turn      = 1;                            // 1 .. 13
+let phase     = "play";                       // play | over
+let scores    = {};                           // box → number, or absent = open
+CATS.forEach(k =&gt; scores[k] = null);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Roll — but only the dice you didn't hold</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A roll re-throws only the loose dice: for each of the five, if it isn't held, replace it with a fresh 1–6. Held dice keep their face. Each roll costs one of your three, and after the first roll of a turn you're allowed to toggle holds. That single <code>if (!held[i])</code> is the entire "keep some, re-roll the rest" mechanic that the whole gamble of Yahtzee rests on.</p>
+        <div class="relative"><pre>function roll(){
+  if (phase !== "play" || rollsLeft &lt;= 0) return;
+  for (let i = 0; i &lt; 5; i++)
+    if (!held[i]) dice[i] = 1 + Math.floor(Math.random() * 6); // loose ones only
+  rollsLeft--;
+  hasRolled = true;
+  render();
+}
+function toggleHold(i){                         // click a die between rolls
+  if (phase !== "play" || !hasRolled || rollsLeft &lt;= 0) return;
+  held[i] = !held[i];
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">One helper to rule them all — counts of each face</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the trick that makes thirteen rules feel like one. Walk the five dice once and tally how many showed each face into a seven-slot array (index 0 unused, 1–6 the faces). From that single histogram every category is answerable: "three of a kind" is "does any count reach 3?", "sixes" is "count[6] × 6", a straight is a run of consecutive non-zero counts. Compute it once per hand and every score falls out of it.</p>
+        <div class="relative"><pre>function counts(d){                             // histogram of the faces
+  const c = [0,0,0,0,0,0,0];                    // c[1]..c[6]
+  for (const x of d) c[x]++;
+  return c;
+}
+function sum(d){ return d.reduce((a,b) =&gt; a + b, 0); }  // total of all five
+
+// e.g. dice [5,2,5,5,2]  →  counts = [0,0,2,0,0,3,0]
+//   c[5] = 3  (three fives),  c[2] = 2  (two twos)</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The upper section — and the +35 bonus at 63</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The six upper boxes are the simplest scores in the game: the "fives" box is worth the count of 5s times 5, and so on for every face. The famous bonus rewards spreading your luck: if the six upper boxes together reach <strong>63 or more</strong> you get a flat <strong>+35</strong>. Why 63? Because 63 is exactly <em>three of each face</em> — three 1s + three 2s + … + three 6s = 3 × (1+2+3+4+5+6) = 3 × 21 = 63. Averaging three-of-a-kind across the top half is the bonus's break-even line, and the whole bonus is one <code>&ge; 63</code> comparison.</p>
+        <div class="relative"><pre>const FACE = { ones:1, twos:2, threes:3, fours:4, fives:5, sixes:6 };
+
+function upperScore(cat, c){ return c[FACE[cat]] * FACE[cat]; } // count × face
+
+function upperSubtotal(){                       // the six upper boxes so far
+  return ["ones","twos","threes","fours","fives","sixes"]
+    .reduce((a, k) =&gt; a + (scores[k] || 0), 0);
+}
+function upperBonus(){
+  return upperSubtotal() &gt;= 63 ? 35 : 0;         // 63 = three of every face
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The lower section — every rule reads the histogram</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The seven lower boxes are combinations, and each is one question about <code>counts</code>. Three- and four-of-a-kind: if any face count reaches 3 (or 4), score the sum of all five dice, else zero. Full house: some face appears exactly 3 times <em>and</em> another exactly 2 → a fixed 25. Straights are a longest-run scan over the six counts — four in a row is a small straight (30), five in a row a large straight (40). Yahtzee is any count hitting 5 → 50. Chance is the escape hatch: just the sum, always.</p>
+        <div class="relative"><pre>function longestRun(c){                          // consecutive present faces
+  let run = 0, best = 0;
+  for (let f = 1; f &lt;= 6; f++){ run = c[f] ? run + 1 : 0; best = Math.max(best, run); }
+  return best;
+}
+function scoreFor(cat, d){
+  const c = counts(d), total = sum(d);
+  if (cat in FACE)           return c[FACE[cat]] * FACE[cat];
+  if (cat === "threeKind")   return c.some(n =&gt; n &gt;= 3) ? total : 0;
+  if (cat === "fourKind")    return c.some(n =&gt; n &gt;= 4) ? total : 0;
+  if (cat === "fullHouse")   return c.includes(3) &amp;&amp; c.includes(2) ? 25 : 0;
+  if (cat === "smallStraight") return longestRun(c) &gt;= 4 ? 30 : 0;
+  if (cat === "largeStraight") return longestRun(c) &gt;= 5 ? 40 : 0;
+  if (cat === "yahtzee")     return c.some(n =&gt; n === 5) ? 50 : 0;
+  if (cat === "chance")      return total;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Live preview + spend exactly one box a turn</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Because <code>scoreFor</code> is pure — dice in, number out — you can show a live preview: for every box that's still open, run it against the current dice and print the result in green. Choosing a box <em>commits</em> that number. The one iron rule of Yahtzee is enforced in three lines: you may only score an open box, and doing so writes the number, ends the turn, and resets the dice — so you always spend exactly one box per turn, even if that means banking a zero.</p>
+        <div class="relative"><pre>function chooseCategory(cat){
+  if (phase !== "play" || !hasRolled || scores[cat] !== null) return; // open only
+  scores[cat] = scoreFor(cat, dice);            // commit the previewed number
+  if (CATS.every(k =&gt; scores[k] !== null)){ phase = "over"; render(); return; }
+  turn++;                                        // next turn: fresh three rolls
+  rollsLeft = 3; hasRolled = false;
+  held = [false,false,false,false,false];
+  dice = [null,null,null,null,null];
+  render();
+}
+// preview for an open box = scoreFor(cat, dice), shown in green until committed</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Thirteen turns, then the grand total</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There are exactly as many turns as boxes: thirteen. When the last open box is filled the game is over. The grand total is three sums bolted together — the upper subtotal, plus the +35 bonus if it earned it, plus every lower box. Because unfilled boxes are <code>null</code> they simply count as zero in the running total, so the same total function works live during the game and as the final score at the end.</p>
+        <div class="relative"><pre>function lowerTotal(){
+  return ["threeKind","fourKind","fullHouse","smallStraight",
+          "largeStraight","yahtzee","chance"]
+    .reduce((a, k) =&gt; a + (scores[k] || 0), 0);
+}
+function grandTotal(){
+  return upperSubtotal() + upperBonus() + lowerTotal();
+}
+// game ends the moment CATS.every(k => scores[k] !== null) — 13 boxes, 13 turns</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 54 of GameFromZero done — the push-your-luck dice classic.</h3><p class="text-sm text-emerald-700 mt-2">You built the whole of Yahtzee with no dice physics and no rules engine — five integers, five held flags, a rolls-left counter, and a scorecard object of thirteen boxes. Every one of those thirteen scores reads from the same one-line helper: a <code>counts[1..6]</code> histogram of how many of each face you rolled. "Sum of the 4s", "is this a full house?", "is there a run of five?" all become a single expression over that array, and the famous +35 upper bonus is one <code>&ge; 63</code> test — 63 being exactly three of every face. Because the score function is pure it doubles as the live green preview, one-box-per-turn is three lines of bookkeeping, and the grand total is the upper subtotal plus the bonus plus the lower boxes. Next: add the Yahtzee bonus (+100 for extra fives-of-a-kind) and the joker rule, a two-player pass-and-play, an expected-value hint that tells you which dice to hold, or a solver that plays a whole game to maximise the average score. <strong>👉 Tomorrow — Day 55: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== YAHTZEE ENGINE (vanilla) =====
+const PIPS = { 1:[4], 2:[0,8], 3:[0,4,8], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8] };
+const FACE = { ones:1, twos:2, threes:3, fours:4, fives:5, sixes:6 };
+
+const UPPER = [
+  { key:"ones",   label:"Aces &middot; 1s",  hint:"Sum of all 1s" },
+  { key:"twos",   label:"Twos &middot; 2s",  hint:"Sum of all 2s" },
+  { key:"threes", label:"Threes &middot; 3s",hint:"Sum of all 3s" },
+  { key:"fours",  label:"Fours &middot; 4s", hint:"Sum of all 4s" },
+  { key:"fives",  label:"Fives &middot; 5s", hint:"Sum of all 5s" },
+  { key:"sixes",  label:"Sixes &middot; 6s", hint:"Sum of all 6s" },
+];
+const LOWER = [
+  { key:"threeKind",     label:"Three of a kind", hint:"Sum of all dice" },
+  { key:"fourKind",      label:"Four of a kind",  hint:"Sum of all dice" },
+  { key:"fullHouse",     label:"Full house",      hint:"3 + 2 &rarr; 25 pts" },
+  { key:"smallStraight", label:"Small straight",  hint:"4 in a row &rarr; 30" },
+  { key:"largeStraight", label:"Large straight",  hint:"5 in a row &rarr; 40" },
+  { key:"yahtzee",       label:"Yahtzee",         hint:"5 of a kind &rarr; 50" },
+  { key:"chance",        label:"Chance",          hint:"Sum of all dice" },
+];
+const CATS = UPPER.concat(LOWER).map(c => c.key);
+
+// ---- state ----
+let dice, held, rollsLeft, hasRolled, turn, phase, scores;
+
+function newGame(){
+  dice = [null,null,null,null,null];
+  held = [false,false,false,false,false];
+  rollsLeft = 3;
+  hasRolled = false;
+  turn = 1;
+  phase = "play";
+  scores = {};
+  CATS.forEach(k => scores[k] = null);
+  render();
+}
+
+// ---- scoring ----
+function counts(d){ const c = [0,0,0,0,0,0,0]; for (const x of d) c[x]++; return c; }
+function sum(d){ return d.reduce((a,b) => a + b, 0); }
+function longestRun(c){
+  let run = 0, best = 0;
+  for (let f = 1; f <= 6; f++){ run = c[f] ? run + 1 : 0; if (run > best) best = run; }
+  return best;
+}
+function scoreFor(cat, d){
+  const c = counts(d), total = sum(d);
+  if (cat in FACE)             return c[FACE[cat]] * FACE[cat];
+  if (cat === "threeKind")     return c.some(n => n >= 3) ? total : 0;
+  if (cat === "fourKind")      return c.some(n => n >= 4) ? total : 0;
+  if (cat === "fullHouse")     return (c.includes(3) && c.includes(2)) ? 25 : 0;
+  if (cat === "smallStraight") return longestRun(c) >= 4 ? 30 : 0;
+  if (cat === "largeStraight") return longestRun(c) >= 5 ? 40 : 0;
+  if (cat === "yahtzee")       return c.some(n => n === 5) ? 50 : 0;
+  if (cat === "chance")        return total;
+  return 0;
+}
+function upperSubtotal(){ return UPPER.reduce((a,c) => a + (scores[c.key] || 0), 0); }
+function upperBonus(){ return upperSubtotal() >= 63 ? 35 : 0; }
+function lowerTotal(){ return LOWER.reduce((a,c) => a + (scores[c.key] || 0), 0); }
+function grandTotal(){ return upperSubtotal() + upperBonus() + lowerTotal(); }
+
+// ---- turn actions ----
+function roll(){
+  if (phase !== "play" || rollsLeft <= 0) return;
+  for (let i = 0; i < 5; i++) if (!held[i]) dice[i] = 1 + Math.floor(Math.random() * 6);
+  rollsLeft--;
+  hasRolled = true;
+  render();
+}
+function toggleHold(i){
+  if (phase !== "play" || !hasRolled || rollsLeft <= 0) return;
+  held[i] = !held[i];
+  render();
+}
+function chooseCategory(cat){
+  if (phase !== "play" || !hasRolled || scores[cat] !== null) return;
+  scores[cat] = scoreFor(cat, dice);
+  if (CATS.every(k => scores[k] !== null)){ phase = "over"; render(); return; }
+  turn++;
+  rollsLeft = 3; hasRolled = false;
+  held = [false,false,false,false,false];
+  dice = [null,null,null,null,null];
+  render();
+}
+
+// ===== rendering =====
+const diceEl   = document.getElementById("yz-dice");
+const sheetEl  = document.getElementById("yz-sheet");
+const statusEl = document.getElementById("yz-status");
+const turnEl   = document.getElementById("yz-turn");
+const rollsEl  = document.getElementById("yz-rolls");
+const upperEl  = document.getElementById("yz-upper");
+const totalEl  = document.getElementById("yz-total");
+const overEl   = document.getElementById("yz-over");
+const rollBtn  = document.getElementById("yz-roll");
+const newBtn   = document.getElementById("yz-new");
+
+function renderDice(){
+  diceEl.innerHTML = "";
+  const canRoll = phase === "play" && hasRolled && rollsLeft > 0;
+  for (let i = 0; i < 5; i++){
+    const v = dice[i];
+    const d = document.createElement("div");
+    if (v === null){
+      d.className = "yz-die blank";
+    } else {
+      d.className = "yz-die" + (held[i] ? " held" : "") + (canRoll ? " rollable" : "");
+      d.dataset.i = i;
+      for (let p = 0; p < 9; p++){
+        const pip = document.createElement("div");
+        pip.className = "yz-pip" + (PIPS[v].includes(p) ? " on" : "");
+        d.appendChild(pip);
+      }
+      if (held[i]){ const tag = document.createElement("div"); tag.className = "yz-hold-tag"; tag.textContent = "HOLD"; d.appendChild(tag); }
+    }
+    diceEl.appendChild(d);
+  }
+}
+
+function rowHTML(cat){
+  const filled = scores[cat.key] !== null;
+  const canScore = phase === "play" && hasRolled;
+  let cls = "yz-row", valCls = "val", val;
+  if (filled){
+    cls += " filled"; val = scores[cat.key];
+  } else if (canScore){
+    const s = scoreFor(cat.key, dice);
+    cls += " open"; valCls = "val preview" + (s === 0 ? " zero" : ""); val = s;
+  } else {
+    val = "&mdash;";
+  }
+  const dataAttr = (!filled && canScore) ? ' data-cat="' + cat.key + '"' : "";
+  return '<div class="' + cls + '"' + dataAttr + '>' +
+           '<div class="lbl">' + cat.label + '<small>' + cat.hint + '</small></div>' +
+           '<div class="' + valCls + '">' + val + '</div>' +
+         '</div>';
+}
+
+function renderSheet(){
+  const up = upperSubtotal(), bonus = upperBonus();
+  let upHTML = '<div class="yz-col"><h4>Upper section</h4>' +
+    UPPER.map(rowHTML).join("") +
+    '<div class="yz-subtotal"><span>Subtotal</span><span>' + up + ' / 63</span></div>' +
+    '<div class="yz-subtotal' + (bonus ? " hit" : "") + '"><span>Bonus at 63</span><span>+' + bonus + '</span></div>' +
+    '</div>';
+  let loHTML = '<div class="yz-col"><h4>Lower section</h4>' +
+    LOWER.map(rowHTML).join("") +
+    '<div class="yz-subtotal grand"><span>Grand total</span><span>' + grandTotal() + '</span></div>' +
+    '</div>';
+  sheetEl.innerHTML = upHTML + loHTML;
+}
+
+function updateHUD(){
+  turnEl.textContent  = Math.min(turn, 13) + "/13";
+  rollsEl.textContent = rollsLeft;
+  upperEl.textContent = upperSubtotal() + "/63";
+  totalEl.textContent = grandTotal();
+}
+
+function updateStatus(){
+  let msg, col = "#a7f3d0";
+  if (phase === "over"){ msg = "🏆 Game over — you scored " + grandTotal() + " points!"; col = "#6ee7b7"; }
+  else if (!hasRolled)  msg = "Turn " + turn + "/13 — press Roll to throw all five dice";
+  else if (rollsLeft > 0) msg = rollsLeft + " roll" + (rollsLeft === 1 ? "" : "s") + " left — click dice to hold, or pick a box to score";
+  else msg = "No rolls left — click a scorecard box to bank a score this turn";
+  statusEl.textContent = msg; statusEl.style.color = col;
+}
+
+function updateButtons(){
+  rollBtn.disabled = phase !== "play" || rollsLeft <= 0;
+  rollBtn.textContent = !hasRolled ? "🎲 Roll dice" : "🎲 Roll (" + rollsLeft + " left)";
+}
+
+function renderOver(){
+  if (phase === "over"){
+    document.getElementById("yz-over-score").textContent = "You scored " + grandTotal() + " points";
+    document.getElementById("yz-over-brk").innerHTML =
+      "Upper " + upperSubtotal() + " + bonus " + upperBonus() + " + lower " + lowerTotal();
+    overEl.classList.remove("hidden");
+  } else {
+    overEl.classList.add("hidden");
+  }
+}
+
+function render(){ renderDice(); renderSheet(); updateHUD(); updateStatus(); updateButtons(); renderOver(); }
+
+// ===== controls =====
+diceEl.addEventListener("click", e => {
+  const d = e.target.closest(".yz-die[data-i]");
+  if (d) toggleHold(+d.dataset.i);
+});
+sheetEl.addEventListener("click", e => {
+  const r = e.target.closest(".yz-row.open[data-cat]");
+  if (r) chooseCategory(r.dataset.cat);
+});
+rollBtn.onclick = roll;
+newBtn.onclick  = newGame;
+document.getElementById("yz-again").onclick = newGame;
+
+window.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  if (e.key === " " || e.code === "Space"){ e.preventDefault(); roll(); }
+  else if (e.key >= "1" && e.key <= "5"){ toggleHold(+e.key - 1); }
+  else if (e.key.toLowerCase() === "n"){ newGame(); }
+});
+
+// ===== boot =====
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. Five ints and a scorecard object",
+   why:"Yahtzee looks like it needs dice objects and a big rules table, but the whole state fits in a handful of variables. Five integers hold the faces showing, five booleans mark the dice you're keeping for the next throw, a counter tracks how many of your three rolls are left, and the scorecard is a plain object mapping each of the thirteen box names to a number once scored, or null while it's still open. There is no board — every action in the game is just a function reading these few values.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">dice&nbsp;&nbsp;= [5, 2, 5, 5, 2]&nbsp;&nbsp;(faces 1..6)<br>held&nbsp;&nbsp;= [T, F, T, T, F]&nbsp;&nbsp;(keep on re-roll)<br>rollsLeft = 2&nbsp;&nbsp;of 3<br><br>scores = { ones:3, fives:null, yahtzee:null, ... }<br>null = box still open</div>`,
+   code:`const CATS = ["ones","twos","threes","fours","fives","sixes",
+  "threeKind","fourKind","fullHouse","smallStraight",
+  "largeStraight","yahtzee","chance"];       // 13 boxes
+
+let dice      = [null,null,null,null,null];  // the five faces
+let held      = [false,false,false,false,false];
+let rollsLeft = 3;                            // three throws a turn
+let scores    = {};
+CATS.forEach(k => scores[k] = null);          // every box open` },
+
+ { title:"2. Roll only the dice you didn't hold",
+   why:"The gamble of Yahtzee is the hold-and-reroll. A roll walks all five dice and re-throws only the ones you haven't frozen — held dice keep their face, loose ones get a fresh 1 to 6. Each throw spends one of your three rolls a turn, and after the first throw you may click dice to toggle their held state before throwing again. That single 'if this die isn't held, re-roll it' line is the entire keep-some-chase-the-rest mechanic.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">throw 1: [3 1 5 5 2]&nbsp;&nbsp;→ hold the two 5s<br>throw 2: [5 5 <b>4 6 5</b>]&nbsp;&nbsp;→ hold three 5s<br>throw 3: [5 5 5 <b>5</b> <b>1</b>]&nbsp;&nbsp;→ four 5s!<br><br>held dice never change · loose ones re-roll</div>`,
+   code:`function roll(){
+  if (rollsLeft <= 0) return;
+  for (let i = 0; i < 5; i++)
+    if (!held[i]) dice[i] = 1 + Math.floor(Math.random()*6); // loose only
+  rollsLeft--;
+  hasRolled = true;
+}
+function toggleHold(i){ if (hasRolled) held[i] = !held[i]; }` },
+
+ { title:"3. The counts array — the one helper behind all 13",
+   why:"Here is the idea that collapses thirteen scoring rules into almost nothing. Walk the five dice once and tally how many of each face you rolled into a seven-slot array — index 0 unused, indices 1 through 6 the faces. From that little histogram every single category is answerable without touching the dice again: 'three of a kind' asks does any slot reach 3, 'sixes' is slot 6 times 6, a straight is a run of consecutive non-zero slots. Compute counts once, and all thirteen scores read straight out of it.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">dice&nbsp;&nbsp;= [5, 2, 5, 5, 2]<br>&darr; tally each face<br>counts = [_, 0, <b>2</b>, 0, 0, <b>3</b>, 0]<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;idx 0 1&nbsp;&nbsp;2&nbsp;3 4&nbsp;&nbsp;5 6<br><br>c[5]=3 three fives · c[2]=2 two twos</div>`,
+   code:`function counts(d){
+  const c = [0,0,0,0,0,0,0];   // c[1]..c[6]
+  for (const x of d) c[x]++;    // one pass over the five dice
+  return c;
+}
+function sum(d){ return d.reduce((a,b) => a+b, 0); }
+// [5,2,5,5,2] → counts [0,0,2,0,0,3,0], sum 19` },
+
+ { title:"4. The upper section and the +35 bonus at 63",
+   why:"The six upper boxes are the plainest scores: the fives box is the count of 5s times 5, and likewise for each face — count times face value. The bonus is the clever part. If your six upper boxes together reach 63 or more, you get a flat +35. Why 63? Because 63 is exactly three of every face: three 1s + three 2s + ... + three 6s = 3 x (1+2+3+4+5+6) = 3 x 21 = 63. So averaging three-of-a-kind across the top half is the break-even, and the entire bonus is a single 'is the subtotal at least 63' comparison.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">fives box with [5,2,5,5,2] = c[5] x 5 = 15<br><br>three of each face:<br>3x1 + 3x2 + 3x3 + 3x4 + 3x5 + 3x6<br>= 3 x 21 = <b>63</b><br><br>subtotal &ge; 63 &nbsp;&rarr;&nbsp; +35 bonus</div>`,
+   code:`const FACE = { ones:1, twos:2, threes:3, fours:4, fives:5, sixes:6 };
+
+function upperSubtotal(){
+  return ["ones","twos","threes","fours","fives","sixes"]
+    .reduce((a,k) => a + (scores[k] || 0), 0);
+}
+function upperBonus(){
+  return upperSubtotal() >= 63 ? 35 : 0;   // 63 = three of each face
+}` },
+
+ { title:"5. The lower section — one question about counts each",
+   why:"The seven lower boxes are combinations, and every one is a single question asked of the counts array. Three- and four-of-a-kind: if any face count reaches 3 (or 4), score the sum of all five dice, otherwise zero. Full house: one face appears exactly three times and another exactly twice, for a fixed 25. Straights come from a longest-run scan across the six counts — four consecutive faces is a small straight worth 30, five consecutive a large straight worth 40. Yahtzee is any count hitting 5, worth 50. Chance is the escape hatch: the plain sum, no condition at all.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">any c[f] &ge; 3&nbsp;&rarr; 3-kind = sum of dice<br>a 3 and a 2 in counts&nbsp;&rarr; full house = 25<br>run of 4 present faces&nbsp;&rarr; sm straight = 30<br>run of 5&nbsp;&rarr; lg straight = 40<br>any c[f] = 5&nbsp;&rarr; YAHTZEE = 50<br>chance&nbsp;&rarr; just the sum</div>`,
+   code:`function longestRun(c){                 // consecutive present faces
+  let run = 0, best = 0;
+  for (let f = 1; f <= 6; f++){ run = c[f] ? run+1 : 0; best = Math.max(best, run); }
+  return best;
+}
+function scoreFor(cat, d){
+  const c = counts(d), total = sum(d);
+  if (cat in FACE)           return c[FACE[cat]] * FACE[cat];
+  if (cat === "threeKind")   return c.some(n => n>=3) ? total : 0;
+  if (cat === "fourKind")    return c.some(n => n>=4) ? total : 0;
+  if (cat === "fullHouse")   return c.includes(3) && c.includes(2) ? 25 : 0;
+  if (cat === "smallStraight") return longestRun(c) >= 4 ? 30 : 0;
+  if (cat === "largeStraight") return longestRun(c) >= 5 ? 40 : 0;
+  if (cat === "yahtzee")     return c.some(n => n===5) ? 50 : 0;
+  if (cat === "chance")      return total;
+}` },
+
+ { title:"6. Live preview + spend one box a turn",
+   why:"Because scoreFor is pure — give it dice, get a number — it doubles as a live preview: for every box still open, run it against the current dice and show the result in green so you can see what each choice is worth before you commit. Picking a box locks in that number. And the one unbreakable rule of Yahtzee is enforced in a few lines: you may only choose an open box, and choosing it writes the score, ends the turn and resets the dice. So you always spend exactly one box every turn — even when the dice betrayed you and the best you can do is cross off a zero.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">open boxes show a green preview:<br>full house <b>25</b> · sm straight <b>0</b> · chance <b>19</b><br><br>click one &rarr; it locks, the turn ends<br>13 boxes, 13 turns, no skipping</div>`,
+   code:`function chooseCategory(cat){
+  if (!hasRolled || scores[cat] !== null) return;  // open box only
+  scores[cat] = scoreFor(cat, dice);               // commit the preview
+  if (CATS.every(k => scores[k] !== null)){ phase = "over"; return; }
+  turn++;                                            // reset for next turn
+  rollsLeft = 3; hasRolled = false;
+  held = [false,false,false,false,false];
+  dice = [null,null,null,null,null];
+}` },
+
+ { title:"7. Thirteen turns, then the grand total",
+   why:"There are exactly as many turns as there are boxes: thirteen. The game is over the moment the last open box is filled — no separate turn counter needed, just 'are all thirteen non-null'. The grand total bolts three sums together: the upper subtotal, plus the +35 bonus if the upper half earned it, plus every lower box. Since unfilled boxes are null and count as zero, the very same total function serves as the live running score during play and as the final number when the last box closes.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">all 13 boxes filled&nbsp;&rarr; GAME OVER<br><br>grand = upper subtotal<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ (subtotal &ge; 63 ? 35 : 0)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ lower total<br><br>same sum runs live and final</div>`,
+   code:`function lowerTotal(){
+  return ["threeKind","fourKind","fullHouse","smallStraight",
+          "largeStraight","yahtzee","chance"]
+    .reduce((a,k) => a + (scores[k] || 0), 0);
+}
+function grandTotal(){
+  return upperSubtotal() + upperBonus() + lowerTotal();
+}
+// over when CATS.every(k => scores[k] !== null)` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>
