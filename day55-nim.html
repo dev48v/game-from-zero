@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 55 — Nim</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+  .hidden { display:none; }
+
+  /* ===== nim ===== */
+  .nim-wrap { display:flex; flex-direction:column; gap:20px; align-items:center; }
+  .nim-heaps { display:flex; flex-direction:column; gap:16px; width:100%; max-width:600px; }
+  .nim-heap { display:flex; align-items:center; gap:14px; padding:8px 12px; border-radius:14px;
+              background:#0b1220; border:1px solid #1e293b; }
+  .nim-heap.active { border-color:#34d399; box-shadow:0 0 0 2px rgba(52,211,153,.25); }
+  .nim-heap-lbl { width:96px; flex-shrink:0; line-height:1.15; }
+  .nim-heap-lbl .name { color:#5eead4; font-size:12px; font-weight:800; letter-spacing:.06em; }
+  .nim-heap-lbl .cnt  { color:#64748b; font-size:11px; font-variant-numeric:tabular-nums; }
+  .nim-objs { display:flex; gap:9px; flex-wrap:wrap; align-items:center; min-height:34px; }
+  .nim-obj { width:30px; height:30px; border-radius:50%; transition:transform .1s, box-shadow .15s, background .15s; }
+  .nim-obj.live {
+    background:linear-gradient(145deg,#f8fafc,#94a3b8);
+    box-shadow: inset 0 2px 2px rgba(255,255,255,.65), 0 4px 8px rgba(0,0,0,.4);
+    cursor:pointer;
+  }
+  .nim-obj.live:hover { transform:translateY(-3px); }
+  .nim-obj.ghost { background:transparent; border:2px dashed #1e293b; box-shadow:none; }
+  .nim-obj.sel {
+    transform:translateY(-6px);
+    background:linear-gradient(145deg,#fecaca,#ef4444);
+    box-shadow: 0 0 0 3px #f87171, 0 8px 15px rgba(239,68,68,.45);
+  }
+  .nim-obj.disabled { cursor:default; }
+  .nim-obj.disabled:hover { transform:none; }
+
+  .nim-sum { width:100%; max-width:600px; background:#07130f; border:1px solid #1e293b; border-radius:14px;
+             padding:12px 14px; font-family:ui-monospace,Menlo,monospace; }
+  .nim-sum h4 { color:#5eead4; font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
+  .nim-brow { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:13px; color:#94a3b8; padding:2px 0; }
+  .nim-brow .bits { letter-spacing:.28em; color:#cbd5e1; }
+  .nim-brow .bits .one { color:#6ee7b7; font-weight:800; }
+  .nim-brow.total { border-top:1px solid #1e293b; margin-top:6px; padding-top:8px; color:#e2e8f0; font-weight:800; }
+  .nim-brow.total .bits { letter-spacing:.28em; }
+  .nim-verdict { margin-top:8px; font-size:12px; font-family:-apple-system,"Inter",sans-serif; }
+  .nim-verdict.win  { color:#6ee7b7; }
+  .nim-verdict.lose { color:#fca5a5; }
+
+  .nim-over { position:absolute; inset:0; background:rgba(2,6,23,.9); border-radius:19px;
+              display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; z-index:5; text-align:center; padding:20px; }
+  .nim-over h3 { font-size:44px; font-weight:900; }
+  .nim-over h3.win  { color:#6ee7b7; }
+  .nim-over h3.lose { color:#fca5a5; }
+  .nim-over .brk { font-size:14px; color:#94a3b8; max-width:360px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 55</div>
+      <h1 class="text-xl font-bold">⚪ Nim — A Few Heaps of Ordinary Objects and a Rule So Simple It Fits in One Sentence — On Your Turn Take as Many as You Like, One or All, but Only From a Single Heap, and Whoever Grabs the Very Last Object Wins (Flip a Toggle and It's Misère: the One Who Takes the Last Object Loses Instead) — Which Sounds Like Pure Luck Until You Learn the 1901 Secret That Makes It Solved Mathematics: XOR Every Heap Size Together Into One Number Called the Nim-Sum, and the Whole Game Collapses to a Single Fact — a Position Is a Guaranteed Loss for the Player About to Move If and Only If That Nim-Sum Is Zero, Because Every Move Off a Balanced Position Unbalances Some Binary Column and Every Move Onto One Can Be Answered by Rebalancing It Right Back, So the Perfect Move Is Always to Shrink Exactly One Heap Until the Nim-Sum Reads Zero Again and Hand Your Opponent a Dead Position — Played Here Against an AI That Computes That Nim-Sum Every Turn and Plays the Rebalancing Move Whenever One Exists, in Pure Vanilla JavaScript, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Take from one heap, force the last move — beat the nim-sum AI.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm">On your turn, <strong>click an object</strong> in any heap — that object and every object to its right light up red, so one click chooses <em>how many</em> to take from that single heap. Press <strong>✓ Take</strong> to confirm the move, then the AI replies. In the default <strong>normal</strong> game, whoever takes the <strong>last</strong> object <strong>wins</strong>; flip the toggle for <strong>misère</strong>, where taking the last object <strong>loses</strong>. The AI plays the perfect <strong>nim-sum</strong> strategy — turn on <strong>Show nim-sum</strong> to watch it, and to learn the one trick that turns this into solved mathematics. Move first, keep the nim-sum at zero for your opponent, and you can beat a perfect player.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🎯 Turn</div>
+          <div class="text-2xl font-black stat" id="nim-turn">You</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">⚙️ Play</div>
+          <div class="text-2xl font-black stat" id="nim-mode">Normal</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">⊕ Nim-sum</div>
+          <div class="text-2xl font-black stat" id="nim-xor">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">⚪ Objects left</div>
+          <div class="text-2xl font-black stat" id="nim-left">0</div>
+        </div>
+      </div>
+
+      <!-- board console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="nim-status">Your turn — click objects in a heap to take them</div>
+        <div class="nim-wrap">
+          <div class="nim-heaps" id="nim-heaps"></div>
+          <div class="nim-sum hidden" id="nim-panel"></div>
+        </div>
+        <div id="nim-over" class="nim-over hidden">
+          <h3 id="nim-over-title" class="win">YOU WIN</h3>
+          <div class="brk" id="nim-over-brk"></div>
+          <button id="nim-again" class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold mt-2">↻ Play again</button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <button id="nim-take"  class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-2.5 rounded-lg font-bold">✓ Take</button>
+        <button id="nim-clear" class="btn bg-slate-700 hover:bg-slate-800 text-white px-5 py-2.5 rounded-lg font-bold">✗ Clear</button>
+        <button id="nim-toggle-mode" class="btn bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold">Normal ⇄ Misère</button>
+        <button id="nim-toggle-sum"  class="btn bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold">Show nim-sum</button>
+        <button id="nim-new"   class="btn bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        There is barely any game state here — a list of heap sizes like <span class="keycap">[3, 4, 5]</span>, whose turn it is, and one boolean for misère. A move mutates a single number: <span class="keycap">heaps[i] -= n</span>. The entire "intelligence" of the opponent is one line — <span class="keycap">heaps.reduce((a,h) =&gt; a ^ h, 0)</span> — the XOR of every heap size. When that nim-sum is non-zero the AI can always shrink one heap to make it zero and hand you a dead position; when it is already zero the AI is theoretically lost and merely plays on, so a human who never breaks a balanced position beats it. <span class="keycap">Enter</span> confirms a take, <span class="keycap">N</span> starts a new game.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How XOR turns a pile-taking game into solved mathematics</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Nim has almost no code and almost all theory. The state is a list of heap sizes; a move subtracts from one of them; the game ends when they are all zero. What makes it worth building is the opponent: a <em>provably perfect</em> AI in about ten lines, resting on one 1901 theorem — a position is lost for the player to move exactly when the XOR of the heap sizes (the "nim-sum") is zero. Below, the whole engine in seven short blocks: state, a move, the nim-sum, the theorem, the winning move that always zeroes it, the misère endgame twist, and the wiring. Copy each block in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The whole game is a list of heap sizes</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no board and there are no piece objects — the entire position is an array of integers, one per heap. Alongside it you only need to know whose turn it is, whether you are playing misère (last object <em>loses</em> instead of wins), and the little move the player is currently building with clicks. A second copy of the starting sizes is kept just so the display can draw the already-taken objects as faded "ghosts"; it plays no part in the rules.</p>
+        <div class="relative"><pre>let heaps    = [3, 4, 5];           // sizes of each heap — the whole position
+let original = [3, 4, 5];           // starting sizes, only for drawing ghosts
+let turn     = "you";               // "you" | "cpu"
+let misere   = false;               // false = take the LAST object to WIN
+let phase    = "play";              // "play" | "over"
+let winner   = null;
+let sel      = { heap:-1, take:0 }; // the move you are building by clicking</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">A move: take any number from one heap</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The single rule of Nim is that on your turn you remove <em>at least one</em> object, all from the <em>same</em> heap — one, several, or the whole heap, your choice. So the move itself is one subtraction on one array slot. The game is over the instant every heap is empty; the player who made that final move took the last object, which wins in normal play and loses in misère.</p>
+        <div class="relative"><pre>function applyMove(heaps, heap, take){
+  heaps[heap] -= take;              // remove `take` objects from one heap — that's it
+}
+function legal(heaps, heap, take){
+  return take &gt;= 1 &amp;&amp; take &lt;= heaps[heap];   // at least one, at most the whole heap
+}
+function isOver(heaps){
+  return heaps.every(h =&gt; h === 0);          // all heaps empty = game over
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The nim-sum — XOR every heap size</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Here is the one magic number the whole game turns on. Fold the heap sizes together with bitwise XOR and you get the <strong>nim-sum</strong>. XOR is binary addition with the carries thrown away, so each bit of the nim-sum is <code>1</code> exactly when an <em>odd</em> number of heaps have that bit set. A nim-sum of zero therefore means every binary column is balanced — an even number of heaps contribute each power of two.</p>
+        <div class="relative"><pre>function nimSum(heaps){
+  return heaps.reduce((a, h) =&gt; a ^ h, 0);  // XOR fold — the "nim-sum"
+}
+
+//   heaps [3, 4, 5]
+//     3 = 0 1 1
+//     4 = 1 0 0
+//     5 = 1 0 1
+//   xor = 0 1 0   → nim-sum 2   (bit columns: two 1s, two 4s → balanced;
+//                                 one 2 → the odd one out, so bit set)</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Bouton's theorem — nim-sum zero is a dead position</h3></div>
+        <p class="text-sm text-slate-600 mb-3">In 1901 Charles Bouton proved the entire game with a single statement: <strong>a position is a loss for the player about to move if and only if its nim-sum is zero.</strong> The reasoning is a two-line invariant. From a <em>balanced</em> position (sum zero) any move you make touches exactly one heap, flips some bits, and so must <em>unbalance</em> at least one column — you always hand back a non-zero sum. From an <em>unbalanced</em> position (sum non-zero) there is always a move that rebalances it to zero. So a player who keeps handing over zero can never be forced off it, and the last balanced position — every heap empty — is the loss.</p>
+        <div class="relative"><pre>function isLosingForMover(heaps){
+  return nimSum(heaps) === 0;       // sum 0 → mover loses under perfect play
+}
+//   sum === 0  → any move UNbalances a column → opponent gets a non-zero sum
+//   sum !== 0  → you can always rebalance to 0 → opponent is stuck again
+//   [0,0,0] has sum 0 and no move → the player to "move" has already lost</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The winning move always zeroes the nim-sum</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Turning the theorem into a move is three lines. When the sum <code>x</code> is non-zero, look at each heap's target size <code>h ^ x</code>. Because <code>x</code> has a highest set bit, the heap that also has that bit set will see it cleared by the XOR, making <code>h ^ x &lt; h</code> — so you can legally <em>shrink</em> that heap to <code>h ^ x</code>. After the move the new nim-sum is <code>x ^ h ^ (h ^ x) = 0</code>: you have rebalanced every column and handed your opponent a dead position. There is always at least one such heap whenever <code>x ≠ 0</code>.</p>
+        <div class="relative"><pre>function winningMove(heaps){
+  const x = nimSum(heaps);
+  if (x === 0) return null;                    // balanced → no winning move exists
+  for (let i = 0; i &lt; heaps.length; i++){
+    const target = heaps[i] ^ x;               // where this heap must land
+    if (target &lt; heaps[i])                     // can only ever SHRINK a heap
+      return { heap:i, take: heaps[i] - target };
+  }
+}
+// proof the new sum is 0:   x ^ heaps[i] ^ (heaps[i] ^ x)  ==  0</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Misère — the endgame flips, and only then</h3></div>
+        <p class="text-sm text-slate-600 mb-3">If taking the last object <em>loses</em>, the surprise is that you play the <strong>exact same nim-sum strategy</strong> almost the whole way — it only diverges at the very end. Watch for the moment when at most one heap has more than one object. Before that, play normal Nim. At that endgame you switch goals: leave your opponent an <strong>odd number of single-object heaps</strong>, because a player facing an odd count of lone objects is forced to take the last one. So if one fat heap remains, reduce it to <code>0</code> or <code>1</code> to make the count of ones odd; if only ones are left, you are simply counting parity.</p>
+        <div class="relative"><pre>function bestMove(heaps, misere){
+  const big  = heaps.filter(h =&gt; h &gt; 1).length;   // heaps with 2+ objects
+  const ones = heaps.filter(h =&gt; h === 1).length; // single-object heaps
+  if (misere &amp;&amp; big &lt;= 1){                         // the misère endgame — and ONLY here
+    if (big === 1){                                // one fat heap left to shape
+      const i = heaps.findIndex(h =&gt; h &gt; 1);
+      const target = ones % 2 === 0 ? 1 : 0;       // leave an ODD number of 1s
+      return { heap:i, take: heaps[i] - target };
+    }
+    const i = heaps.findIndex(h =&gt; h === 1);       // only 1s remain: forced parity
+    return { heap:i, take:1 };
+  }
+  return winningMove(heaps) || playOn(heaps);      // otherwise: normal nim-sum theory
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Playing on, and wiring the turns</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When the nim-sum is already zero the AI is, in theory, lost — there is no rebalancing move — so it just <em>plays on</em>: it takes one object from the largest heap and hopes you slip. That is exactly why a human who understands the trick can beat a "perfect" opponent: move first from a non-zero position, always hand back a zero, and the AI never gets a chance. The rest is turn-taking — apply the move, check for game over (the last mover wins in normal play, loses in misère), otherwise pass the turn.</p>
+        <div class="relative"><pre>function playOn(heaps){                          // lost position → stall for a mistake
+  let i = 0;
+  for (let k = 1; k &lt; heaps.length; k++) if (heaps[k] &gt; heaps[i]) i = k;
+  return { heap:i, take:1 };
+}
+function cpuTurn(){
+  const m = bestMove(heaps, misere);            // perfect when a winning move exists
+  applyMove(heaps, m.heap, m.take);
+  if (isOver(heaps)) finish("cpu");             // "cpu" took the last object
+  else               turn = "you";
+}
+function finish(mover){                          // who took the last object?
+  phase = "over";
+  winner = misere ? other(mover) : mover;       // misère: last mover LOSES
+}
+const other = p =&gt; p === "you" ? "cpu" : "you";</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 55 of GameFromZero done — the game mathematics completely solved.</h3><p class="text-sm text-emerald-700 mt-2">You built a game with a provably perfect opponent in about ten lines. The position is just a list of heap sizes; a move is one subtraction; the whole strategy is a single number — the XOR of the heaps, the nim-sum. Bouton's 1901 theorem says a position is lost for the mover exactly when that number is zero, and the winning move is always the one that shrinks a heap until the nim-sum reads zero again, because <code>x ^ h ^ (h ^ x) = 0</code>. Misère plays identically until the endgame, where you flip to leaving an odd number of lone objects. Next: extend it to <strong>Nim with a bound</strong> (take at most <code>k</code>, a Sprague–Grundy warm-up), add <strong>Grundy numbers</strong> so any impartial game reduces to a Nim heap, build <strong>subtraction games</strong> and <strong>Wythoff's Nim</strong> with its golden-ratio losing positions, or show the full binary breakdown live as a teaching board. <strong>👉 Tomorrow — Day 56: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== NIM ENGINE (vanilla) =====
+// ---- state ----
+let heaps, original, turn, misere, phase, winner, sel, lastCpu, showSum;
+
+function newGame(randomize){
+  if (randomize){
+    const n = 3 + Math.floor(Math.random() * 2);            // 3 or 4 heaps
+    original = Array.from({ length:n }, () => 1 + Math.floor(Math.random() * 7));
+  }
+  heaps   = original.slice();
+  turn    = "you";
+  phase   = "play";
+  winner  = null;
+  sel     = { heap:-1, take:0 };
+  lastCpu = null;
+  render();
+}
+
+// ---- rules ----
+function applyMove(hs, heap, take){ hs[heap] -= take; }
+function legal(hs, heap, take){ return take >= 1 && take <= hs[heap]; }
+function isOver(hs){ return hs.every(h => h === 0); }
+function other(p){ return p === "you" ? "cpu" : "you"; }
+
+// ---- the nim-sum ----
+function nimSum(hs){ return hs.reduce((a, h) => a ^ h, 0); }
+
+// ---- perfect AI ----
+function winningMove(hs){
+  const x = nimSum(hs);
+  if (x === 0) return null;
+  for (let i = 0; i < hs.length; i++){
+    const target = hs[i] ^ x;
+    if (target < hs[i]) return { heap:i, take: hs[i] - target };
+  }
+  return null;
+}
+function playOn(hs){
+  let i = -1;
+  for (let k = 0; k < hs.length; k++) if (hs[k] > 0 && (i < 0 || hs[k] > hs[i])) i = k;
+  return { heap:i, take:1 };
+}
+function bestMove(hs, mis){
+  const big  = hs.filter(h => h > 1).length;
+  const ones = hs.filter(h => h === 1).length;
+  if (mis && big <= 1){
+    if (big === 1){
+      const i = hs.findIndex(h => h > 1);
+      const target = ones % 2 === 0 ? 1 : 0;   // leave an odd number of 1-heaps
+      return { heap:i, take: hs[i] - target };
+    }
+    const i = hs.findIndex(h => h === 1);
+    return { heap:i, take:1 };
+  }
+  return winningMove(hs) || playOn(hs);
+}
+
+// ---- turn flow ----
+function confirmMove(){
+  if (phase !== "play" || turn !== "you" || sel.heap < 0 || !legal(heaps, sel.heap, sel.take)) return;
+  applyMove(heaps, sel.heap, sel.take);
+  sel = { heap:-1, take:0 };
+  if (isOver(heaps)){ finish("you"); return; }
+  turn = "cpu";
+  render();
+  setTimeout(cpuTurn, 700);
+}
+function cpuTurn(){
+  if (phase !== "play" || turn !== "cpu") return;
+  const m = bestMove(heaps, misere);
+  applyMove(heaps, m.heap, m.take);
+  lastCpu = m;
+  if (isOver(heaps)){ finish("cpu"); return; }
+  turn = "you";
+  render();
+}
+function finish(mover){
+  phase  = "over";
+  winner = misere ? other(mover) : mover;       // misère: taking the last object loses
+  render();
+}
+
+// ---- selection (player clicks) ----
+function selectFrom(heap, liveIdx){
+  if (phase !== "play" || turn !== "you") return;
+  sel = { heap, take: heaps[heap] - liveIdx };  // take this object + all to its right
+  render();
+}
+function clearSel(){ sel = { heap:-1, take:0 }; render(); }
+
+// ===== rendering =====
+const heapsEl  = document.getElementById("nim-heaps");
+const panelEl  = document.getElementById("nim-panel");
+const statusEl = document.getElementById("nim-status");
+const turnEl   = document.getElementById("nim-turn");
+const modeEl   = document.getElementById("nim-mode");
+const xorEl    = document.getElementById("nim-xor");
+const leftEl   = document.getElementById("nim-left");
+const overEl   = document.getElementById("nim-over");
+const takeBtn  = document.getElementById("nim-take");
+const clearBtn = document.getElementById("nim-clear");
+const modeBtn  = document.getElementById("nim-toggle-mode");
+const sumBtn   = document.getElementById("nim-toggle-sum");
+const newBtn   = document.getElementById("nim-new");
+
+function renderHeaps(){
+  heapsEl.innerHTML = "";
+  const yourTurn = phase === "play" && turn === "you";
+  heaps.forEach((h, i) => {
+    const row = document.createElement("div");
+    row.className = "nim-heap" + (sel.heap === i ? " active" : "");
+    const lbl = document.createElement("div");
+    lbl.className = "nim-heap-lbl";
+    lbl.innerHTML = '<div class="name">HEAP ' + (i + 1) + '</div><div class="cnt">' + h + ' left</div>';
+    row.appendChild(lbl);
+
+    const objs = document.createElement("div");
+    objs.className = "nim-objs";
+    const gone = original[i] - h;                          // already-taken objects
+    for (let g = 0; g < gone; g++){
+      const o = document.createElement("div");
+      o.className = "nim-obj ghost";
+      objs.appendChild(o);
+    }
+    const selStart = (sel.heap === i) ? h - sel.take : h;  // first highlighted live index
+    for (let j = 0; j < h; j++){
+      const o = document.createElement("div");
+      const selected = (sel.heap === i && j >= selStart);
+      o.className = "nim-obj live" + (selected ? " sel" : "") + (yourTurn ? "" : " disabled");
+      if (yourTurn){ o.dataset.heap = i; o.dataset.idx = j; }
+      objs.appendChild(o);
+    }
+    row.appendChild(objs);
+    heapsEl.appendChild(row);
+  });
+}
+
+function bin(n, w){ return n.toString(2).padStart(w, "0"); }
+function bitsHTML(str){
+  return str.split("").map(c => c === "1" ? '<span class="one">1</span>' : "0").join("");
+}
+function renderPanel(){
+  if (!showSum){ panelEl.classList.add("hidden"); return; }
+  panelEl.classList.remove("hidden");
+  const w = Math.max(2, Math.max(...heaps, ...original, 1).toString(2).length);
+  const x = nimSum(heaps);
+  let html = "<h4>Nim-sum · XOR of the heaps</h4>";
+  heaps.forEach((h, i) => {
+    html += '<div class="nim-brow"><span>heap ' + (i + 1) + ' = ' + h + '</span><span class="bits">' + bitsHTML(bin(h, w)) + '</span></div>';
+  });
+  html += '<div class="nim-brow total"><span>XOR = ' + x + '</span><span class="bits">' + bitsHTML(bin(x, w)) + '</span></div>';
+  const bal = x === 0;
+  const total = heaps.reduce((a, b) => a + b, 0);
+  let verdict;
+  if (total === 0) verdict = '<div class="nim-verdict">position empty — game over</div>';
+  else if (bal)    verdict = '<div class="nim-verdict lose">nim-sum 0 → the player to move is theoretically LOSING (every column balanced)</div>';
+  else             verdict = '<div class="nim-verdict win">nim-sum ' + x + ' ≠ 0 → the player to move can force a win by zeroing it' + (misere ? ' (until the misère endgame)' : '') + '</div>';
+  html += verdict;
+  panelEl.innerHTML = html;
+}
+
+function updateHUD(){
+  turnEl.textContent = phase === "over" ? "—" : (turn === "you" ? "You" : "CPU");
+  modeEl.textContent = misere ? "Misère" : "Normal";
+  xorEl.textContent  = nimSum(heaps);
+  leftEl.textContent = heaps.reduce((a, b) => a + b, 0);
+}
+
+function updateStatus(){
+  let msg, col = "#a7f3d0";
+  if (phase === "over"){
+    msg = winner === "you" ? "🏆 You win!" : "💻 CPU wins.";
+    col = winner === "you" ? "#6ee7b7" : "#fca5a5";
+  } else if (turn === "cpu"){
+    msg = "CPU is thinking…";
+  } else if (sel.heap >= 0){
+    msg = "Taking " + sel.take + " from heap " + (sel.heap + 1) + " — press ✓ Take to confirm";
+  } else {
+    const pre = lastCpu ? "CPU took " + lastCpu.take + " from heap " + (lastCpu.heap + 1) + ". " : "";
+    msg = pre + "Your turn — click objects in a heap to take them";
+  }
+  statusEl.textContent = msg;
+  statusEl.style.color = col;
+}
+
+function updateButtons(){
+  const canTake = phase === "play" && turn === "you" && sel.heap >= 0 && sel.take >= 1;
+  takeBtn.disabled  = !canTake;
+  takeBtn.textContent = sel.take >= 1 ? "✓ Take " + sel.take : "✓ Take";
+  clearBtn.disabled = !(phase === "play" && turn === "you" && sel.heap >= 0);
+  modeBtn.textContent = misere ? "Misère ⇄ Normal" : "Normal ⇄ Misère";
+  sumBtn.textContent  = showSum ? "Hide nim-sum" : "Show nim-sum";
+  sumBtn.classList.toggle("toggle-on", showSum);
+  modeBtn.classList.toggle("toggle-on", misere);
+}
+
+function renderOver(){
+  if (phase === "over"){
+    const t = document.getElementById("nim-over-title");
+    const won = winner === "you";
+    t.textContent = won ? "YOU WIN" : "CPU WINS";
+    t.className = won ? "win" : "lose";
+    const rule = misere ? "took the last object and LOST it (misère)" : "took the last object";
+    const loser = won ? "CPU" : "You";
+    document.getElementById("nim-over-brk").textContent =
+      misere ? (loser + " " + rule + " — " + (won ? "you" : "the CPU") + " win.")
+             : ((won ? "You" : "CPU") + " " + rule + " — the win.");
+    overEl.classList.remove("hidden");
+  } else {
+    overEl.classList.add("hidden");
+  }
+}
+
+function render(){ renderHeaps(); renderPanel(); updateHUD(); updateStatus(); updateButtons(); renderOver(); }
+
+// ===== controls =====
+heapsEl.addEventListener("click", e => {
+  const o = e.target.closest(".nim-obj.live[data-heap]");
+  if (o) selectFrom(+o.dataset.heap, +o.dataset.idx);
+});
+takeBtn.onclick  = confirmMove;
+clearBtn.onclick = clearSel;
+newBtn.onclick   = () => newGame(true);
+document.getElementById("nim-again").onclick = () => newGame(true);
+modeBtn.onclick  = () => { misere = !misere; newGame(false); };   // restart under new rule
+sumBtn.onclick   = () => { showSum = !showSum; render(); };
+
+window.addEventListener("keydown", e => {
+  if (document.getElementById("look").classList.contains("hidden")) return;
+  if (e.key === "Enter"){ e.preventDefault(); confirmMove(); }
+  else if (e.key.toLowerCase() === "n"){ newGame(true); }
+  else if (e.key === "Escape"){ clearSel(); }
+});
+
+// ===== boot =====
+original = [3, 4, 5];
+misere   = false;
+showSum  = true;
+newGame(false);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The whole position is a list of heap sizes",
+   why:"Nim strips a game down to almost nothing. There is no board and no pieces — the entire position is an array of integers, one number per heap of objects. Everything else is bookkeeping: whose turn it is and whether you are playing misère, where taking the last object loses instead of wins. Because the state is this small, the interesting part is not the data structure but the mathematics that lets you play it perfectly.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">heaps = [3, 4, 5]<br><br>&#9899;&#9899;&#9899;&nbsp;&nbsp;&nbsp;&nbsp;heap 1 (3)<br>&#9899;&#9899;&#9899;&#9899;&nbsp;&nbsp;&nbsp;heap 2 (4)<br>&#9899;&#9899;&#9899;&#9899;&#9899;&nbsp;&nbsp;heap 3 (5)<br><br>turn = "you" &middot; misère = false</div>`,
+   code:`let heaps  = [3, 4, 5];   // one integer per heap — the whole position
+let turn   = "you";      // "you" | "cpu"
+let misere = false;      // false = take the LAST object to WIN
+// no board, no piece objects — the game is these numbers` },
+
+ { title:"2. A move takes any number from ONE heap",
+   why:"The only rule of Nim: on your turn you remove at least one object, all from the same heap. You may take one, several, or the entire heap — but never split your take across two heaps. So a move is literally one subtraction on one array slot. The game ends the moment every heap is empty, and the player who made that final move is the one who took the last object.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">[3, 4, 5]<br>take 2 from heap 3&nbsp;&rarr;&nbsp;[3, 4, <b>3</b>]<br>take all of heap 1&nbsp;&rarr;&nbsp;[<b>0</b>, 4, 3]<br><br>never across two heaps &middot; at least one object</div>`,
+   code:`function applyMove(heaps, heap, take){
+  heaps[heap] -= take;         // remove `+"`take`"+` objects from one heap
+}
+function isOver(heaps){
+  return heaps.every(h => h === 0);   // all empty = game over
+}` },
+
+ { title:"3. The nim-sum — XOR the heap sizes",
+   why:"This is the one number the whole game turns on. Fold the heap sizes together with bitwise XOR — binary addition with the carries dropped — and you get the nim-sum. Because XOR cancels in pairs, each bit of the nim-sum is 1 exactly when an odd number of heaps have that bit set. A nim-sum of zero means every binary column is balanced: each power of two appears across an even number of heaps.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">&nbsp;3 = 0 1 1<br>&nbsp;4 = 1 0 0<br>&nbsp;5 = 1 0 1<br>&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;<br>xor = 0 1 0&nbsp;&nbsp;&rarr;&nbsp;<b>nim-sum 2</b><br><br>bit is 1 &hArr; an ODD number of heaps set it</div>`,
+   code:`function nimSum(heaps){
+  return heaps.reduce((a, h) => a ^ h, 0);  // XOR fold
+}
+// [3,4,5] → 3 ^ 4 ^ 5 = 2  (only the "2" column is odd)` },
+
+ { title:"4. Bouton's theorem — nim-sum 0 is a lost position",
+   why:"In 1901 Charles Bouton solved Nim with one sentence: a position is a loss for the player about to move if and only if its nim-sum is zero. The proof is a tiny invariant. From a balanced position (sum 0) every move touches a single heap and must unbalance some column, so you always hand back a non-zero sum. From an unbalanced position (sum non-zero) there is always a move back to zero. A player who keeps giving away zero can never be dislodged, and the final zero position — all heaps empty — is the loss.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">nim-sum &ne; 0&nbsp;&rarr; the mover can WIN<br>nim-sum = 0&nbsp;&rarr; the mover will LOSE<br><br>from 0: any move &rarr; non-zero (you unbalance it)<br>from non-0: a move &rarr; 0 (you rebalance it)<br><br>[0,0,0] = 0, no move &rarr; mover has lost</div>`,
+   code:`function isLosingForMover(heaps){
+  return nimSum(heaps) === 0;   // Bouton 1901
+}
+// sum 0  → whatever you touch, opponent gets non-zero back
+// sum ≠0 → you can always answer with a zero` },
+
+ { title:"5. The winning move always zeroes the nim-sum",
+   why:"The theorem becomes a move in three lines. With sum x non-zero, consider each heap's target size h XOR x. The heap sharing x's highest set bit has that bit cleared by the XOR, so h XOR x is smaller than h — you can legally shrink that heap to it. After the move the new nim-sum is x XOR h XOR (h XOR x), which is 0: every column rebalanced. Such a heap always exists when x is non-zero, so a winning position always has a winning move — and it is unique in what it achieves, a handed-over zero.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">[3, 4, 5] &middot; nim-sum = 2<br><br>heap 1: 3 ^ 2 = 1 &lt; 3&nbsp;&nbsp;&#10003; shrink 3&rarr;1<br>&rarr; [<b>1</b>, 4, 5] &middot; nim-sum = 1^4^5 = <b>0</b><br><br>new sum = x ^ h ^ (h ^ x) = 0</div>`,
+   code:`function winningMove(heaps){
+  const x = nimSum(heaps);
+  if (x === 0) return null;               // no winning move
+  for (let i = 0; i < heaps.length; i++){
+    const target = heaps[i] ^ x;
+    if (target < heaps[i])                // can only shrink
+      return { heap:i, take: heaps[i] - target };
+  }
+}` },
+
+ { title:"6. Misère flips only at the endgame",
+   why:"When taking the last object loses, the shock is how little changes: you play the identical nim-sum strategy almost the whole game. It only diverges once at most one heap has more than one object. Before that point, play normal Nim. At the endgame you switch to a parity goal — leave your opponent an odd number of single-object heaps, since a player facing an odd count of lone objects is forced to take the last one. One fat heap left? Reduce it to 0 or 1 so the number of ones is odd. Only ones left? You are just counting parity.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">play normal Nim until &le; 1 heap has 2+ objects<br><br>then leave an ODD number of single heaps:<br>[1, 1, <b>4</b>]&nbsp;&rarr; take 3&nbsp;&rarr;&nbsp;[1, 1, 1]&nbsp;(three 1s)<br>opponent faces odd ones &rarr; forced to take last</div>`,
+   code:`function bestMove(heaps, misere){
+  const big  = heaps.filter(h => h > 1).length;
+  const ones = heaps.filter(h => h === 1).length;
+  if (misere && big <= 1){            // endgame only
+    if (big === 1){
+      const i = heaps.findIndex(h => h > 1);
+      const target = ones % 2 === 0 ? 1 : 0;   // leave odd # of 1s
+      return { heap:i, take: heaps[i] - target };
+    }
+    return { heap: heaps.findIndex(h => h === 1), take:1 };
+  }
+  return winningMove(heaps) || playOn(heaps);
+}` },
+
+ { title:"7. Playing on — why a human can win",
+   why:"When the nim-sum is already zero there is no rebalancing move: the player to move is, in theory, lost. The AI cannot conjure a win, so it plays on — takes one object and hopes for a mistake. This is precisely why you can beat a perfect opponent: move first from a non-zero position, always answer with a zero, and the AI never gets a turn where it can escape. Perfect play only guarantees a win from a winning position; from a losing one, all it can do is wait for you to slip.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">nim-sum already 0 &rarr; no winning move<br>AI "plays on": take 1, hope you err<br><br>you move first from a non-zero position,<br>keep handing back 0 &rarr; you win every time</div>`,
+   code:`function playOn(heaps){                 // lost → stall for a mistake
+  let i = 0;
+  for (let k = 1; k < heaps.length; k++)
+    if (heaps[k] > heaps[i]) i = k;
+  return { heap:i, take:1 };
+}
+function cpuTurn(){
+  const m = bestMove(heaps, misere);   // perfect when a win exists
+  applyMove(heaps, m.heap, m.take);
+  // last mover WINS (normal) / LOSES (misère)
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>
