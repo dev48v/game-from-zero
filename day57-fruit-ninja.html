@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 57 — Fruit Ninja</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+  .hidden { display:none; }
+
+  /* ===== fruit ninja ===== */
+  .fn-wrap { display:flex; flex-direction:column; gap:14px; align-items:center; }
+  .fn-canvas-hold { width:100%; display:flex; justify-content:center; }
+  #fn-canvas {
+    display:block; width:100%; max-width:832px; height:auto; border-radius:12px;
+    background:#0b1220; image-rendering:auto; cursor:crosshair; touch-action:none;
+    box-shadow: inset 0 0 0 2px #1e293b, 0 8px 22px rgba(0,0,0,.45);
+  }
+  .fn-over { position:absolute; inset:0; background:rgba(2,6,23,.9); border-radius:19px;
+             display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; z-index:5; text-align:center; padding:20px; }
+  .fn-over h3 { font-size:44px; font-weight:900; }
+  .fn-over h3.win  { color:#6ee7b7; }
+  .fn-over h3.lose { color:#fca5a5; }
+  .fn-over .brk { font-size:14px; color:#94a3b8; max-width:380px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 57</div>
+      <h1 class="text-xl font-bold">🍉 Fruit Ninja — A Genuinely-Live Blade Game Built From Nothing but Projectile Motion and One Line of Geometry: Every Fruit Is Launched From Below the Screen With an Upward Velocity and a Sideways Nudge So Gravity Pulls It Straight Back Down Into a Perfect Parabolic Arc, the Blade Is Simply the Last Handful of Places Your Pointer Has Been in the Past Tenth of a Second Joined Into a Glowing Trail, and a Slice Is Decided by the Oldest Trick in Collision Detection — the Shortest Distance From a Fruit's Centre to the Line Segment Your Hand Just Drew, Found by Projecting the Centre Onto the Segment and Clamping to Its Endpoints: If That Distance Is Smaller Than the Fruit's Radius the Segment Cuts the Circle and the Fruit Splits Into Two Spinning Halves in a Burst of Juice Particles That Fall Under the Same Gravity — Sweep Your Blade Through Several Fruit in One Unbroken Motion and the Slices Chain Into a Combo Worth Bonus Points, but a Black Bomb Hidden Among the Harvest Costs You a Life the Instant Your Blade Touches It, as Does Any Fruit You Let Fall Untouched Off the Bottom of the Screen, and Three Mistakes Ends the Run — All Driven by a Fixed-Timestep Accumulator Loop So the Physics Is Identical on a 60Hz or a 144Hz Screen, in Pure Vanilla JavaScript, One Canvas, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Swipe across the fruit to slice it — chain them for combos, and never touch a bomb.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm">Move your <strong>mouse</strong> (or drag your <strong>finger</strong>) across a flying fruit to cut it — your pointer leaves a <strong>blade trail</strong> and any fruit that trail crosses is sliced into two halves in a spray of juice. Sweep through <strong>three or more fruit in one unbroken motion</strong> and the slices chain into a <strong>combo</strong> worth bonus points. Slicing a <strong>💣 bomb</strong> costs a life, and so does letting a fruit fall off the <strong>bottom</strong> of the screen untouched. You have three lives. <span class="keycap">R</span> restarts.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🍉 Score</div>
+          <div class="text-2xl font-black stat" id="fn-score">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🔥 Combo</div>
+          <div class="text-2xl font-black stat" id="fn-combo">–</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">❤️ Lives</div>
+          <div class="text-2xl font-black stat" id="fn-lives">❤️❤️❤️</div>
+        </div>
+      </div>
+
+      <!-- game console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="fn-status">Slice the fruit, dodge the bombs — swipe through several at once for a combo</div>
+        <div class="fn-wrap">
+          <div class="fn-canvas-hold">
+            <canvas id="fn-canvas" width="832" height="448"></canvas>
+          </div>
+        </div>
+        <div id="fn-over" class="fn-over hidden">
+          <h3 id="fn-over-title" class="lose">GAME OVER</h3>
+          <div class="brk" id="fn-over-brk"></div>
+          <button id="fn-again" class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold mt-2">↻ Play again</button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <button id="fn-new" class="btn bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        Each fruit is a projectile: it is thrown up from below the screen with an upward velocity and a sideways nudge, then a single line of gravity added every tick bends its path into a parabola so it rises, slows, and falls. The blade is nothing but the last few positions of your pointer, joined into a line; when the newest segment of that line passes within a fruit's radius of its centre — a <strong>segment-versus-circle</strong> test — the fruit is cut. Slicing spawns two spinning halves and a burst of juice that obey the same gravity, and a fixed-timestep loop runs the whole simulation in constant <span class="keycap">1/120&nbsp;s</span> steps so it plays the same on any monitor.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How projectile motion plus one line of geometry becomes Fruit Ninja</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Fruit Ninja looks like it needs sprites and a physics engine, but it is really just four small ideas stacked together: a fruit is a projectile thrown up from below that gravity pulls back into an arc, the blade is the last few points your pointer visited joined into a line, a slice is a single <em>segment-versus-circle</em> distance test, and a cut spawns two halves plus juice particles that fall under the same gravity. Chain the slices in one motion for a combo, hide a bomb among the fruit for danger, and count three mistakes as game over. Below is the whole game in eight short blocks. Copy them in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A fruit is a projectile launched from below</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There are no paths to script. A fruit is a circle with a position and a velocity, spawned just below the bottom edge at a random column and thrown <em>upward</em> with a strong negative vertical velocity and a small sideways nudge aimed roughly toward the middle. That is all the launch is — from here gravity does the rest, so the fruit rises, slows, stops, and falls in a parabola. A small fraction of spawns are bombs instead of fruit.</p>
+        <div class="relative"><pre>const GRAVITY = 900;                    // px/s^2, pulls everything down
+const FRUITS = [ {color:"#ef4444",r:38}, {color:"#f97316",r:30}, /* … */ ];
+
+function spawnOne(){
+  const bomb = Math.random() &lt; 0.12;    // ~1 in 8 is a bomb
+  const type = bomb ? "bomb" : (Math.random() * FRUITS.length | 0);
+  const r    = bomb ? 30 : FRUITS[type].r;
+  const x = rand(W * 0.15, W * 0.85);    // random column
+  const y = H + r + 10;                  // start just below the screen
+  const vy = -rand(680, 860);            // thrown UP (negative y)
+  const vx = clamp((W / 2 - x) * 0.6, -260, 260) + rand(-60, 60); // toward centre
+  fruits.push({ x, y, vx, vy, r, type, rot:0, vrot:rand(-3,3), sliced:false });
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The fixed-timestep loop and the parabolic arc</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Advance the physics by however long the last frame took and the fruit fly higher on a slow machine than a fast one. The fix is an <strong>accumulator</strong>: bank the real elapsed time and spend it in fixed <code>1/120&nbsp;s</code> chunks. Inside each chunk the arc is two lines — add gravity to the vertical velocity, then add both velocities to the position. Rise, slow, fall: a perfect parabola for free.</p>
+        <div class="relative"><pre>const STEP = 1 / 120;
+let last = performance.now(), acc = 0;
+function frame(now){
+  let dt = (now - last) / 1000; last = now;
+  if (dt &gt; 0.25) dt = 0.25;              // clamp a tab-switch / lag spike
+  acc += dt;
+  while (acc &gt;= STEP){ update(STEP); acc -= STEP; }  // fixed slices
+  render(); requestAnimationFrame(frame);
+}
+function stepFruit(f, dt){
+  f.vy += GRAVITY * dt;                   // gravity — the whole of the arc
+  f.x  += f.vx * dt;                      // integrate position from velocity
+  f.y  += f.vy * dt;
+  f.rot += f.vrot * dt;                   // a little spin for flavour
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The blade is your recent pointer trail</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no sword sprite. The blade is just an array of the last places your pointer has been, each stamped with a time. Every time the pointer moves you push a new point and drop any older than a tenth of a second, so the trail is always a short, fresh ribbon that you draw as a fading, tapering line. The important part is that each new point, paired with the one before it, is a <strong>line segment</strong> — the segment your hand just swept.</p>
+        <div class="relative"><pre>let trail = [];                           // [{x, y, t}, …] newest last
+const TRAIL_MS = 130;
+
+function addTrailPoint(x, y){
+  const now = performance.now();
+  const prev = trail[trail.length - 1];
+  trail.push({ x, y, t: now });
+  if (trail.length &gt; 40) trail.shift();
+  // only a *fresh* move is a real swipe — a big time gap is a pen-up, ignore it
+  if (playing &amp;&amp; prev &amp;&amp; now - prev.t &lt; 60) sliceSegment(prev.x, prev.y, x, y);
+}
+// prune old points each frame so the ribbon stays short
+function pruneTrail(now){ while (trail.length &amp;&amp; now - trail[0].t &gt; TRAIL_MS) trail.shift(); }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">The slice test — shortest distance from a point to a segment</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the heart of the whole game. A fruit is a circle; the swipe is a line segment; the fruit is cut when the segment passes within the fruit's radius of its centre. Finding that distance is the classic trick: <strong>project</strong> the centre onto the infinite line through the segment to get a parameter <code>t</code>, then <strong>clamp</strong> <code>t</code> to <code>[0,1]</code> so you land on the closest point of the <em>segment</em> (not the endless line), and compare that point's distance to the radius. Compare squared distances and there is not even a square root.</p>
+        <div class="relative"><pre>function segCircle(ax, ay, bx, by, cx, cy, r){
+  const dx = bx - ax, dy = by - ay;         // the swipe segment A→B
+  const len2 = dx*dx + dy*dy;
+  let t = len2 ? ((cx-ax)*dx + (cy-ay)*dy) / len2 : 0;  // project C onto A→B
+  t = t &lt; 0 ? 0 : t &gt; 1 ? 1 : t;             // clamp to the segment's ends
+  const px = ax + t*dx, py = ay + t*dy;      // closest point on the segment
+  const ex = cx - px, ey = cy - py;
+  return ex*ex + ey*ey &lt;= r*r;               // within the radius? → a hit
+}
+function sliceSegment(ax, ay, bx, by){
+  for (const f of fruits){
+    if (f.sliced) continue;
+    if (segCircle(ax, ay, bx, by, f.x, f.y, f.r))
+      f.type === "bomb" ? hitBomb(f) : sliceFruit(f, ax, ay, bx, by);
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">A cut splits the fruit into two halves and juice</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When a fruit is sliced it is removed and replaced by two half-discs, thrown apart <em>perpendicular</em> to the cut so they fly off to either side of the blade, spinning, and falling under the same gravity. A dozen small juice droplets in the fruit's colour burst out in every direction. Halves and particles are the same projectile as the fruit — position, velocity, gravity — just with a lifetime so they fade and are cleared away.</p>
+        <div class="relative"><pre>function sliceFruit(f, ax, ay, bx, by){
+  f.sliced = true; score += 1; registerComboSlice();
+  const ang  = Math.atan2(by - ay, bx - ax);   // direction of the blade
+  const perp = ang + Math.PI / 2;              // halves fly across the cut
+  for (const side of [-1, 1])
+    halves.push({ x:f.x, y:f.y, r:f.r, type:f.type, ang, side, rot:0, vrot:rand(-4,4),
+      vx: f.vx*0.4 + Math.cos(perp)*120*side,
+      vy: f.vy*0.4 + Math.sin(perp)*120*side - 40, life:1.6 });
+  for (let i = 0; i &lt; 14; i++){                 // juice particles
+    const a = Math.random()*Math.PI*2, sp = rand(40, 220);
+    particles.push({ x:f.x, y:f.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60,
+      r:rand(2,6), color:FRUITS[f.type].inner, life:rand(0.5,1.0) });
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Combos — chain slices in one unbroken motion</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A combo is just "how many fruit fell to the blade in quick succession". Every slice bumps a counter and refreshes a short timer; while your blade keeps cutting, the timer keeps being reset and the count climbs — a single swipe across three fruit registers three slices in the same tick. When the timer finally lapses with no new cut, the streak is over: three or more earns a bonus and a flashy pop-up, then the counter resets to zero.</p>
+        <div class="relative"><pre>const COMBO_WINDOW = 0.30;                 // seconds a combo stays "alive"
+let combo = 0, comboTimer = 0;
+
+function registerComboSlice(){             // called once per fruit sliced
+  combo += 1; comboTimer = COMBO_WINDOW;   // keep the streak alive
+}
+function tickCombo(dt){
+  if (combo &gt; 0 &amp;&amp; (comboTimer -= dt) &lt;= 0){ // streak ended
+    if (combo &gt;= 3){                        // 3+ in one motion → bonus
+      const bonus = combo * 2; score += bonus;
+      comboPopup = { n: combo, bonus, life: 1.1 };
+    }
+    combo = 0;
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Bombs, missed fruit, and three lives</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There are two ways to lose a life. Touch a <strong>bomb</strong> with the blade and it explodes — that is the same slice test as a fruit, only the outcome is a penalty. Or let a fruit fall clean off the <strong>bottom</strong> of the screen without cutting it. Each mistake costs one of three lives; run out and the game is over. Fruit that drift off the <em>sides</em>, and bombs that fall away untouched, are simply removed and cost nothing.</p>
+        <div class="relative"><pre>function hitBomb(f){ f.sliced = true; explode(f); loseLife(); }
+
+function cull(){                            // once per tick, after the physics
+  for (let i = fruits.length - 1; i &gt;= 0; i--){
+    const f = fruits[i];
+    if (f.sliced){ fruits.splice(i, 1); continue; }
+    if (f.y - f.r &gt; H + 40 &amp;&amp; f.vy &gt; 0){    // fell off the BOTTOM…
+      if (f.type !== "bomb") loseLife();     // …a missed fruit costs a life
+      fruits.splice(i, 1);
+    } else if (f.x &lt; -80 || f.x &gt; W + 80){   // drifted off a side → free
+      fruits.splice(i, 1);
+    }
+  }
+}
+function loseLife(){ if (--lives &lt;= 0) gameOver(); }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Wiring it together — the tick and the pointer</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The update tick spawns a fresh wave on a timer, steps every fruit, half and particle through the arc, ages the combo, and culls what has left the field — slicing itself happens off in the pointer handler as your hand moves. The one fiddly bit is mapping the pointer: the canvas is drawn at a fixed 832×448 but shown at whatever CSS width, so scale the client coordinates by the ratio between the two before you feed them to the blade.</p>
+        <div class="relative"><pre>function update(dt){
+  if ((spawnTimer -= dt) &lt;= 0){ spawnWave(); spawnTimer = rand(0.65, 1.25); }
+  for (const f of fruits)    stepFruit(f, dt);
+  for (const h of halves)    { stepFruit(h, dt); h.life -= dt; }
+  for (const p of particles) { stepFruit(p, dt); p.life -= dt; }
+  tickCombo(dt); cull();
+}
+function canvasPos(e){                       // client px → internal 832×448
+  const b = canvas.getBoundingClientRect();
+  return { x:(e.clientX - b.left) * (canvas.width  / b.width),
+           y:(e.clientY - b.top ) * (canvas.height / b.height) };
+}
+canvas.addEventListener("pointermove", e =&gt; {
+  const p = canvasPos(e); addTrailPoint(p.x, p.y); e.preventDefault();
+}, { passive:false });</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 57 of GameFromZero done — a real blade game from one arc and one distance test.</h3><p class="text-sm text-emerald-700 mt-2">You built Fruit Ninja and none of it was magic: a fruit is a projectile thrown up from below that a single line of gravity bends into a parabola, the blade is only the last few points your pointer visited joined into a segment, and the whole slice is the oldest trick in collision detection — project the fruit's centre onto that segment, clamp to its ends, and check the distance against the radius. A cut spawns two halves and a burst of juice that fall under the same gravity, a short timer chains slices into combos, and a hidden bomb plus a fall off the bottom are the only two ways to lose a life. Next: swept collision so a lightning-fast flick can never skip over a small fruit, special fruit (freeze, bonus, extra life), a rising difficulty curve that throws denser waves, or a two-blade multitouch mode. <strong>👉 Tomorrow — Day 58: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== FRUIT NINJA ENGINE (vanilla) =====
+const canvas = document.getElementById("fn-canvas");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+
+// ---- constants (all in pixels & seconds) ----
+const GRAVITY      = 900;    // downward acceleration for everything
+const STEP         = 1 / 120;
+const TRAIL_MS     = 130;    // how long a blade point lives (ms)
+const COMBO_WINDOW = 0.30;   // seconds a combo streak stays alive
+const BOMB_CHANCE  = 0.12;   // fraction of spawns that are bombs
+const SPAWN_MIN    = 0.65, SPAWN_MAX = 1.25;  // seconds between waves
+const FRESH_MS     = 60;     // a move older than this is a pen-up, not a swipe
+
+const FRUITS = [
+  { name:"watermelon", color:"#ef4444", inner:"#fecaca", r:38 },
+  { name:"orange",     color:"#f97316", inner:"#fed7aa", r:30 },
+  { name:"lime",       color:"#84cc16", inner:"#ecfccb", r:27 },
+  { name:"lemon",      color:"#facc15", inner:"#fef9c3", r:26 },
+  { name:"grape",      color:"#a855f7", inner:"#f3e8ff", r:23 },
+  { name:"apple",      color:"#22c55e", inner:"#dcfce7", r:29 },
+];
+
+function clamp(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
+function rand(a, b){ return a + Math.random() * (b - a); }
+
+// ---- state ----
+let fruits, halves, particles, trail;
+let score, best, lives, combo, comboTimer, comboPopup, hurtFlash;
+let state, spawnTimer, anim;
+
+function loadBest(){ try { return +localStorage.getItem("fn-best") || 0; } catch (e){ return 0; } }
+function saveBest(){ try { localStorage.setItem("fn-best", String(best)); } catch (e){} }
+
+function newGame(){
+  fruits = []; halves = []; particles = []; trail = [];
+  score = 0; lives = 3; combo = 0; comboTimer = 0; comboPopup = null; hurtFlash = 0;
+  spawnTimer = 0.4; anim = 0; state = "play";
+  best = loadBest();
+  document.getElementById("fn-over").classList.add("hidden");
+  updateHUD();
+}
+
+// ---- spawning ----
+function spawnWave(){
+  const n = 1 + (Math.random() * 3 | 0);   // 1..3 objects
+  for (let i = 0; i < n; i++) spawnOne();
+}
+function spawnOne(){
+  const bomb = Math.random() < BOMB_CHANCE;
+  const type = bomb ? "bomb" : (Math.random() * FRUITS.length | 0);
+  const r = bomb ? 30 : FRUITS[type].r;
+  const x = rand(W * 0.15, W * 0.85);
+  const y = H + r + 10;                     // start just below the screen
+  const vy = -rand(700, 860);               // thrown upward
+  const vx = clamp((W / 2 - x) * 0.6, -260, 260) + rand(-60, 60); // toward centre
+  fruits.push({ x, y, vx, vy, r, type, rot: 0, vrot: rand(-3, 3), sliced: false });
+}
+
+// ---- projectile physics (shared by fruit, halves, particles) ----
+function stepBody(o, dt){
+  o.vy += GRAVITY * dt;
+  o.x  += o.vx * dt;
+  o.y  += o.vy * dt;
+  if (o.vrot !== undefined) o.rot += o.vrot * dt;
+}
+
+// ---- the slice test: segment (blade) vs circle (fruit) ----
+function segCircle(ax, ay, bx, by, cx, cy, r){
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 ? ((cx - ax) * dx + (cy - ay) * dy) / len2 : 0; // project centre
+  t = t < 0 ? 0 : t > 1 ? 1 : t;                               // clamp to segment
+  const px = ax + t * dx, py = ay + t * dy;                    // closest point
+  const ex = cx - px, ey = cy - py;
+  return ex * ex + ey * ey <= r * r;                           // within radius?
+}
+function sliceSegment(ax, ay, bx, by){
+  let hits = 0;
+  for (const f of fruits){
+    if (f.sliced) continue;
+    if (segCircle(ax, ay, bx, by, f.x, f.y, f.r)){
+      hits++;
+      if (f.type === "bomb") hitBomb(f);
+      else sliceFruit(f, ax, ay, bx, by);
+    }
+  }
+  return hits;
+}
+
+// ---- a cut: two halves + juice ----
+function sliceFruit(f, ax, ay, bx, by){
+  f.sliced = true;
+  score += 1;
+  registerComboSlice();
+  const ang = Math.atan2(by - ay, bx - ax);   // blade direction
+  const perp = ang + Math.PI / 2;             // halves fly across the cut
+  for (const side of [-1, 1]){
+    halves.push({
+      x: f.x, y: f.y, r: f.r, type: f.type, ang, side,
+      vx: f.vx * 0.4 + Math.cos(perp) * 120 * side,
+      vy: f.vy * 0.4 + Math.sin(perp) * 120 * side - 40,
+      rot: 0, vrot: rand(-4, 4), life: 1.6
+    });
+  }
+  spawnJuice(f.x, f.y, FRUITS[f.type].inner, 14, 220);
+}
+function spawnJuice(x, y, color, n, spread){
+  for (let i = 0; i < n; i++){
+    const a = Math.random() * Math.PI * 2, sp = rand(40, spread);
+    particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+      r: rand(2, 6), color, life: rand(0.5, 1.0) });
+  }
+}
+function hitBomb(f){
+  f.sliced = true;
+  hurtFlash = 0.4;
+  spawnJuice(f.x, f.y, "#f59e0b", 16, 320);
+  spawnJuice(f.x, f.y, "#ef4444", 14, 320);
+  loseLife();
+}
+
+// ---- combos ----
+function registerComboSlice(){ combo += 1; comboTimer = COMBO_WINDOW; }
+function tickCombo(dt){
+  if (combo > 0){
+    comboTimer -= dt;
+    if (comboTimer <= 0){
+      if (combo >= 3){
+        const bonus = combo * 2;
+        score += bonus;
+        comboPopup = { n: combo, bonus, life: 1.1 };
+      }
+      combo = 0;
+    }
+  }
+  if (comboPopup){ comboPopup.life -= dt; if (comboPopup.life <= 0) comboPopup = null; }
+  if (hurtFlash > 0) hurtFlash -= dt;
+}
+
+// ---- lives / game over ----
+function loseLife(){
+  lives--;
+  hurtFlash = Math.max(hurtFlash, 0.4);
+  if (lives <= 0) gameOver();
+}
+function gameOver(){
+  state = "over";
+  best = Math.max(best, score);
+  saveBest();
+  showOver();
+}
+function showOver(){
+  const t = document.getElementById("fn-over-title");
+  t.textContent = "GAME OVER";
+  t.className = "lose";
+  document.getElementById("fn-over-brk").textContent =
+    "You scored " + score + ". Best: " + best + ". A bomb or a fruit off the bottom got you.";
+  document.getElementById("fn-over").classList.remove("hidden");
+  updateHUD();
+}
+
+// ---- remove sliced / off-screen bodies ----
+function cull(){
+  for (let i = fruits.length - 1; i >= 0; i--){
+    const f = fruits[i];
+    if (f.sliced){ fruits.splice(i, 1); continue; }
+    if (f.y - f.r > H + 40 && f.vy > 0){        // fell off the bottom
+      if (f.type !== "bomb") loseLife();         // a missed fruit costs a life
+      fruits.splice(i, 1);
+    } else if (f.x < -80 || f.x > W + 80){       // drifted off a side → free
+      fruits.splice(i, 1);
+    }
+  }
+  for (let i = halves.length - 1; i >= 0; i--){
+    const h = halves[i];
+    if (h.life <= 0 || h.y - h.r > H + 60) halves.splice(i, 1);
+  }
+  for (let i = particles.length - 1; i >= 0; i--){
+    if (particles[i].life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ---- one physics tick ----
+function update(dt){
+  anim += dt;
+  spawnTimer -= dt;
+  if (spawnTimer <= 0){ spawnWave(); spawnTimer = rand(SPAWN_MIN, SPAWN_MAX); }
+  for (const f of fruits)    stepBody(f, dt);
+  for (const h of halves)  { stepBody(h, dt); h.life -= dt; }
+  for (const p of particles){ stepBody(p, dt); p.life -= dt; }
+  tickCombo(dt);
+  cull();
+  updateHUD();
+}
+
+// ===== rendering =====
+function render(){
+  // dojo backdrop
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0b1220");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  drawGlow();
+
+  particles.forEach(drawParticle);
+  halves.forEach(drawHalf);
+  fruits.forEach(f => { if (!f.sliced) (f.type === "bomb" ? drawBomb : drawFruit)(f); });
+  drawTrail();
+  drawComboPopup();
+
+  if (hurtFlash > 0){
+    ctx.fillStyle = "rgba(239,68,68," + Math.min(0.5, hurtFlash) + ")";
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawGlow(){
+  const r = ctx.createRadialGradient(W / 2, H * 0.7, 40, W / 2, H * 0.7, W * 0.6);
+  r.addColorStop(0, "rgba(16,185,129,.10)");
+  r.addColorStop(1, "rgba(16,185,129,0)");
+  ctx.fillStyle = r; ctx.fillRect(0, 0, W, H);
+}
+
+function drawFruit(f){
+  const F = FRUITS[f.type];
+  ctx.save();
+  ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+  ctx.fillStyle = F.color;
+  ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,.16)";                        // bottom shade
+  ctx.beginPath(); ctx.arc(0, f.r * 0.18, f.r * 0.92, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = F.color;
+  ctx.beginPath(); ctx.arc(0, -f.r * 0.05, f.r * 0.82, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.30)";                  // shine
+  ctx.beginPath(); ctx.arc(-f.r * 0.32, -f.r * 0.34, f.r * 0.28, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#16a34a";                                // little stem
+  ctx.fillRect(-2, -f.r - 3, 4, 7);
+  ctx.restore();
+}
+
+function drawBomb(f){
+  ctx.save();
+  ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+  ctx.fillStyle = "#0f172a";
+  ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#334155"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,.28)";                  // shine
+  ctx.beginPath(); ctx.arc(-f.r * 0.3, -f.r * 0.32, f.r * 0.24, 0, Math.PI * 2); ctx.fill();
+  // fuse
+  ctx.strokeStyle = "#a16207"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(f.r * 0.5, -f.r * 0.5); ctx.lineTo(f.r * 0.8, -f.r * 1.05); ctx.stroke();
+  // spark (flickers)
+  const s = 3 + Math.sin(anim * 30) * 1.5;
+  ctx.fillStyle = "#fbbf24";
+  ctx.beginPath(); ctx.arc(f.r * 0.8, -f.r * 1.05, s, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#f97316";
+  ctx.beginPath(); ctx.arc(f.r * 0.8, -f.r * 1.05, s * 0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawHalf(h){
+  const F = FRUITS[h.type];
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, h.life));
+  ctx.translate(h.x, h.y); ctx.rotate(h.ang + h.rot);
+  ctx.fillStyle = F.color;                                  // outer skin
+  ctx.beginPath();
+  if (h.side > 0) ctx.arc(0, 0, h.r, 0, Math.PI);
+  else            ctx.arc(0, 0, h.r, Math.PI, Math.PI * 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = F.inner;                                  // exposed flesh
+  ctx.beginPath();
+  if (h.side > 0) ctx.arc(0, 0, h.r * 0.74, 0, Math.PI);
+  else            ctx.arc(0, 0, h.r * 0.74, Math.PI, Math.PI * 2);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawParticle(p){
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+  ctx.fillStyle = p.color;
+  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawTrail(){
+  const now = performance.now();
+  while (trail.length && now - trail[0].t > TRAIL_MS) trail.shift();  // prune
+  if (trail.length < 2) return;
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for (let i = 1; i < trail.length; i++){
+    const a = trail[i - 1], b = trail[i];
+    const age = (now - b.t) / TRAIL_MS;          // 0 fresh … 1 old
+    ctx.strokeStyle = "rgba(226,232,240," + (1 - age) * 0.85 + ")";
+    ctx.lineWidth = 13 * (1 - age) + 1;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.strokeStyle = "rgba(110,231,183," + (1 - age) * 0.9 + ")";   // bright core
+    ctx.lineWidth = (13 * (1 - age) + 1) * 0.4;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+}
+
+function drawComboPopup(){
+  if (!comboPopup) return;
+  const a = Math.max(0, Math.min(1, comboPopup.life));
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = "900 46px -apple-system, Inter, sans-serif";
+  ctx.fillText(comboPopup.n + "  COMBO!", W / 2, H / 2 - 10);
+  ctx.fillStyle = "#6ee7b7";
+  ctx.font = "800 22px -apple-system, Inter, sans-serif";
+  ctx.fillText("+" + comboPopup.bonus + " bonus", W / 2, H / 2 + 26);
+  ctx.restore();
+}
+
+// ===== HUD =====
+const scoreEl  = document.getElementById("fn-score");
+const comboEl  = document.getElementById("fn-combo");
+const lifeEl   = document.getElementById("fn-lives");
+const statusEl = document.getElementById("fn-status");
+function updateHUD(){
+  scoreEl.textContent = score;
+  comboEl.textContent = combo > 1 ? "x" + combo : "–";
+  lifeEl.textContent  = lives > 0 ? "❤️".repeat(lives) : "—";
+  if (state === "over"){
+    statusEl.textContent = "💀 Game over — you scored " + score + " (best " + best + "). Hit New game to try again.";
+    statusEl.style.color = "#fca5a5";
+  } else {
+    statusEl.textContent = "Slice the fruit, dodge the bombs — swipe through several at once for a combo  ·  Best: " + best;
+    statusEl.style.color = "#a7f3d0";
+  }
+}
+
+// ===== input =====
+function lookVisible(){ return !document.getElementById("look").classList.contains("hidden"); }
+function canvasPos(e){
+  const b = canvas.getBoundingClientRect();
+  return { x: (e.clientX - b.left) * (canvas.width  / b.width),
+           y: (e.clientY - b.top ) * (canvas.height / b.height) };
+}
+function addTrailPoint(x, y){
+  const now = performance.now();
+  const prev = trail.length ? trail[trail.length - 1] : null;
+  trail.push({ x, y, t: now });
+  if (trail.length > 40) trail.shift();
+  // only a fresh, continuous move is a real swipe — a big time gap is a pen-up
+  if (state === "play" && prev && now - prev.t < FRESH_MS){
+    sliceSegment(prev.x, prev.y, x, y);
+  }
+}
+canvas.addEventListener("pointermove", e => {
+  if (!lookVisible()) return;
+  const p = canvasPos(e);
+  addTrailPoint(p.x, p.y);
+  e.preventDefault();
+}, { passive: false });
+canvas.addEventListener("pointerdown", e => {
+  if (!lookVisible()) return;
+  const p = canvasPos(e);
+  trail.length = 0;
+  trail.push({ x: p.x, y: p.y, t: performance.now() });
+  e.preventDefault();
+}, { passive: false });
+
+window.addEventListener("keydown", e => {
+  if (!lookVisible()) return;
+  if (e.key.toLowerCase() === "r") newGame();
+});
+document.getElementById("fn-new").onclick   = newGame;
+document.getElementById("fn-again").onclick = newGame;
+
+// ===== fixed-timestep loop =====
+let last = performance.now(), acc = 0;
+function frame(now){
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.25) dt = 0.25;              // clamp after a tab-switch / lag spike
+  acc += dt;
+  let guard = 0;
+  while (acc >= STEP && guard++ < 8){
+    if (state === "play") update(STEP);
+    acc -= STEP;
+  }
+  render();
+  requestAnimationFrame(frame);
+}
+
+// ===== boot =====
+newGame();
+requestAnimationFrame(frame);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. A fruit is a projectile thrown from below",
+   why:"There are no scripted paths. A fruit is just a circle with a position and a velocity. It spawns a little below the bottom edge at a random column and is thrown upward — a strong negative vertical velocity — with a small sideways nudge aimed roughly toward the middle of the screen. That single launch is all the input the arc ever gets; gravity does everything after. A small fraction of spawns are bombs rather than fruit, but they are the same projectile with a different fate when cut.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">spawn at&nbsp;&nbsp;(randomX, belowScreen)<br>vy = −rand(700, 860)&nbsp;&nbsp;// thrown UP<br>vx = toward centre + jitter<br><br>~1 in 8 is a 💣 bomb<br>then gravity takes over</div>`,
+   code:`function spawnOne(){
+  const bomb = Math.random() < 0.12;
+  const type = bomb ? "bomb" : (Math.random()*FRUITS.length | 0);
+  const r = bomb ? 30 : FRUITS[type].r;
+  const x = rand(W*0.15, W*0.85);       // random column
+  const y = H + r + 10;                 // just below the screen
+  const vy = -rand(700, 860);           // thrown upward
+  const vx = clamp((W/2 - x)*0.6, -260, 260) + rand(-60, 60);
+  fruits.push({ x, y, vx, vy, r, type, rot:0, vrot:rand(-3,3), sliced:false });
+}` },
+
+ { title:"2. Gravity bends the launch into an arc",
+   why:"Fruit Ninja's whole feel comes from one line of physics run in a fixed-timestep loop. Bank the real elapsed time in an accumulator and spend it in equal 1/120-second slices so the game plays identically on any refresh rate. Inside each slice the arc is nothing but: add gravity to the vertical velocity, then add both velocities to the position. Rise, slow to a stop at the top, fall back down — a textbook parabola, for free, with no path data at all.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">every 1/120 s:<br>vy += GRAVITY · dt<br>x += vx · dt&nbsp;&nbsp;·&nbsp;&nbsp;y += vy · dt<br><br>up → slow → down = a parabola<br>same speed at 60 Hz and 144 Hz</div>`,
+   code:`const STEP = 1/120;
+function frame(now){
+  let dt = (now-last)/1000; last = now;
+  if (dt > 0.25) dt = 0.25;             // clamp a lag spike
+  acc += dt;
+  while (acc >= STEP){ update(STEP); acc -= STEP; }
+  render(); requestAnimationFrame(frame);
+}
+function stepBody(o, dt){
+  o.vy += GRAVITY*dt;                   // gravity — the whole arc
+  o.x  += o.vx*dt;  o.y += o.vy*dt;     // integrate the parabola
+}` },
+
+ { title:"3. The blade is your recent pointer trail",
+   why:"There is no sword. The blade is an array of the last places the pointer has visited, each stamped with a time. On every pointer move you push a new point and drop any older than about a tenth of a second, so the trail is always a short, fresh ribbon you can draw as a fading, tapering line. Crucially, each new point paired with the one before it is a line segment — the exact stroke your hand just swept — and that segment is what gets tested against the fruit.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">trail = [{x,y,t}, {x,y,t}, …]&nbsp;&nbsp;newest last<br>drop points older than 130 ms<br><br>newest two points = the swipe segment<br>A ────────▶ B</div>`,
+   code:`function addTrailPoint(x, y){
+  const now = performance.now();
+  const prev = trail[trail.length-1];
+  trail.push({ x, y, t: now });
+  if (trail.length > 40) trail.shift();
+  // a fresh, continuous move = a real swipe (a big gap = pen-up)
+  if (playing && prev && now - prev.t < 60)
+    sliceSegment(prev.x, prev.y, x, y);
+}` },
+
+ { title:"4. The slice: distance from centre to the segment",
+   why:"This is the entire game in one function. A fruit is a circle, a swipe is a line segment, and the fruit is cut when the segment comes within the fruit's radius of its centre. To find that shortest distance you project the centre onto the infinite line through the segment to get a parameter t, then clamp t to [0,1] so you stay on the segment itself rather than the endless line, giving the closest point. Compare that point's squared distance to the squared radius — no square root, one branch, and tunnelling small fruit is impossible at normal swipe speeds.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">project centre C onto A→B → t<br>clamp t to [0,1] → closest point P<br>|C − P| ≤ r&nbsp;&nbsp;?&nbsp;&nbsp;→ SLICE<br><br>circle vs segment · squared, no sqrt</div>`,
+   code:`function segCircle(ax,ay,bx,by,cx,cy,r){
+  const dx = bx-ax, dy = by-ay, len2 = dx*dx + dy*dy;
+  let t = len2 ? ((cx-ax)*dx + (cy-ay)*dy)/len2 : 0; // project
+  t = t<0 ? 0 : t>1 ? 1 : t;                          // clamp to segment
+  const px = ax + t*dx, py = ay + t*dy;               // closest point
+  const ex = cx-px, ey = cy-py;
+  return ex*ex + ey*ey <= r*r;                        // within radius?
+}` },
+
+ { title:"5. A cut spawns two halves and juice",
+   why:"When a fruit is sliced it is removed and replaced by two half-discs thrown apart perpendicular to the cut, so they peel off to either side of the blade, spinning and falling under the same gravity. A dozen small droplets in the fruit's inner colour burst out in all directions. Halves and particles are exactly the same projectile as the fruit — position, velocity, gravity — with a lifetime added so they fade out and get cleared. It reads as a real slice because both pieces obey the same physics the fruit did.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">cut angle → halves fly ⟂ to the blade<br>◑ ◐&nbsp;&nbsp;+ spin + gravity<br><br>+ 14 juice droplets in every direction<br>each with a fading lifetime</div>`,
+   code:`function sliceFruit(f, ax, ay, bx, by){
+  f.sliced = true; score += 1; registerComboSlice();
+  const perp = Math.atan2(by-ay, bx-ax) + Math.PI/2;
+  for (const side of [-1, 1])
+    halves.push({ x:f.x, y:f.y, r:f.r, type:f.type, side,
+      vx: f.vx*0.4 + Math.cos(perp)*120*side,
+      vy: f.vy*0.4 + Math.sin(perp)*120*side - 40, life:1.6 });
+  spawnJuice(f.x, f.y, FRUITS[f.type].inner, 14);  // burst of droplets
+}` },
+
+ { title:"6. Combos — slices chained in one motion",
+   why:"A combo is simply how many fruit fell to the blade in quick succession. Every slice bumps a counter and refreshes a short timer; while the blade keeps cutting, that timer keeps being reset and the count climbs — a single swipe drawn across three fruit registers three slices in the very same tick, since one segment tests against every fruit. When the timer finally lapses with no new cut the streak ends: three or more earns a bonus and a pop-up, then the counter resets. No 'swipe object' needed — the timer defines the swipe.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">each slice: combo++, timer = 0.30 s<br>timer lapses with no new cut → streak ends<br><br>combo ≥ 3 → bonus = combo × 2 + 🎉<br>one segment can cut many fruit at once</div>`,
+   code:`function registerComboSlice(){ combo++; comboTimer = 0.30; }
+function tickCombo(dt){
+  if (combo > 0 && (comboTimer -= dt) <= 0){   // streak ended
+    if (combo >= 3){                            // 3+ in one motion
+      score += combo * 2;                       // bonus
+      comboPopup = { n: combo, life: 1.1 };
+    }
+    combo = 0;
+  }
+}` },
+
+ { title:"7. Bombs, missed fruit, and three lives",
+   why:"There are exactly two ways to lose a life. Touch a bomb with the blade — the same slice test as a fruit, only the outcome is an explosion and a penalty — or let a fruit fall clean off the bottom of the screen without cutting it. Each mistake costs one of three lives and running out ends the game. Fruit that drift off the sides, and bombs that fall away untouched, are just removed and cost nothing. That asymmetry is the whole risk of the game: you must swipe, but never at the wrong thing.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">slice a 💣 → explode → −1 life<br>fruit off the BOTTOM uncut → −1 life<br><br>fruit off a SIDE / bomb ignored → free<br>3 lives gone → GAME OVER</div>`,
+   code:`function hitBomb(f){ f.sliced = true; explode(f); loseLife(); }
+function cull(){
+  for (const f of fruits){
+    if (f.y - f.r > H + 40 && f.vy > 0){   // off the bottom
+      if (f.type !== "bomb") loseLife();    // a missed fruit costs a life
+      remove(f);
+    } else if (f.x < -80 || f.x > W + 80) remove(f); // off a side = free
+  }
+}
+function loseLife(){ if (--lives <= 0) gameOver(); }` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>
