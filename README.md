@@ -57,6 +57,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 53 — Bomberman](https://dev48v.infy.uk/game/day53-bomberman.html) — `day53-bomberman.html`
 - [GameFromZero · Day 54 — Yahtzee](https://dev48v.infy.uk/game/day54-yahtzee.html) — `day54-yahtzee.html`
 - [GameFromZero · Day 55 — Nim](https://dev48v.infy.uk/game/day55-nim.html) — `day55-nim.html`
+- [GameFromZero · Day 56 — Platformer](https://dev48v.infy.uk/game/day56-platformer.html) — `day56-platformer.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

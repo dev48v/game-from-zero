@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 56 — Platformer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+  .hidden { display:none; }
+
+  /* ===== platformer ===== */
+  .pf-wrap { display:flex; flex-direction:column; gap:14px; align-items:center; }
+  .pf-canvas-hold { width:100%; display:flex; justify-content:center; }
+  #pf-canvas {
+    display:block; width:100%; max-width:832px; height:auto; border-radius:12px;
+    background:#0b1220; image-rendering:auto;
+    box-shadow: inset 0 0 0 2px #1e293b, 0 8px 22px rgba(0,0,0,.45);
+  }
+  .pf-over { position:absolute; inset:0; background:rgba(2,6,23,.9); border-radius:19px;
+             display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; z-index:5; text-align:center; padding:20px; }
+  .pf-over h3 { font-size:44px; font-weight:900; }
+  .pf-over h3.win  { color:#6ee7b7; }
+  .pf-over h3.lose { color:#fca5a5; }
+  .pf-over .brk { font-size:14px; color:#94a3b8; max-width:380px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 56</div>
+      <h1 class="text-xl font-bold">🏃 Platformer — A Genuinely-Live Side-Scroller Built From Nothing but a Grid of Characters and Newton's Laws: Every <code>#</code> in a String Array Is One Solid Tile So the Whole World Is Just Text, the Hero Is a Box With a Velocity, and Gravity Is a Single Line Added Every Tick — Hold the Arrow Keys or A/D to Run With Real Acceleration and Ground Friction, Press Up / W / Space to Jump and the Longer You Hold the Higher You Rise (a Variable-Height Jump You Cut Short by Letting Go), With a Sliver of Coyote-Time So a Half-Second-Late Press Off the Edge of a Ledge Still Launches You and a Jump-Buffer So an Early Press Landing Fires the Instant You Touch Down — Where the Game Actually Lives Is the Collision: the Textbook Trick of Moving and Resolving One Axis at a Time, Push the Box Out Horizontally and Zero the X-Velocity So You Can Never Tunnel Through a Wall, Then Move Vertically and When You Land Snap to the Tile Top and Zero the Fall So You Stand Instead of Sinking and the Ceiling Stops a Jump Dead — a Camera Locks Onto You and Scrolls the Level Past While Clamped So It Never Shows the Void Beyond the Edges, Coins Wait to Be Grabbed, a Patrolling Enemy That Turns at Every Wall and Ledge Dies if You Land on Its Head and Bounces You Back Up but Kills You if You Touch Its Side, Spikes and Bottomless Pits Cost a Life and Respawn You at the Start, and a Flag at the Far End Wins the Level — All Driven by a Fixed-Timestep Accumulator Loop So the Physics Is Identical on a 60Hz or a 144Hz Screen, in Pure Vanilla JavaScript, One Canvas, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Run, jump, stomp the goomba, grab the coins, reach the flag.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm">Use <span class="keycap">&larr;</span> <span class="keycap">&rarr;</span> or <span class="keycap">A</span> <span class="keycap">D</span> to run and <span class="keycap">&uarr;</span> / <span class="keycap">W</span> / <span class="keycap">Space</span> to jump — <strong>hold jump longer to jump higher</strong>. Land <strong>on top</strong> of an enemy to squash it (you bounce off); brush its <strong>side</strong> and you lose a life. <strong>Spikes</strong> and falling into a <strong>pit</strong> cost a life and send you back to the start. Collect coins on the way and touch the <strong>🚩 flag</strong> at the far right to win. You have three lives. <span class="keycap">R</span> restarts.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🪙 Coins</div>
+          <div class="text-2xl font-black stat" id="pf-coins">0 / 0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">❤️ Lives</div>
+          <div class="text-2xl font-black stat" id="pf-lives">❤️❤️❤️</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🏁 State</div>
+          <div class="text-2xl font-black stat" id="pf-state">Playing</div>
+        </div>
+      </div>
+
+      <!-- game console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="pf-status">Reach the flag on the far right — mind the pits and spikes</div>
+        <div class="pf-wrap">
+          <div class="pf-canvas-hold">
+            <canvas id="pf-canvas" width="832" height="448"></canvas>
+          </div>
+        </div>
+        <div id="pf-over" class="pf-over hidden">
+          <h3 id="pf-over-title" class="win">YOU WIN</h3>
+          <div class="brk" id="pf-over-brk"></div>
+          <button id="pf-again" class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold mt-2">↻ Play again</button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <button id="pf-new" class="btn bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        The entire world is a small array of text rows — every <span class="keycap">#</span> is a solid tile, <span class="keycap">=</span> a platform, <span class="keycap">^</span> a spike, <span class="keycap">o</span> a coin, <span class="keycap">E</span> an enemy and <span class="keycap">G</span> the goal. The hero is one rectangle with a velocity; gravity adds to that velocity every tick and the position integrates from it. Collision is resolved <strong>one axis at a time</strong> — first move and unstick horizontally, then vertically — which is the single trick that keeps the player from ever tunnelling through a wall and makes landing feel solid. A fixed-timestep loop runs the physics in constant <span class="keycap">1/120&nbsp;s</span> steps so the game plays identically no matter your monitor's refresh rate.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How a grid of characters plus Newton's laws becomes a platformer</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">A side-scroller looks like a lot of game but it is really just four small ideas stacked together: the world is a grid of characters, a fixed-timestep loop advances the physics in equal slices, the hero is a box with a velocity that gravity feeds every tick, and collision is resolved <em>one axis at a time</em>. Get that last one right — move horizontally then unstick, move vertically then land — and everything else (a following camera, coins, a stompable enemy, spikes, a goal flag) is a few lines each. Below is the whole engine in eight short blocks. Copy them in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The world is a grid of characters</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no level editor and no data file — the entire level is an array of equal-length strings, one character per tile. <code>#</code> and <code>=</code> are solid, <code>^</code> is a spike, <code>o</code> a coin, <code>E</code> an enemy, <code>G</code> the goal and <code>P</code> the player's start. A single pass reads it into the things the game cares about: where the player spawns, where the coins and enemies are, and which cells are solid. A tile's pixel position is just its column and row times the tile size.</p>
+        <div class="relative"><pre>const T = 32;                              // tile size in pixels
+const LEVEL = [
+  "                                     ",  // ... sky ...
+  "        oo                       G   ",  // coins + goal flag
+  "  #####    ##   ====   ^^   ###### ##",  // solid ground, platforms, spikes
+  "  P    E        o          E         ",  // player start, enemies, a coin
+];
+const SOLID = new Set(["#", "="]);         // which glyphs you cannot pass through
+
+function tileAt(c, r){                      // the glyph at column c, row r
+  return (LEVEL[r] &amp;&amp; LEVEL[r][c]) || " ";
+}
+function solid(c, r){
+  if (c &lt; 0) return true;                   // an invisible wall on the far left
+  return SOLID.has(tileAt(c, r));           // off the top / bottom / right = empty
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The fixed-timestep loop</h3></div>
+        <p class="text-sm text-slate-600 mb-3">If you advance the physics by however long the last frame took, the game behaves differently on a 60&nbsp;Hz and a 144&nbsp;Hz screen and a lag spike can teleport the player through a wall. The fix is an <strong>accumulator</strong>: bank the real elapsed time, then spend it in fixed <code>1/120&nbsp;s</code> chunks, calling <code>update</code> once per whole chunk. Rendering happens once per frame with whatever is left over. Now the simulation is deterministic and framerate-independent.</p>
+        <div class="relative"><pre>const STEP = 1 / 120;                 // one physics slice = 1/120 of a second
+let last = performance.now(), acc = 0;
+
+function frame(now){
+  let dt = (now - last) / 1000;       // real seconds since the last frame
+  last = now;
+  if (dt &gt; 0.25) dt = 0.25;           // clamp after a tab-switch / lag spike
+  acc += dt;                          // bank the time
+  while (acc &gt;= STEP){                 // spend it in equal fixed slices
+    update(STEP);                     // physics always sees the SAME dt
+    acc -= STEP;
+  }
+  render();                           // draw once per frame
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The hero is a box with a velocity, and gravity is one line</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The player is just a rectangle with a velocity <code>(vx, vy)</code>. Horizontal input pushes the velocity toward a top speed with real acceleration, and when you let go, friction eases it back to zero so movement has weight. Gravity is the whole of the "falling" code: every tick it adds a constant to <code>vy</code> (capped so you never fall faster than one tile per step). Position then integrates from velocity — but only <em>through</em> the collision routine in the next step.</p>
+        <div class="relative"><pre>const GRAVITY = 2200, MAXFALL = 1100;      // px/s^2 down, terminal speed
+const MOVE = 210, ACCEL = 1600, FRICTION = 1400;
+
+function movePlayer(dt){
+  const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  if (dir !== 0){
+    p.vx += dir * ACCEL * dt;              // accelerate toward top speed
+    p.vx = clamp(p.vx, -MOVE, MOVE);
+  } else {                                  // no input → friction to a stop
+    const f = FRICTION * dt;
+    p.vx = p.vx &gt; 0 ? Math.max(0, p.vx - f) : Math.min(0, p.vx + f);
+  }
+  p.vy = Math.min(p.vy + GRAVITY * dt, MAXFALL);   // gravity — the whole of it
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">A jump with variable height, coyote-time and a buffer</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A good jump is three tiny rules. <strong>Variable height:</strong> starting the jump sets a big upward velocity; if you release the key while still rising, you cut that velocity in half, so a tap is a hop and a hold is a leap. <strong>Coyote-time:</strong> you may still jump for a few hundredths of a second <em>after</em> walking off a ledge, which forgives a late press. <strong>Jump-buffer:</strong> a press made a moment before landing is remembered and fires the instant you touch down.</p>
+        <div class="relative"><pre>const JUMP = 680, COYOTE = 0.09, BUFFER = 0.10, CUT = 0.5;
+
+function jumpLogic(dt){
+  if (p.onGround) p.coyote = COYOTE; else p.coyote -= dt;   // grace after a ledge
+  p.buf -= dt;
+  if (pressedJump) p.buf = BUFFER;                          // remember an early press
+  if (p.buf &gt; 0 &amp;&amp; p.coyote &gt; 0){                            // fire when both are live
+    p.vy = -JUMP; p.onGround = false; p.coyote = 0; p.buf = 0;
+  }
+  if (releasedJump &amp;&amp; p.vy &lt; 0) p.vy *= CUT;                // let go early → shorter jump
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">AABB tile collision — resolve one axis at a time</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the heart of the whole game. Never move both axes at once. First add <code>vx</code> to <code>x</code>, look at every solid tile the box now overlaps, and push the box back to that tile's edge — right side if you were moving right, left side if left — and zero <code>vx</code>. <em>Then</em> add <code>vy</code> to <code>y</code> and do it again vertically: landing snaps you to the tile top and marks you grounded; a rising hit snaps you under the tile. Splitting the axes turns a hard corner-case problem into two trivial 1-D ones and makes tunnelling impossible.</p>
+        <div class="relative"><pre>function cells(o){                          // tile range the box overlaps
+  return { c0: Math.floor(o.x / T),         c1: Math.floor((o.x + o.w - 0.01) / T),
+           r0: Math.floor(o.y / T),         r1: Math.floor((o.y + o.h - 0.01) / T) };
+}
+function moveX(o){
+  o.x += o.vx * STEP;                       // 1) move on X only
+  const b = cells(o);
+  for (let r = b.r0; r &lt;= b.r1; r++) for (let c = b.c0; c &lt;= b.c1; c++)
+    if (solid(c, r)){                       // 2) unstick to the tile edge
+      o.x = o.vx &gt; 0 ? c * T - o.w : (c + 1) * T;
+      o.vx = 0; return;                      //    and kill horizontal speed
+    }
+}
+function moveY(o){
+  o.y += o.vy * STEP;                       // 3) THEN move on Y only
+  o.onGround = false;
+  const b = cells(o);
+  for (let r = b.r0; r &lt;= b.r1; r++) for (let c = b.c0; c &lt;= b.c1; c++)
+    if (solid(c, r)){
+      if (o.vy &gt; 0){ o.y = r * T - o.h; o.onGround = true; }  // landed → stand
+      else          o.y = (r + 1) * T;                        // bonked a ceiling
+      o.vy = 0; return;                                        // landing zeroes fall
+    }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">A camera that follows the player</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The level is far wider than the canvas, so instead of moving the world you move a <em>camera</em>: an <code>(x, y)</code> offset subtracted from everything when you draw. Centre it on the player, then <strong>clamp</strong> it to the level bounds so it never scrolls past the first or last column and shows empty space. That single clamp is what stops the classic "the camera ran off the edge of the map" bug.</p>
+        <div class="relative"><pre>function updateCamera(){
+  cam.x = clamp(p.x + p.w / 2 - VIEW_W / 2, 0, COLS * T - VIEW_W);
+  cam.y = clamp(p.y + p.h / 2 - VIEW_H / 2, 0, ROWS * T - VIEW_H);
+}
+// when drawing anything:  screenX = worldX - cam.x;  screenY = worldY - cam.y;
+function clamp(v, lo, hi){ return v &lt; lo ? lo : v &gt; hi ? hi : v; }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Enemies: patrol, then stomp or die</h3></div>
+        <p class="text-sm text-slate-600 mb-3">An enemy is the same box-with-velocity as the player and reuses the exact same <code>moveX</code>/<code>moveY</code> collision. It patrols by walking one way until it hits a wall <em>or</em> runs out of floor ahead, then flips direction — so it never walks off its own platform. Against the player it is Mario's rule: if the player is falling and their feet are near the enemy's head, it is a <strong>stomp</strong> — the enemy dies and the player bounces; any other overlap is a side hit and costs a life.</p>
+        <div class="relative"><pre>function updateEnemy(e, dt){
+  e.vy = Math.min(e.vy + GRAVITY * dt, MAXFALL);
+  moveX(e); if (e.hitWall) e.vx *= -1;          // bounce off walls
+  moveY(e);
+  if (e.onGround){                               // no floor ahead? turn around
+    const ahead = e.vx &gt; 0 ? e.x + e.w + 2 : e.x - 2;
+    if (!solid(Math.floor(ahead / T), Math.floor((e.y + e.h + 2) / T))) e.vx *= -1;
+  }
+  if (overlap(p, e)){
+    const stomp = p.vy &gt; 0 &amp;&amp; (p.y + p.h) - e.y &lt; 16;   // falling onto its head
+    if (stomp){ e.alive = false; p.vy = -520; }         // squash + bounce
+    else       loseLife();                              // touched its side
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Coins, spikes, pits, the flag — and the wiring</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The rest is a handful of overlap tests each tick. A coin box you overlap flips to collected. A spike tile under your box, or falling below the map (a pit), costs a life and respawns you at the start; lose all three and it is game over. Touch a <code>G</code> tile and you win. All of these run after the movement, once the player's final position for the tick is known.</p>
+        <div class="relative"><pre>function update(dt){
+  movePlayer(dt); jumpLogic(dt);
+  moveX(p); moveY(p);                                   // resolve player collision
+  enemies.forEach(e =&gt; e.alive &amp;&amp; updateEnemy(e, dt));
+
+  coins.forEach(c =&gt; { if (!c.got &amp;&amp; overlap(p, c)) c.got = true; });
+  if (spikeUnder(p) || p.y &gt; ROWS * T + 80) loseLife(); // spike or bottomless pit
+  if (goalUnder(p)) win();                              // reached the flag
+  updateCamera();
+}
+function loseLife(){ if (--lives &lt;= 0) gameOver(); else respawn(); }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 56 of GameFromZero done — a real side-scroller from a grid of text.</h3><p class="text-sm text-emerald-700 mt-2">You built a platformer with genuine physics and none of it was magic: the world is an array of strings, a fixed-timestep accumulator keeps the simulation identical on any monitor, the hero is a box that gravity accelerates every tick, and the whole feel of the game comes from resolving collision one axis at a time — move on X and unstick, then move on Y and land. On top of that skeleton a following-and-clamped camera, a box-vs-box coin grab, a patrolling enemy with a stomp rule, spikes, pits and a goal flag were only a few lines apiece. Next: add moving platforms and one-way (jump-through) tiles, a double-jump or wall-jump, a swept/continuous collision test for very fast bodies, a scrolling parallax background with several depths, or a tiny in-page level editor that writes new rows of that same character grid. <strong>👉 Tomorrow — Day 57: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== PLATFORMER ENGINE (vanilla) =====
+const canvas = document.getElementById("pf-canvas");
+const ctx = canvas.getContext("2d");
+const VIEW_W = canvas.width, VIEW_H = canvas.height;
+
+// ---- constants (all in pixels & seconds) ----
+const T        = 32;      // tile size
+const GRAVITY  = 2200;    // downward acceleration
+const MAXFALL  = 1100;    // terminal fall speed
+const MOVE     = 210;     // top horizontal speed
+const ACCEL    = 1600;    // ground/air acceleration
+const FRICTION = 1400;    // deceleration when no input
+const JUMP     = 680;     // initial jump velocity (~3.3 tiles high)
+const COYOTE   = 0.09;    // grace period to jump after leaving a ledge
+const BUFFER   = 0.10;    // remembered early jump press
+const CUT      = 0.5;     // velocity kept when jump released while rising
+const STOMP    = 520;     // bounce after squashing an enemy
+const ENEMY_V  = 70;      // enemy patrol speed
+const PW = 22, PH = 28;   // player box size
+const EW = 26, EH = 26;   // enemy box size
+const CW = 18, CH = 18;   // coin box size
+
+function clamp(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
+
+// ---- the world is a grid of characters ----
+// #,= solid   ^ spike   o coin   E enemy   G goal   P player start
+function buildLevel(){
+  const ROWSn = 14, COLSn = 60;
+  const g = [];
+  for (let r = 0; r < ROWSn; r++) g.push(Array(COLSn).fill(" "));
+  const set = (r, c, ch) => { if (r >= 0 && r < ROWSn && c >= 0 && c < COLSn) g[r][c] = ch; };
+
+  for (let c = 0; c < COLSn; c++) set(13, c, "#");             // ground
+  [20, 21, 22, 40, 41, 42].forEach(c => set(13, c, " "));      // two pits
+  for (let c = 25; c <= 28; c++) set(10, c, "=");              // floating platform
+  for (let c = 45; c <= 48; c++) set(10, c, "=");              // floating platform
+  [[11,5],[11,6],[11,7],[11,20],[11,21],[11,22],
+   [9,25],[9,26],[9,27],[9,45],[9,46],[9,47]].forEach(a => set(a[0], a[1], "o")); // coins
+  [36, 37].forEach(c => set(12, c, "^"));                      // spikes
+  set(12, 2, "P");                                             // player start
+  set(12, 14, "E"); set(12, 33, "E"); set(12, 50, "E");        // enemies
+  set(12, 57, "G");                                            // goal flag
+  return g.map(row => row.join(""));
+}
+
+let LEVEL, ROWS, COLS;
+const SOLID = new Set(["#", "="]);
+
+function tileAt(c, r){ return (LEVEL[r] && LEVEL[r][c]) || " "; }
+function solid(c, r){
+  if (c < 0) return true;                 // invisible wall at the far left
+  if (r < 0 || r >= ROWS || c >= COLS) return false;
+  return SOLID.has(tileAt(c, r));
+}
+
+// ---- state ----
+let p, enemies, coins, spawn, enemySpawns, coinTotal;
+let lives, coinsGot, state, won, cam, anim = 0;
+const keys = { left:false, right:false, jump:false };
+const input = { jumpEdge:false, jumpRelEdge:false };
+
+function parseLevel(){
+  enemySpawns = []; coins = [];
+  for (let r = 0; r < ROWS; r++){
+    for (let c = 0; c < COLS; c++){
+      const ch = LEVEL[r][c];
+      if (ch === "P") spawn = { x: c * T + (T - PW) / 2, y: (r + 1) * T - PH };
+      else if (ch === "E") enemySpawns.push({ x: c * T + (T - EW) / 2, y: (r + 1) * T - EH });
+      else if (ch === "o") coins.push({ x: c * T + (T - CW) / 2, y: r * T + (T - CH) / 2, w: CW, h: CH, got:false });
+    }
+  }
+  coinTotal = coins.length;
+}
+
+function newGame(){
+  LEVEL = buildLevel();
+  ROWS = LEVEL.length; COLS = LEVEL[0].length;
+  parseLevel();
+  p = { x:0, y:0, w:PW, h:PH, vx:0, vy:0, onGround:false, coyote:0, buf:0, face:1 };
+  cam = { x:0, y:0 };
+  lives = 3; coinsGot = 0; won = false; state = "play";
+  respawnPlayer(); resetEnemies();
+  updateCamera();
+  document.getElementById("pf-over").classList.add("hidden");
+  updateHUD();
+}
+
+function respawnPlayer(){
+  p.x = spawn.x; p.y = spawn.y; p.vx = 0; p.vy = 0;
+  p.onGround = false; p.coyote = 0; p.buf = 0; p.face = 1;
+}
+function resetEnemies(){
+  enemies = enemySpawns.map(s => ({ x:s.x, y:s.y, w:EW, h:EH, vx:ENEMY_V, vy:0, onGround:false, alive:true, face:1, hitWall:false }));
+}
+
+// ---- AABB tile collision, resolved ONE AXIS AT A TIME ----
+function cells(o){
+  return { c0: Math.floor(o.x / T),               c1: Math.floor((o.x + o.w - 0.01) / T),
+           r0: Math.floor(o.y / T),               r1: Math.floor((o.y + o.h - 0.01) / T) };
+}
+function moveX(o, dt){
+  o.x += o.vx * dt;
+  o.hitWall = false;
+  const b = cells(o);
+  for (let r = b.r0; r <= b.r1; r++){
+    for (let c = b.c0; c <= b.c1; c++){
+      if (solid(c, r)){
+        o.x = o.vx > 0 ? c * T - o.w : (c + 1) * T;   // unstick to the tile edge
+        o.vx = 0; o.hitWall = true; return;
+      }
+    }
+  }
+}
+function moveY(o, dt){
+  o.vy = Math.min(o.vy + GRAVITY * dt, MAXFALL);
+  o.y += o.vy * dt;
+  o.onGround = false;
+  const b = cells(o);
+  for (let r = b.r0; r <= b.r1; r++){
+    for (let c = b.c0; c <= b.c1; c++){
+      if (solid(c, r)){
+        if (o.vy > 0){ o.y = r * T - o.h; o.onGround = true; }  // landed
+        else           o.y = (r + 1) * T;                        // bonked ceiling
+        o.vy = 0; return;
+      }
+    }
+  }
+}
+
+// ---- player control ----
+function movePlayer(dt){
+  const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  if (dir !== 0){
+    p.vx = clamp(p.vx + dir * ACCEL * dt, -MOVE, MOVE);
+    p.face = dir;
+  } else {
+    const f = FRICTION * dt;
+    p.vx = p.vx > 0 ? Math.max(0, p.vx - f) : Math.min(0, p.vx + f);
+  }
+  // jump: coyote-time + jump buffer + variable height
+  if (p.onGround) p.coyote = COYOTE; else p.coyote -= dt;
+  p.buf -= dt;
+  if (input.jumpEdge){ p.buf = BUFFER; input.jumpEdge = false; }
+  if (p.buf > 0 && p.coyote > 0){
+    p.vy = -JUMP; p.onGround = false; p.coyote = 0; p.buf = 0;
+  }
+  if (input.jumpRelEdge){ if (p.vy < 0) p.vy *= CUT; input.jumpRelEdge = false; }
+}
+
+// ---- overlap tests ----
+function overlap(a, b){
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+function anyTile(o, ch){
+  const c0 = Math.max(0, Math.floor(o.x / T)),   c1 = Math.min(COLS - 1, Math.floor((o.x + o.w - 0.01) / T));
+  const r0 = Math.max(0, Math.floor(o.y / T)),   r1 = Math.min(ROWS - 1, Math.floor((o.y + o.h - 0.01) / T));
+  for (let r = r0; r <= r1; r++)
+    for (let c = c0; c <= c1; c++)
+      if (tileAt(c, r) === ch) return true;
+  return false;
+}
+
+// ---- enemies ----
+function updateEnemies(dt){
+  for (const e of enemies){
+    if (!e.alive) continue;
+    moveX(e, dt); if (e.hitWall) e.vx *= -1;           // bounce off walls
+    moveY(e, dt);
+    if (e.onGround){                                    // turn at a ledge
+      const ahead = e.vx > 0 ? e.x + e.w + 2 : e.x - 2;
+      if (!solid(Math.floor(ahead / T), Math.floor((e.y + e.h + 2) / T))) e.vx *= -1;
+    }
+    e.face = e.vx >= 0 ? 1 : -1;
+    if (overlap(p, e)){
+      const stomp = p.vy > 0 && (p.y + p.h) - e.y < 16;  // falling onto its head
+      if (stomp){ e.alive = false; p.vy = -STOMP; }
+      else { loseLife(); return; }
+    }
+  }
+}
+
+// ---- lives / win ----
+function loseLife(){
+  lives--;
+  if (lives <= 0){ state = "over"; won = false; showOver(); }
+  else { respawnPlayer(); resetEnemies(); }
+}
+function win(){ state = "over"; won = true; showOver(); }
+
+function showOver(){
+  const t = document.getElementById("pf-over-title");
+  t.textContent = won ? "YOU WIN" : "GAME OVER";
+  t.className = won ? "win" : "lose";
+  document.getElementById("pf-over-brk").textContent = won
+    ? "You reached the flag with " + coinsGot + " / " + coinTotal + " coins."
+    : "Out of lives — the pits and spikes got you. Try again.";
+  document.getElementById("pf-over").classList.remove("hidden");
+  updateHUD();
+}
+
+// ---- camera ----
+function updateCamera(){
+  cam.x = clamp(p.x + p.w / 2 - VIEW_W / 2, 0, Math.max(0, COLS * T - VIEW_W));
+  cam.y = clamp(p.y + p.h / 2 - VIEW_H / 2, 0, Math.max(0, ROWS * T - VIEW_H));
+}
+
+// ---- one physics tick ----
+function update(dt){
+  anim += dt;
+  movePlayer(dt);
+  moveX(p, dt);
+  moveY(p, dt);
+  updateEnemies(dt);
+  if (state !== "play") return;
+  coins.forEach(c => { if (!c.got && overlap(p, c)){ c.got = true; coinsGot++; } });
+  if (anyTile(p, "^") || p.y > ROWS * T + 80){ loseLife(); return; }
+  if (anyTile(p, "G")){ win(); return; }
+  updateCamera();
+}
+
+// ===== rendering =====
+function render(){
+  // sky
+  const sky = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+  sky.addColorStop(0, "#7dd3fc"); sky.addColorStop(1, "#e0f2fe");
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  drawParallax();
+
+  ctx.save();
+  ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
+  drawTiles();
+  drawCoins();
+  drawEnemies();
+  drawPlayer();
+  ctx.restore();
+
+  updateHUD();
+}
+
+function drawParallax(){
+  // distant hills, slower than the camera
+  ctx.fillStyle = "#bbf7d0";
+  const off = (cam.x * 0.3) % 260;
+  for (let i = -1; i < VIEW_W / 260 + 2; i++){
+    const x = i * 260 - off;
+    ctx.beginPath();
+    ctx.arc(x + 130, VIEW_H - 40, 150, Math.PI, 0);
+    ctx.fill();
+  }
+  // clouds
+  ctx.fillStyle = "rgba(255,255,255,.85)";
+  const co = (cam.x * 0.5) % 360;
+  for (let i = -1; i < VIEW_W / 360 + 2; i++){
+    const x = i * 360 - co + 60, y = 60 + (i % 2) * 40;
+    cloud(x, y);
+  }
+}
+function cloud(x, y){
+  ctx.beginPath();
+  ctx.arc(x, y, 20, 0, 7); ctx.arc(x + 24, y + 6, 26, 0, 7);
+  ctx.arc(x + 54, y, 20, 0, 7); ctx.rect(x, y, 54, 22);
+  ctx.fill();
+}
+
+function drawTiles(){
+  const c0 = Math.max(0, Math.floor(cam.x / T));
+  const c1 = Math.min(COLS - 1, Math.floor((cam.x + VIEW_W) / T) + 1);
+  for (let c = c0; c <= c1; c++){
+    for (let r = 0; r < ROWS; r++){
+      const ch = tileAt(c, r);
+      const x = c * T, y = r * T;
+      if (ch === "#"){
+        ctx.fillStyle = "#8b5a2b"; ctx.fillRect(x, y, T, T);       // dirt
+        ctx.fillStyle = "#22c55e"; ctx.fillRect(x, y, T, 7);       // grass cap
+        ctx.fillStyle = "rgba(0,0,0,.12)"; ctx.fillRect(x, y + T - 4, T, 4);
+      } else if (ch === "="){
+        ctx.fillStyle = "#a16207"; ctx.fillRect(x, y, T, T);       // wood platform
+        ctx.fillStyle = "#ca8a04"; ctx.fillRect(x, y, T, 6);
+        ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.strokeRect(x + .5, y + .5, T - 1, T - 1);
+      } else if (ch === "^"){
+        ctx.fillStyle = "#cbd5e1";
+        ctx.beginPath();
+        ctx.moveTo(x + 2, y + T); ctx.lineTo(x + T / 2, y + 4); ctx.lineTo(x + T - 2, y + T);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "#94a3b8"; ctx.stroke();
+      } else if (ch === "G"){
+        // flag pole + banner
+        ctx.fillStyle = "#e2e8f0"; ctx.fillRect(x + T / 2 - 2, y - T * 3, 4, T * 4);
+        ctx.fillStyle = "#f43f5e";
+        ctx.beginPath();
+        ctx.moveTo(x + T / 2 + 2, y - T * 3);
+        ctx.lineTo(x + T / 2 + 26, y - T * 3 + 12);
+        ctx.lineTo(x + T / 2 + 2, y - T * 3 + 24);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#334155"; ctx.fillRect(x + T / 2 - 6, y + T - 6, 12, 6);
+      }
+    }
+  }
+}
+
+function drawCoins(){
+  for (const c of coins){
+    if (c.got) continue;
+    const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+    const sx = Math.abs(Math.cos(anim * 4 + c.x * 0.05));    // spin illusion
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(0.4 + 0.6 * sx, 1);
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath(); ctx.arc(0, 0, c.w / 2, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fde68a";
+    ctx.beginPath(); ctx.arc(0, 0, c.w / 2 - 4, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawEnemies(){
+  for (const e of enemies){
+    if (!e.alive) continue;
+    const wob = Math.sin(anim * 10) * 2;
+    ctx.fillStyle = "#7c3aed";
+    roundRect(e.x, e.y + wob, e.w, e.h - wob, 8); ctx.fill();
+    // feet
+    ctx.fillStyle = "#4c1d95";
+    ctx.fillRect(e.x + 3, e.y + e.h - 4, 7, 4);
+    ctx.fillRect(e.x + e.w - 10, e.y + e.h - 4, 7, 4);
+    // eyes, looking in travel direction
+    ctx.fillStyle = "#fff";
+    const ex = e.face > 0 ? 4 : -4;
+    ctx.beginPath(); ctx.arc(e.x + e.w / 2 - 5 + ex, e.y + 10 + wob, 4, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(e.x + e.w / 2 + 5 + ex, e.y + 10 + wob, 4, 0, 7); ctx.fill();
+    ctx.fillStyle = "#111827";
+    ctx.beginPath(); ctx.arc(e.x + e.w / 2 - 4 + ex, e.y + 10 + wob, 2, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(e.x + e.w / 2 + 6 + ex, e.y + 10 + wob, 2, 0, 7); ctx.fill();
+  }
+}
+
+function drawPlayer(){
+  const squash = p.onGround && Math.abs(p.vx) > 20 ? Math.sin(anim * 18) * 1.5 : 0;
+  // body
+  ctx.fillStyle = "#059669";
+  roundRect(p.x, p.y + squash, p.w, p.h - squash, 6); ctx.fill();
+  ctx.fillStyle = "#047857";
+  roundRect(p.x, p.y + p.h - 8, p.w, 8, 6); ctx.fill();     // legs
+  // face
+  ctx.fillStyle = "#fff";
+  const fx = p.face > 0 ? 3 : -3;
+  ctx.beginPath(); ctx.arc(p.x + p.w / 2 + fx, p.y + 9 + squash, 4, 0, 7); ctx.fill();
+  ctx.fillStyle = "#111827";
+  ctx.beginPath(); ctx.arc(p.x + p.w / 2 + fx + (p.face > 0 ? 1 : -1), p.y + 9 + squash, 2, 0, 7); ctx.fill();
+}
+
+function roundRect(x, y, w, h, r){
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// ===== HUD =====
+const coinEl  = document.getElementById("pf-coins");
+const lifeEl  = document.getElementById("pf-lives");
+const stateEl = document.getElementById("pf-state");
+const statusEl = document.getElementById("pf-status");
+function updateHUD(){
+  coinEl.textContent = coinsGot + " / " + coinTotal;
+  lifeEl.textContent = lives > 0 ? "❤️".repeat(lives) : "—";
+  if (state === "over"){
+    stateEl.textContent = won ? "You win!" : "Game over";
+    statusEl.textContent = won ? "🏁 You reached the flag!" : "💀 Out of lives.";
+    statusEl.style.color = won ? "#6ee7b7" : "#fca5a5";
+  } else {
+    stateEl.textContent = "Playing";
+    statusEl.textContent = "Reach the flag on the far right — mind the pits and spikes";
+    statusEl.style.color = "#a7f3d0";
+  }
+}
+
+// ===== input =====
+function lookVisible(){ return !document.getElementById("look").classList.contains("hidden"); }
+window.addEventListener("keydown", e => {
+  if (!lookVisible()) return;
+  const k = e.key.toLowerCase();
+  if (k === "arrowleft"  || k === "a") keys.left = true;
+  if (k === "arrowright" || k === "d") keys.right = true;
+  if (k === "arrowup" || k === "w" || k === " " || k === "spacebar"){
+    if (!keys.jump) input.jumpEdge = true;
+    keys.jump = true;
+  }
+  if (k === "r") newGame();
+  if (["arrowleft","arrowright","arrowup","arrowdown"," ","spacebar"].includes(k)) e.preventDefault();
+});
+window.addEventListener("keyup", e => {
+  const k = e.key.toLowerCase();
+  if (k === "arrowleft"  || k === "a") keys.left = false;
+  if (k === "arrowright" || k === "d") keys.right = false;
+  if (k === "arrowup" || k === "w" || k === " " || k === "spacebar"){
+    keys.jump = false; input.jumpRelEdge = true;
+  }
+});
+document.getElementById("pf-new").onclick   = newGame;
+document.getElementById("pf-again").onclick = newGame;
+
+// ===== fixed-timestep loop =====
+const STEP = 1 / 120;
+let last = performance.now(), acc = 0;
+function frame(now){
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.25) dt = 0.25;         // clamp after a tab-switch / lag spike
+  acc += dt;
+  let guard = 0;
+  while (acc >= STEP && guard++ < 8){
+    if (state === "play") update(STEP);
+    acc -= STEP;
+  }
+  render();
+  requestAnimationFrame(frame);
+}
+
+// ===== boot =====
+newGame();
+requestAnimationFrame(frame);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The whole world is a grid of characters",
+   why:"A platformer level looks like a lot of data, but here it is just an array of equal-length strings — one character per tile. A hash is solid ground, an equals sign a platform, a caret a spike, an 'o' a coin, an 'E' an enemy, a 'G' the goal and a 'P' the player's start. Nothing else describes the world. To ask whether a pixel position is inside a wall you divide by the tile size to get a column and row and read the character there. That one lookup, solid(c,r), is the foundation the entire physics stands on.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">"      o o       G"<br>"  ==     ^^   ==="<br>" P   E        ####"<br>"#################"<br><br>column c, row r &rarr; LEVEL[r][c]<br>'#','=' = solid &middot; '^' spike &middot; 'o' coin &middot; 'G' goal</div>`,
+   code:`const T = 32;                          // tile size in pixels
+const SOLID = new Set(["#", "="]);
+function tileAt(c, r){ return (LEVEL[r] && LEVEL[r][c]) || " "; }
+function solid(c, r){
+  if (c < 0) return true;               // wall on the far left
+  return SOLID.has(tileAt(c, r));       // everything else off-map = empty
+}` },
+
+ { title:"2. A fixed-timestep loop keeps physics honest",
+   why:"Tie your physics to the length of the last frame and the game speeds up and slows down with the framerate, and a single lag spike can shove the player clean through a wall. Instead, bank the real elapsed time in an accumulator and spend it in equal, fixed slices — one 120th of a second each — calling update once per whole slice. The physics always sees the same dt, so the simulation is deterministic and identical on a 60 Hz laptop and a 144 Hz monitor. Rendering just draws whatever the latest state is.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">acc += realTime<br>while (acc &gt;= 1/120){<br>&nbsp;&nbsp;update(1/120)&nbsp;&nbsp;// always the same dt<br>&nbsp;&nbsp;acc -= 1/120<br>}<br>render()<br><br>same speed at 60 Hz and 144 Hz</div>`,
+   code:`const STEP = 1 / 120;
+let last = performance.now(), acc = 0;
+function frame(now){
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.25) dt = 0.25;        // clamp a lag spike
+  acc += dt;
+  while (acc >= STEP){ update(STEP); acc -= STEP; }
+  render();
+  requestAnimationFrame(frame);
+}` },
+
+ { title:"3. The hero is a box, and gravity is one line",
+   why:"The player is nothing but a rectangle with a velocity. Left/right input accelerates the horizontal velocity toward a top speed, and releasing it lets friction ease it back to zero, which is what gives movement a sense of weight. Gravity is the entire falling model: every tick it adds a constant to the vertical velocity, capped at a terminal speed. Nothing moves yet — the velocity is only turned into a new position by the collision step, which is where the real work happens.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">input &rarr; vx accelerates to &plusmn;MOVE<br>no input &rarr; friction &rarr; vx to 0<br><br>every tick:&nbsp;&nbsp;vy += GRAVITY &middot; dt<br>(capped at MAXFALL)<br><br>position comes later, via collision</div>`,
+   code:`function movePlayer(dt){
+  const dir = (keys.right?1:0) - (keys.left?1:0);
+  if (dir) p.vx = clamp(p.vx + dir*ACCEL*dt, -MOVE, MOVE);
+  else {                                  // friction to a stop
+    const f = FRICTION*dt;
+    p.vx = p.vx>0 ? Math.max(0,p.vx-f) : Math.min(0,p.vx+f);
+  }
+  p.vy = Math.min(p.vy + GRAVITY*dt, MAXFALL);  // gravity
+}` },
+
+ { title:"4. A jump that feels good — three tiny rules",
+   why:"A satisfying jump is not one number, it is three small forgiving rules. Variable height: the jump sets a big upward velocity, and if you release the key while still rising you halve that velocity, so a tap is a hop and a hold is a full leap. Coyote-time: for a few hundredths of a second after walking off a ledge you can still jump, forgiving a slightly late press. Jump-buffer: a press made just before you land is remembered and fires the moment you touch ground, so an eager press is never swallowed.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">tap &rarr; small hop&nbsp;&nbsp;&middot;&nbsp;&nbsp;hold &rarr; high leap<br>(release while rising &rarr; vy &times;= 0.5)<br><br>coyote: jump up to 0.09 s AFTER a ledge<br>buffer: a press 0.10 s EARLY still fires</div>`,
+   code:`function jumpLogic(dt){
+  if (p.onGround) p.coyote = COYOTE; else p.coyote -= dt;
+  p.buf -= dt;
+  if (pressed) p.buf = BUFFER;            // remember early press
+  if (p.buf > 0 && p.coyote > 0){         // both live → jump
+    p.vy = -JUMP; p.onGround = false; p.coyote = p.buf = 0;
+  }
+  if (released && p.vy < 0) p.vy *= 0.5;  // variable height
+}` },
+
+ { title:"5. Collision: resolve ONE axis at a time",
+   why:"This is the whole game in one idea. Never move diagonally in a single step. First add horizontal velocity to x, find every solid tile the box now overlaps, and shove the box back to that tile's near edge, zeroing horizontal speed — now you can never tunnel through a wall no matter how fast you run. Then, separately, add vertical velocity to y and do the same: hitting a tile from above snaps you onto its top and flags you grounded (and landing zeroes the fall so you stand, not sink); hitting one from below stops the jump. Two easy 1-D problems instead of one hard 2-D one.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">x += vx&nbsp;&nbsp;&rarr; hit wall? push out, vx = 0<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&darr;&nbsp;(only now)<br>y += vy&nbsp;&nbsp;&rarr; hit floor? snap up, onGround, vy = 0<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr; hit ceiling? snap down, vy = 0</div>`,
+   code:`function moveX(o){
+  o.x += o.vx*STEP;
+  for (tile the box overlaps) if (solid){
+    o.x = o.vx>0 ? c*T - o.w : (c+1)*T;   // unstick
+    o.vx = 0; break;
+  }
+}
+function moveY(o){
+  o.y += o.vy*STEP; o.onGround = false;
+  for (tile the box overlaps) if (solid){
+    if (o.vy>0){ o.y = r*T - o.h; o.onGround = true; }
+    else         o.y = (r+1)*T;
+    o.vy = 0; break;
+  }
+}` },
+
+ { title:"6. A camera that follows and clamps",
+   why:"The level is far wider than the canvas, so rather than move the world you move a camera — an (x, y) offset you subtract from everything at draw time. Centre it on the player so they stay in the middle of the screen, then clamp it to the level's bounds so it can never scroll past the first or last column and reveal the empty void beyond the map. That clamp is the difference between a camera that feels solid and one that drifts off the edge of the world.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">cam.x = player.x - VIEW_W/2<br>cam.x = clamp(cam.x, 0, levelW - VIEW_W)<br><br>draw: screenX = worldX - cam.x<br><br>player centred &middot; never past the edges</div>`,
+   code:`function updateCamera(){
+  cam.x = clamp(p.x + p.w/2 - VIEW_W/2, 0, COLS*T - VIEW_W);
+  cam.y = clamp(p.y + p.h/2 - VIEW_H/2, 0, ROWS*T - VIEW_H);
+}
+// everything drawn at (worldX - cam.x, worldY - cam.y)` },
+
+ { title:"7. Enemies, coins, spikes and the flag",
+   why:"Everything else is overlap tests once the player's position for the tick is settled. An enemy is the same box-and-velocity as the player and reuses the identical collision; it patrols until it hits a wall or finds no floor ahead, then turns. Against the player it is the classic rule: falling onto its head is a stomp — the enemy dies and you bounce — while any side contact costs a life. A coin box you overlap is collected; a spike tile beneath you, or falling below the map into a pit, costs a life and respawns you; touching the goal flag wins.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">enemy: patrol, turn at wall/ledge<br>falling onto head &rarr; STOMP + bounce<br>touch its side &rarr; lose a life<br><br>coin overlap &rarr; collect<br>spike / fall in pit &rarr; lose a life + respawn<br>touch flag 'G' &rarr; WIN</div>`,
+   code:`if (overlap(p, e)){
+  const stomp = p.vy > 0 && (p.y+p.h) - e.y < 16;
+  if (stomp){ e.alive = false; p.vy = -STOMP; }  // squash + bounce
+  else loseLife();                                // side hit
+}
+if (anyTile(p, "^") || p.y > ROWS*T + 80) loseLife(); // spike / pit
+if (anyTile(p, "G")) win();                            // flag` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>
