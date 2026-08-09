@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 58 — Pipe Mania</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+  .hidden { display:none; }
+
+  /* ===== pipe mania ===== */
+  .pm-wrap { display:flex; flex-direction:column; gap:14px; align-items:center; }
+  .pm-canvas-hold { width:100%; display:flex; justify-content:center; }
+  #pm-canvas {
+    display:block; width:100%; max-width:832px; height:auto; border-radius:12px;
+    background:#0b1220; image-rendering:auto; cursor:pointer; touch-action:none;
+    box-shadow: inset 0 0 0 2px #1e293b, 0 8px 22px rgba(0,0,0,.45);
+  }
+  .pm-over { position:absolute; inset:0; background:rgba(2,6,23,.9); border-radius:19px;
+             display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; z-index:5; text-align:center; padding:20px; }
+  .pm-over h3 { font-size:44px; font-weight:900; }
+  .pm-over h3.win  { color:#6ee7b7; }
+  .pm-over h3.lose { color:#fca5a5; }
+  .pm-over .brk { font-size:14px; color:#94a3b8; max-width:380px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 58</div>
+      <h1 class="text-xl font-bold">🔧 Pipe Mania — A Genuinely-Live Pipe-Laying Race Built From Nothing but a Grid, a Handful of Bitmasks and One Rule About Matching Openings: Every Pipe Piece Is Just a Set of Open Sides — North, East, South, West Packed Into Four Bits — So a Horizontal Straight Is "East + West", an Elbow Is "North + East", and the Rare Cross Is All Four at Once; a Queue Feeds You Random Pieces One at a Time and You Race a Draining Fuse to Click Them Onto Empty Cells (Overwriting Any Pipe the Water Has Not Yet Reached) Into an Unbroken Path Away From a Fixed Source; When the Fuse Runs Out the Water Is Released and Crawls Cell-by-Cell on a Timer, and at Every Step the Piece It Sits in Routes It From the Side It Entered to Its One Other Opening — a Cross Simply Sends It Straight Through — Then It Only Advances if the Neighbouring Cell Actually Has the Opposite Opening Facing Back at It, the Exact Bitmask Test <code>neighbour.mask &amp; opposite(exit)</code>, Otherwise the Flow Springs a Leak and Stops Dead; Fill Enough Connected Pipe to Reach the Distance Goal Before That Happens and You Win, Leak Before It and You Lose — All Driven by a Fixed-Timestep Accumulator Loop So the Flow Ticks Identically on a 60Hz or a 144Hz Screen, in Pure Vanilla JavaScript, One Canvas, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Lay the pipeline from the source before the fuse burns down — then race the water to the goal.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm"><strong>Click empty cells</strong> to drop the next pipe from the <strong>queue</strong> — build an unbroken run of connected openings leading away from the green <strong>source</strong>. You may <strong>overwrite</strong> any pipe the water has not yet reached, but never a filled one or the source. When the <strong>fuse</strong> runs out the water is released and crawls one cell at a time; it keeps going only where the next pipe's opening <strong>faces back at it</strong>. Fill <strong>10 connected pipes</strong> before the water hits a dead end or a gap and you win — leak early and you lose. Press <span class="keycap">Space</span> to release the water early for a bonus, <span class="keycap">R</span> to restart.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🏆 Score</div>
+          <div class="text-2xl font-black stat" id="pm-score">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">💧 Distance</div>
+          <div class="text-2xl font-black stat" id="pm-dist">0 / 10</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">⏱ Phase</div>
+          <div class="text-2xl font-black stat" id="pm-phase">Build</div>
+        </div>
+      </div>
+
+      <!-- game console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="pm-status">Lay pipe from the source — the fuse is burning</div>
+        <div class="pm-wrap">
+          <div class="pm-canvas-hold">
+            <canvas id="pm-canvas" width="832" height="448"></canvas>
+          </div>
+        </div>
+        <div id="pm-over" class="pm-over hidden">
+          <h3 id="pm-over-title" class="win">YOU WIN</h3>
+          <div class="brk" id="pm-over-brk"></div>
+          <button id="pm-again" class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold mt-2">↻ Play again</button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <button id="pm-release" class="btn bg-amber-500 hover:bg-amber-600 text-white px-6 py-2.5 rounded-lg font-bold">▶ Release water now</button>
+        <button id="pm-new" class="btn bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        Every pipe is nothing but a <strong>set of open sides</strong> packed into four bits — <span class="keycap">N</span><span class="keycap">E</span><span class="keycap">S</span><span class="keycap">W</span> — so a straight is two opposite bits, an elbow is two adjacent bits, and a cross is all four. The whole game lives in one test: when the water leaves a piece through some side, it advances only if the neighbour in that direction has the <strong>opposite</strong> opening facing back — the single line <code>neighbour.mask &amp; opposite(exit)</code>. A piece routes the water from the side it came in to its one other opening; a cross sends it straight through. Reach the distance goal on connected pipe and you win; the water finds a dead end or a gap first and it is game over. A fixed-timestep loop advances the flow in constant <span class="keycap">steps</span> so it plays the same on any monitor.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How four bits per tile and one matching rule become Pipe Mania</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Pipe Mania looks like it needs a graph library and a flood-fill, but it is really just five small ideas stacked together: a pipe piece is a <em>set of open sides</em> stored as four bits, a queue hands you random pieces to click onto a grid, a fuse counts down and then the water is released, the water is a little walker that each tick asks its current piece for its <em>other</em> opening, and it advances only when the neighbour has the <em>opposite</em> opening facing back. Get that one bitmask test right — <code>neighbour.mask &amp; opposite(exit)</code> — and everything else (overwrite rules, a distance goal, win and lose) is a few lines each. Below is the whole game in eight short blocks. Copy them in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A pipe piece is a set of open sides</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There are no sprites and no special cases per piece. A piece is just <em>which of its four sides are open</em>, packed into four bits — North&nbsp;1, East&nbsp;2, South&nbsp;4, West&nbsp;8. A horizontal straight has East and West open, so its mask is <code>2|8 = 10</code>; an elbow from North to East is <code>1|2 = 3</code>; the cross is all four, <code>15</code>. That is the entire vocabulary of the game: every rule below is a bit test against these masks.</p>
+        <div class="relative"><pre>const N = 1, E = 2, S = 4, W = 8;          // one bit per side
+
+const PIECES = {
+  H:  E | W,        // 10  ── straight ──
+  V:  N | S,        //  5  │ straight │
+  NE: N | E,        //  3  └ elbow
+  SE: E | S,        //  6  ┌ elbow
+  SW: S | W,        // 12  ┐ elbow
+  NW: N | W,        //  9  ┘ elbow
+  CROSS: N|E|S|W    // 15  ┼ crossover
+};
+// "is this piece open on side d?"  →  (mask &amp; d) !== 0
+function open(mask, d){ return (mask &amp; d) !== 0; }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Directions: opposites and grid deltas</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Two tiny lookup tables make the whole flow work. <code>OPP</code> maps a side to the side facing it — North↔South, East↔West — because when water leaves a cell heading East it enters the next cell through <em>its</em> West side. <code>DELTA</code> maps a side to the row/column step you take to reach that neighbour. Every "does the pipe connect?" and "where does the water go next?" question is answered with these two.</p>
+        <div class="relative"><pre>const OPP   = { 1:4, 4:1, 2:8, 8:2 };        // N↔S, E↔W
+const DELTA = { 1:[-1,0], 2:[0,1], 4:[1,0], 8:[0,-1] }; // [dr,dc]
+
+// leaving a cell through `exit` → the neighbour cell…
+const [dr, dc] = DELTA[exit];
+const nr = r + dr, nc = c + dc;
+// …and the water enters that neighbour through the OPPOSITE side
+const entrySide = OPP[exit];</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The board, the source, and the random queue</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The world is a grid of cells, each either empty, a pipe (with a mask), or the one <strong>source</strong> — a special cell with a single opening that points into the board. A <strong>queue</strong> hands you the upcoming pieces one at a time, drawn from a weighted bag so straights and elbows are common and the cross is rare. You always place <code>queue[0]</code>; placing it shifts the queue forward and tops it back up.</p>
+        <div class="relative"><pre>const COLS = 9, ROWS = 7;
+let board = [];
+for (let r = 0; r &lt; ROWS; r++){
+  board[r] = [];
+  for (let c = 0; c &lt; COLS; c++) board[r][c] = { kind:"empty", mask:0, filled:false };
+}
+// the source: one opening, pointing into the grid
+let source = { r: 3, c: 0, dir: E };
+board[3][0] = { kind:"source", mask: E, filled:false };
+
+const BAG = ["H","H","H","V","V","V","NE","SE","SW","NW","NE","SE","SW","NW","CROSS"];
+let queue = [];
+function refill(){ while (queue.length &lt; 5) queue.push(BAG[Math.random()*BAG.length | 0]); }</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Placing a piece — and the overwrite rule</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Clicking a cell drops the front of the queue onto it. On an empty cell that is a plain place. On a cell that already holds a pipe it is an <strong>overwrite</strong> — allowed, because you are correcting your own plan — but only if the water has not yet reached it. You can never overwrite a cell the water has already filled, the cell it is filling right now, or the source. That single guard is the whole risk of building ahead of the flow.</p>
+        <div class="relative"><pre>function placeAt(r, c){
+  const cell = board[r][c];
+  if (cell.kind === "source" || cell.filled) return;      // never these
+  if (flowing &amp;&amp; flow.r === r &amp;&amp; flow.c === c) return;       // not the cell filling now
+  if (cell.kind === "pipe") overwrites++;                  // replacing a pipe = overwrite
+  const key = queue.shift();                               // take the next piece
+  cell.kind = "pipe";
+  cell.mask = PIECES[key];
+  refill();                                                // top the queue back up
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The fuse, then release the water (fixed-timestep)</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A fuse counts down during the build phase; when it hits zero the water is released. To keep the flow ticking at the same rate on any monitor, bank the real elapsed time in an <strong>accumulator</strong> and spend it in fixed <code>1/120&nbsp;s</code> slices. Releasing sets a little walker at the source: its position, the side it entered from (none, for the source), and the side it will leave by.</p>
+        <div class="relative"><pre>const STEP = 1/120, BUILD_TIME = 12, FLOW_INTERVAL = 0.9;
+let last = performance.now(), acc = 0;
+function frame(now){
+  let dt = (now - last)/1000; last = now;
+  if (dt &gt; 0.25) dt = 0.25;                    // clamp a lag spike
+  acc += dt;
+  while (acc &gt;= STEP){ update(STEP); acc -= STEP; }
+  render(); requestAnimationFrame(frame);
+}
+function startFlow(){                            // fuse hit zero → release
+  phase = "flow";
+  flow = { r: source.r, c: source.c, from: 0, exit: source.dir, progress: 0, isSource: true };
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">A piece routes the water to its other opening</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the small heart of the flow. The water sits in a piece having entered through one side; the piece sends it out of its <strong>one other</strong> opening. Because a straight or an elbow has exactly two open sides, "the other opening" is just the mask with the entry bit cleared: <code>mask &amp; ~from</code>. A cross is the one exception — it is a genuine crossover, so it sends the water <em>straight through</em> to the opposite side.</p>
+        <div class="relative"><pre>function pieceExit(mask, from){
+  if (mask === PIECES.CROSS) return OPP[from];   // crossover → straight through
+  return mask &amp; ~from;                            // the single OTHER open side
+}
+// examples:
+//   elbow NE (N|E), water in from N → exit E
+//   straight H (E|W), water in from W → exit E
+//   cross,  water in from S → exit N  (straight across)</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Connection matching — advance, or spring a leak</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Each flow tick fills the current piece a little; when it is full, the water tries to move on. It steps to the neighbour in its exit direction and asks one question: does that neighbour have the <strong>opposite</strong> opening facing back at me? That is the whole connectivity model — <code>neighbour.mask &amp; opposite(exit)</code>. If yes, the water advances and the distance climbs; if the neighbour is off the board, empty, or its openings do not line up, the flow has sprung a <strong>leak</strong> and stops dead.</p>
+        <div class="relative"><pre>function stepFlow(dt){
+  flow.progress += dt / FLOW_INTERVAL;
+  while (flow.progress &gt;= 1 &amp;&amp; phase === "flow"){
+    flow.progress -= 1;
+    board[flow.r][flow.c].filled = true;                    // this piece is now full
+    if (!flow.isSource) distance++;                         // count filled pipes
+    if (distance &gt;= GOAL) return win();                     // reached the goal!
+
+    const [dr, dc] = DELTA[flow.exit];                      // step to the neighbour
+    const nr = flow.r + dr, nc = flow.c + dc, entry = OPP[flow.exit];
+    const nb = inBounds(nr, nc) ? board[nr][nc] : null;
+    if (nb &amp;&amp; nb.kind === "pipe" &amp;&amp; (nb.mask &amp; entry)){        // openings line up?
+      flow = { r:nr, c:nc, from:entry, exit:pieceExit(nb.mask, entry), progress:flow.progress, isSource:false };
+    } else {
+      return lose();                                        // a leak — flow stops dead
+    }
+  }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Win, lose, and wiring the tick</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The goal is a distance threshold: fill that many connected pipes and you win the instant the water reaches it. Spring a leak with fewer filled and you lose. The update tick is tiny — burn the fuse during the build phase, run the flow during the flow phase — and a click maps the pointer to a grid cell through the fixed 832×448 canvas so placement lands where you aim.</p>
+        <div class="relative"><pre>const GOAL = 10;
+function win(){ phase = "won";  showOver(true);  }
+function lose(){ phase = "lost"; showOver(false); }
+
+function update(dt){
+  if (phase === "build"){
+    buildTimer -= dt;
+    if (buildTimer &lt;= 0) startFlow();                       // fuse burned down
+  } else if (phase === "flow"){
+    stepFlow(dt);
+  }
+}
+function onClick(e){                                        // client px → grid cell
+  const b = canvas.getBoundingClientRect();
+  const x = (e.clientX - b.left) * (canvas.width  / b.width);
+  const y = (e.clientY - b.top ) * (canvas.height / b.height);
+  const c = Math.floor((x - GX) / CELL), r = Math.floor((y - GY) / CELL);
+  if (inBounds(r, c)) placeAt(r, c);
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 58 of GameFromZero done — a real pipe-laying race from four bits and one matching rule.</h3><p class="text-sm text-emerald-700 mt-2">You built Pipe Mania and none of it was magic: a pipe piece is only a set of open sides packed into four bits, a queue hands you random pieces to click onto a grid, a fuse counts down and releases the water, and the water is a little walker that asks its current piece for its other opening and then advances only where the neighbour has the opposite opening facing back — the single test <code>neighbour.mask &amp; opposite(exit)</code>. A cross is the one twist, a genuine crossover that sends the water straight through. Reach the distance goal on connected pipe and you win; find a dead end or a gap first and it leaks. Next: a refill limit and a bomb tile to erase pipe, a scrolling reservoir that speeds the water up each level, pieces that must be used within N clicks, a one-way cross that scores double when the water crosses it twice, or a puzzle mode with a fixed source and drain you must connect. <strong>👉 Tomorrow — Day 59: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== PIPE MANIA ENGINE (vanilla) =====
+const canvas = document.getElementById("pm-canvas");
+const ctx = canvas.getContext("2d");
+
+// ---- direction bits & tables ----
+const N = 1, E = 2, S = 4, W = 8;
+const OPP   = { 1:4, 4:1, 2:8, 8:2 };                 // N<->S, E<->W
+const DELTA = { 1:[-1,0], 2:[0,1], 4:[1,0], 8:[0,-1] }; // [dr,dc]
+const DIRS  = [N, E, S, W];
+
+// ---- piece table: each piece is a set of open sides ----
+const PIECES = {
+  H:  E | W,        // 10
+  V:  N | S,        //  5
+  NE: N | E,        //  3
+  SE: E | S,        //  6
+  SW: S | W,        // 12
+  NW: N | W,        //  9
+  CROSS: N | E | S | W // 15
+};
+// weighted bag: straights + elbows common, cross rare
+const BAG = ["H","H","H","V","V","V","NE","SE","SW","NW","NE","SE","SW","NW","CROSS"];
+
+// ---- tunables ----
+const COLS = 9, ROWS = 7, CELL = 52;
+const GX = 20, GY = 62;                                // grid origin (px)
+const GRIDW = COLS * CELL, GRIDH = ROWS * CELL;
+const QX = GX + GRIDW + 42, QY = 96, QBW = 108, QBH = 42, QGAP = 12, QVIS = 5;
+const BUILD_TIME = 12;          // seconds of fuse
+const FLOW_INTERVAL = 0.9;      // seconds for the water to fill one cell
+const GOAL = 10;                // connected pipes to fill = win
+const STEP = 1 / 120;
+
+// ---- state ----
+let board, source, queue, flow;
+let phase, buildTimer, distance, score, overwrites, best;
+let hover, badFlash, anim = 0;
+
+function inBounds(r, c){ return r >= 0 && r < ROWS && c >= 0 && c < COLS; }
+function randPiece(){ return BAG[Math.random() * BAG.length | 0]; }
+function refill(){ while (queue.length < QVIS) queue.push(randPiece()); }
+function loadBest(){ try { return +localStorage.getItem("pm-best") || 0; } catch (e){ return 0; } }
+function saveBest(){ try { localStorage.setItem("pm-best", String(best)); } catch (e){} }
+
+// "the OTHER opening" a piece routes the water to (cross = straight through)
+function pieceExit(mask, from){
+  if (mask === PIECES.CROSS) return OPP[from];
+  return mask & ~from;
+}
+
+function newGame(){
+  board = [];
+  for (let r = 0; r < ROWS; r++){
+    board[r] = [];
+    for (let c = 0; c < COLS; c++) board[r][c] = { kind:"empty", mask:0, filled:false };
+  }
+  // source on a random edge, opening pointing into the grid
+  if (Math.random() < 0.5){
+    const r = 1 + (Math.random() * (ROWS - 2) | 0);
+    source = { r, c: 0, dir: E };
+  } else {
+    const c = 1 + (Math.random() * (COLS - 2) | 0);
+    source = { r: 0, c, dir: S };
+  }
+  board[source.r][source.c] = { kind:"source", mask: source.dir, filled:false };
+
+  queue = []; refill();
+  phase = "build"; buildTimer = BUILD_TIME;
+  distance = 0; score = 0; overwrites = 0;
+  flow = null; hover = null; badFlash = null;
+  best = loadBest();
+  document.getElementById("pm-over").classList.add("hidden");
+  updateHUD();
+}
+
+// ---- placing a piece + the overwrite rule ----
+function placeAt(r, c){
+  if (phase !== "build" && phase !== "flow") return;
+  const cell = board[r][c];
+  if (cell.kind === "source" || cell.filled){ flash(r, c); return; }      // never these
+  if (phase === "flow" && flow && flow.r === r && flow.c === c){ flash(r, c); return; } // not the cell filling now
+  if (cell.kind === "pipe") overwrites++;                                 // replacing a pipe = overwrite
+  const key = queue.shift();
+  cell.kind = "pipe"; cell.mask = PIECES[key]; cell.filled = false;
+  refill();
+  updateHUD();
+}
+function flash(r, c){ badFlash = { r, c, t: 0.35 }; }
+
+// ---- release the water ----
+function startFlow(){
+  phase = "flow";
+  flow = { r: source.r, c: source.c, from: 0, exit: source.dir, progress: 0, isSource: true };
+  updateHUD();
+}
+function releaseEarly(){
+  if (phase !== "build") return;
+  score += Math.ceil(buildTimer) * 15;   // bonus for building fast
+  buildTimer = 0; startFlow();
+}
+
+// ---- the flow: fill a cell, then try to advance ----
+function stepFlow(dt){
+  flow.progress += dt / FLOW_INTERVAL;
+  while (flow.progress >= 1 && phase === "flow"){
+    flow.progress -= 1;
+    const here = board[flow.r][flow.c];
+    here.filled = true;
+    if (!flow.isSource){
+      distance++;
+      score += 10;
+      if (here.mask === PIECES.CROSS) score += 5;   // bonus for routing through a cross
+    }
+    if (distance >= GOAL){ win(); return; }
+
+    // step to the neighbour in the exit direction
+    const d = DELTA[flow.exit];
+    const nr = flow.r + d[0], nc = flow.c + d[1];
+    const entry = OPP[flow.exit];
+    const nb = inBounds(nr, nc) ? board[nr][nc] : null;
+    // CONNECTION MATCH: neighbour must have the opposite opening facing back
+    if (nb && nb.kind === "pipe" && (nb.mask & entry)){
+      flow = { r: nr, c: nc, from: entry, exit: pieceExit(nb.mask, entry), progress: flow.progress, isSource: false };
+    } else {
+      lose(); return;   // a leak — the water can go no further
+    }
+  }
+}
+
+// ---- win / lose ----
+function win(){ phase = "won"; best = Math.max(best, score); saveBest(); showOver(true); }
+function lose(){ phase = "lost"; best = Math.max(best, score); saveBest(); showOver(false); }
+function showOver(won){
+  const t = document.getElementById("pm-over-title");
+  t.textContent = won ? "PIPELINE COMPLETE" : "IT LEAKED";
+  t.className = won ? "win" : "lose";
+  document.getElementById("pm-over-brk").textContent = won
+    ? "The water reached the goal — you filled " + distance + " connected pipes for " + score + " points. Best: " + best + "."
+    : "The flow hit a dead end after only " + distance + " / " + GOAL + " pipes. Score " + score + " · best " + best + ". Try laying further ahead of the water.";
+  document.getElementById("pm-over").classList.remove("hidden");
+  updateHUD();
+}
+
+// ---- one physics tick ----
+function update(dt){
+  anim += dt;
+  if (badFlash){ badFlash.t -= dt; if (badFlash.t <= 0) badFlash = null; }
+  if (phase === "build"){
+    buildTimer -= dt;
+    if (buildTimer <= 0){ buildTimer = 0; startFlow(); }
+  } else if (phase === "flow"){
+    stepFlow(dt);
+  }
+}
+
+// ===== rendering =====
+function cellX(c){ return GX + c * CELL; }
+function cellY(r){ return GY + r * CELL; }
+function forEachOpen(mask, fn){ for (const d of DIRS) if (mask & d) fn(d); }
+
+function circle(x, y, r){ ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+function roundRect(x, y, w, h, r){
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+// draw the arm of a pipe from t0..t1 along the half-cell toward `dir`
+function strokeArm(cx, cy, dir, t0, t1, color, w, half){
+  const d = DELTA[dir];                         // [dr, dc]
+  ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx + d[1] * half * t0, cy + d[0] * half * t0);
+  ctx.lineTo(cx + d[1] * half * t1, cy + d[0] * half * t1);
+  ctx.stroke();
+}
+// the grey metal pipe casing for a mask
+function drawCasing(cx, cy, mask, half, thick){
+  forEachOpen(mask, d => strokeArm(cx, cy, d, 0, 1, "#334155", thick + 6, half));
+  forEachOpen(mask, d => strokeArm(cx, cy, d, 0, 1, "#94a3b8", thick,     half));
+  ctx.fillStyle = "#334155"; circle(cx, cy, thick / 2 + 3);
+  ctx.fillStyle = "#cbd5e1"; circle(cx, cy, thick / 2);
+}
+// the blue water inside a cell
+function drawWater(r, c){
+  const cell = board[r][c];
+  const cx = cellX(c) + CELL / 2, cy = cellY(r) + CELL / 2;
+  const half = CELL / 2, wcol = "#38bdf8", ww = 8;
+  const isCur = flow && phase === "flow" && flow.r === r && flow.c === c;
+  if (cell.filled && !isCur){
+    forEachOpen(cell.mask, d => strokeArm(cx, cy, d, 0, 1, wcol, ww, half));
+    ctx.fillStyle = wcol; circle(cx, cy, ww * 0.7);
+    return;
+  }
+  if (isCur){
+    const pr = flow.progress;
+    if (flow.from){
+      const ef = pr < 0.5 ? pr / 0.5 : 1;                 // entry half fills first
+      strokeArm(cx, cy, flow.from, 1 - ef, 1, wcol, ww, half);
+    }
+    const xf = flow.from ? (pr - 0.5) / 0.5 : pr;          // exit half (source has no entry)
+    if (xf > 0) strokeArm(cx, cy, flow.exit, 0, Math.max(0, Math.min(1, xf)), wcol, ww, half);
+    if (pr > 0.35){ ctx.fillStyle = wcol; circle(cx, cy, ww * 0.7); }
+  }
+}
+
+function drawGrid(){
+  for (let r = 0; r < ROWS; r++){
+    for (let c = 0; c < COLS; c++){
+      const x = cellX(c), y = cellY(r), cell = board[r][c];
+      // tile
+      ctx.fillStyle = (r + c) % 2 ? "#0c1526" : "#0f1a30";
+      roundRect(x + 2, y + 2, CELL - 4, CELL - 4, 7); ctx.fill();
+      if (cell.kind === "empty"){
+        // faint placement dot
+        ctx.fillStyle = "rgba(148,163,184,.10)";
+        circle(x + CELL / 2, y + CELL / 2, 3);
+      }
+    }
+  }
+  // hover highlight (only where a piece could go)
+  if (hover && (phase === "build" || phase === "flow")){
+    const cell = board[hover.r][hover.c];
+    const cur = flow && phase === "flow" && flow.r === hover.r && flow.c === hover.c;
+    if (cell.kind !== "source" && !cell.filled && !cur){
+      const x = cellX(hover.c), y = cellY(hover.r);
+      ctx.strokeStyle = cell.kind === "pipe" ? "#f59e0b" : "#34d399";
+      ctx.lineWidth = 2; roundRect(x + 2, y + 2, CELL - 4, CELL - 4, 7); ctx.stroke();
+      // ghost of the piece to be placed
+      const cx = x + CELL / 2, cy = y + CELL / 2;
+      ctx.globalAlpha = 0.35;
+      drawCasing(cx, cy, PIECES[queue[0]], CELL / 2, 13);
+      ctx.globalAlpha = 1;
+    }
+  }
+  // pipes + source
+  for (let r = 0; r < ROWS; r++){
+    for (let c = 0; c < COLS; c++){
+      const cell = board[r][c];
+      const cx = cellX(c) + CELL / 2, cy = cellY(r) + CELL / 2;
+      if (cell.kind === "source"){
+        const x = cellX(c), y = cellY(r);
+        ctx.fillStyle = "#065f46"; roundRect(x + 6, y + 6, CELL - 12, CELL - 12, 8); ctx.fill();
+        ctx.strokeStyle = "#34d399"; ctx.lineWidth = 2; roundRect(x + 6, y + 6, CELL - 12, CELL - 12, 8); ctx.stroke();
+        drawCasing(cx, cy, cell.mask, CELL / 2, 13);
+        ctx.fillStyle = "#a7f3d0"; ctx.font = "700 16px -apple-system, Inter, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("💧", cx, cy);
+        ctx.textBaseline = "alphabetic";
+      } else if (cell.kind === "pipe"){
+        drawCasing(cx, cy, cell.mask, CELL / 2, 13);
+      }
+    }
+  }
+  // water on top
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c].filled || (flow && phase === "flow" && flow.r === r && flow.c === c)) drawWater(r, c);
+
+  // bad-click flash
+  if (badFlash){
+    const x = cellX(badFlash.c), y = cellY(badFlash.r);
+    ctx.strokeStyle = "rgba(239,68,68," + Math.min(1, badFlash.t / 0.35) + ")";
+    ctx.lineWidth = 3; roundRect(x + 2, y + 2, CELL - 4, CELL - 4, 7); ctx.stroke();
+  }
+}
+
+function drawMini(cx, cy, mask){ drawCasing(cx, cy, mask, QBH / 2 - 6, 8); }
+function drawQueue(){
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#a7f3d0"; ctx.font = "800 13px -apple-system, Inter, sans-serif";
+  ctx.fillText("QUEUE", QX, QY - 16);
+  for (let i = 0; i < QVIS; i++){
+    const by = QY + i * (QBH + QGAP);
+    ctx.fillStyle = i === 0 ? "#0f766e" : "#0b1324";
+    roundRect(QX, by, QBW, QBH, 8); ctx.fill();
+    ctx.strokeStyle = i === 0 ? "#34d399" : "#1e293b"; ctx.lineWidth = 2;
+    roundRect(QX, by, QBW, QBH, 8); ctx.stroke();
+    drawMini(QX + QBH / 2 + 6, by + QBH / 2, PIECES[queue[i]]);
+    if (i === 0){
+      ctx.fillStyle = "#6ee7b7"; ctx.font = "800 12px -apple-system, Inter, sans-serif";
+      ctx.fillText("NEXT →", QX + QBH + 18, by + QBH / 2 + 4);
+    }
+  }
+  // legend
+  ctx.fillStyle = "#64748b"; ctx.font = "600 11px -apple-system, Inter, sans-serif";
+  ctx.fillText("Click a cell to place.", QX, QY + QVIS * (QBH + QGAP) + 8);
+  ctx.fillText("Overwrite unfilled pipe.", QX, QY + QVIS * (QBH + QGAP) + 24);
+}
+
+function drawTopBar(){
+  const bx = GX, by = 28, bw = GRIDW, bh = 14;
+  ctx.fillStyle = "#0b1324"; roundRect(bx, by, bw, bh, 7); ctx.fill();
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.font = "800 12px -apple-system, Inter, sans-serif";
+  if (phase === "build"){
+    const f = Math.max(0, buildTimer / BUILD_TIME);
+    ctx.fillStyle = f < 0.3 ? "#ef4444" : "#f59e0b"; roundRect(bx, by, bw * f, bh, 7); ctx.fill();
+    ctx.fillStyle = "#fcd34d";
+    ctx.fillText("🔥 FUSE — water releases in " + buildTimer.toFixed(1) + "s   ·   lay pipe from the 💧 source!", bx, by - 6);
+  } else {
+    const f = Math.min(1, distance / GOAL);
+    ctx.fillStyle = "#38bdf8"; roundRect(bx, by, bw * f, bh, 7); ctx.fill();
+    ctx.fillStyle = "#7dd3fc";
+    const msg = phase === "flow" ? "💧 FLOWING — build ahead of the water!" :
+                phase === "won"  ? "🏁 PIPELINE COMPLETE" : "💥 LEAKED";
+    ctx.fillText(msg + "   ·   " + distance + " / " + GOAL + " pipes filled", bx, by - 6);
+  }
+}
+
+function render(){
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, "#0b1220"); g.addColorStop(1, "#020617");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  drawTopBar();
+  drawGrid();
+  drawQueue();
+}
+
+// ===== HUD =====
+const scoreEl  = document.getElementById("pm-score");
+const distEl   = document.getElementById("pm-dist");
+const phaseEl  = document.getElementById("pm-phase");
+const statusEl = document.getElementById("pm-status");
+function updateHUD(){
+  scoreEl.textContent = score;
+  distEl.textContent  = distance + " / " + GOAL;
+  phaseEl.textContent = phase === "build" ? "Build" : phase === "flow" ? "Flowing" : phase === "won" ? "Win!" : "Leaked";
+  if (phase === "won"){
+    statusEl.textContent = "🏁 Pipeline complete — you filled " + distance + " pipes for " + score + " points (best " + best + ").";
+    statusEl.style.color = "#6ee7b7";
+  } else if (phase === "lost"){
+    statusEl.textContent = "💥 It leaked after " + distance + " / " + GOAL + " pipes. Hit New game to try again.";
+    statusEl.style.color = "#fca5a5";
+  } else if (phase === "flow"){
+    statusEl.textContent = "💧 Water is flowing — keep laying connected pipe ahead of it!  ·  Best: " + best;
+    statusEl.style.color = "#7dd3fc";
+  } else {
+    statusEl.textContent = "Lay pipe from the source — the fuse is burning  ·  Best: " + best;
+    statusEl.style.color = "#a7f3d0";
+  }
+}
+
+// ===== input =====
+function lookVisible(){ return !document.getElementById("look").classList.contains("hidden"); }
+function toCell(e){
+  const b = canvas.getBoundingClientRect();
+  const x = (e.clientX - b.left) * (canvas.width  / b.width);
+  const y = (e.clientY - b.top ) * (canvas.height / b.height);
+  const c = Math.floor((x - GX) / CELL), r = Math.floor((y - GY) / CELL);
+  return inBounds(r, c) ? { r, c } : null;
+}
+canvas.addEventListener("pointerdown", e => {
+  if (!lookVisible()) return;
+  const cell = toCell(e);
+  if (cell) placeAt(cell.r, cell.c);
+  e.preventDefault();
+}, { passive: false });
+canvas.addEventListener("pointermove", e => {
+  if (!lookVisible()) return;
+  hover = toCell(e);
+});
+canvas.addEventListener("pointerleave", () => { hover = null; });
+
+window.addEventListener("keydown", e => {
+  if (!lookVisible()) return;
+  const k = e.key.toLowerCase();
+  if (k === "r") newGame();
+  if (k === " " || k === "spacebar"){ releaseEarly(); e.preventDefault(); }
+});
+document.getElementById("pm-new").onclick     = newGame;
+document.getElementById("pm-again").onclick   = newGame;
+document.getElementById("pm-release").onclick = releaseEarly;
+
+// ===== fixed-timestep loop =====
+let last = performance.now(), acc = 0;
+function frame(now){
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.25) dt = 0.25;              // clamp after a tab-switch / lag spike
+  acc += dt;
+  let guard = 0;
+  while (acc >= STEP && guard++ < 8){
+    if (phase === "build" || phase === "flow") update(STEP);
+    acc -= STEP;
+  }
+  render();
+  requestAnimationFrame(frame);
+}
+
+// ===== boot =====
+newGame();
+requestAnimationFrame(frame);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. A pipe piece is just a set of open sides",
+   why:"There are no sprites and no per-piece special cases. A piece is only which of its four sides are open, packed into four bits — North 1, East 2, South 4, West 8. A horizontal straight is East+West = 10, an elbow from North to East is 1+2 = 3, and the cross is all four at once = 15. That is the whole vocabulary of the game: every rule that follows — does this connect, where does the water go — is a single bit test against these masks.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">N=1&nbsp;&nbsp;E=2&nbsp;&nbsp;S=4&nbsp;&nbsp;W=8<br><br>── straight&nbsp;&nbsp;E|W = 10<br>│&nbsp;&nbsp;straight&nbsp;&nbsp;N|S = 5<br>└ elbow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N|E = 3<br>┼ cross&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N|E|S|W = 15<br><br>open on side d?&nbsp;&nbsp;(mask &amp; d) !== 0</div>`,
+   code:`const N=1, E=2, S=4, W=8;             // one bit per side
+const PIECES = {
+  H:  E|W,   V:  N|S,               // straights
+  NE: N|E,   SE: E|S,               // elbows
+  SW: S|W,   NW: N|W,
+  CROSS: N|E|S|W                    // crossover
+};
+function open(mask, d){ return (mask & d) !== 0; }` },
+
+ { title:"2. Directions — opposites and grid deltas",
+   why:"Two tiny lookup tables drive the entire flow. OPP maps each side to the one facing it: North to South, East to West. It matters because when water leaves a cell heading East, it enters the next cell through THAT cell's West side. DELTA maps a side to the row/column step that reaches the neighbour in that direction. Between them, every 'do these pipes connect?' and 'where does the water go next?' question becomes two array lookups.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">OPP:&nbsp;&nbsp;N&harr;S&nbsp;&nbsp;E&harr;W<br>DELTA:&nbsp;N=[-1,0] E=[0,+1] S=[+1,0] W=[0,-1]<br><br>leave through E &rarr; neighbour to the right<br>&rarr; it is entered through its W side<br>entry = OPP[exit]</div>`,
+   code:`const OPP   = { 1:4, 4:1, 2:8, 8:2 };
+const DELTA = { 1:[-1,0], 2:[0,1], 4:[1,0], 8:[0,-1] };
+
+const [dr, dc] = DELTA[exit];        // step to the neighbour
+const nr = r + dr, nc = c + dc;
+const entrySide = OPP[exit];         // it enters through the opposite side` },
+
+ { title:"3. The board, the source, and the queue",
+   why:"The world is a grid of cells, each empty, a pipe with a mask, or the single source — a special cell with just one opening pointing into the board, where the water will begin. A queue hands you the upcoming pieces one at a time, drawn from a weighted bag so straights and elbows are common and the cross is rare. You always place the front of the queue; placing it shifts the rest forward and tops the queue back up to five.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">grid 9 &times; 7 cells<br>each: empty · pipe(mask) · source<br><br>source = one opening &rarr; into the board<br><br>queue: [ next , +4 upcoming ]<br>bag weights straights + elbows over the cross</div>`,
+   code:`let board = makeGrid(ROWS, COLS);      // all "empty"
+let source = { r:3, c:0, dir:E };
+board[3][0] = { kind:"source", mask:E, filled:false };
+
+const BAG = ["H","H","H","V","V","V","NE","SE","SW","NW",
+             "NE","SE","SW","NW","CROSS"];
+function refill(){ while (queue.length < 5) queue.push(BAG[Math.random()*BAG.length|0]); }` },
+
+ { title:"4. Placing a piece, and the overwrite rule",
+   why:"Clicking a cell drops the front of the queue onto it. On an empty cell that is a plain placement; on a cell that already holds a pipe it is an overwrite — allowed, because you are fixing your own plan — but only while the water has not yet reached it. You can never overwrite a cell the water has already filled, the cell it is filling this very moment, or the source. That one guard is the entire tension of building ahead of the flow.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">click empty&nbsp;&nbsp;&rarr; place queue[0]<br>click unfilled pipe&nbsp;&nbsp;&rarr; OVERWRITE (allowed)<br><br>filled cell&nbsp;&nbsp;&rarr; &#10007; blocked<br>the cell filling now&nbsp;&nbsp;&rarr; &#10007; blocked<br>the source&nbsp;&nbsp;&rarr; &#10007; blocked</div>`,
+   code:`function placeAt(r, c){
+  const cell = board[r][c];
+  if (cell.kind === "source" || cell.filled) return;     // never
+  if (flowing && flow.r === r && flow.c === c) return;    // not the filling cell
+  if (cell.kind === "pipe") overwrites++;                 // overwrite
+  cell.kind = "pipe";
+  cell.mask = PIECES[queue.shift()];
+  refill();
+}` },
+
+ { title:"5. The fuse, then release the water",
+   why:"A fuse counts down through the build phase; when it reaches zero the water is released — or you can release it early yourself for a bonus. To keep the flow ticking at the same rate on every monitor, bank the real elapsed time in an accumulator and spend it in fixed 1/120-second slices, so update always sees the same dt. Releasing sets a little walker at the source: its cell, the side it entered from (none, for the source) and the side it will leave by.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">build phase: fuse 12s &rarr; 0<br>(Space releases early &rarr; bonus)<br><br>acc += realTime<br>while (acc &gt;= 1/120){ update(1/120); acc -= 1/120 }<br><br>release &rarr; walker sits at the source</div>`,
+   code:`const STEP = 1/120;
+function frame(now){
+  let dt = (now-last)/1000; last = now;
+  if (dt > 0.25) dt = 0.25;
+  acc += dt;
+  while (acc >= STEP){ update(STEP); acc -= STEP; }
+  render(); requestAnimationFrame(frame);
+}
+function startFlow(){
+  phase = "flow";
+  flow = { r:source.r, c:source.c, from:0, exit:source.dir, progress:0, isSource:true };
+}` },
+
+ { title:"6. A piece routes water to its OTHER opening",
+   why:"The small heart of the flow. The water sits in a piece, having entered through one side, and the piece sends it out of its one other opening. A straight or an elbow has exactly two open sides, so 'the other opening' is just the mask with the entry bit cleared — mask & ~from. The cross is the single exception: it is a genuine crossover, so it always sends the water straight through to the opposite side, letting two pipelines cross without joining.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">enter through `+"`from`"+`, leave through the other bit<br><br>elbow N|E, in from N &rarr; out E<br>straight E|W, in from W &rarr; out E<br>cross, in from S &rarr; out N (straight through)<br><br>exit = (mask === CROSS) ? OPP[from] : mask &amp; ~from</div>`,
+   code:`function pieceExit(mask, from){
+  if (mask === PIECES.CROSS) return OPP[from];  // crossover: straight through
+  return mask & ~from;                           // the single OTHER open side
+}` },
+
+ { title:"7. Connection matching — advance or leak",
+   why:"Each flow tick fills the current piece a little; when it is full the water tries to move on. It steps to the neighbour in its exit direction and asks exactly one question: does that neighbour have the OPPOSITE opening facing back at me? That is the whole connectivity model — neighbour.mask & opposite(exit). If yes, the water advances into it and the distance climbs. If the neighbour is off the board, empty, or its openings don't line up, the flow has sprung a leak and stops dead.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">fill current cell &rarr; step out through `+"`exit`"+`<br>neighbour entry side = OPP[exit]<br><br>neighbour.mask &amp; entry ?<br>&nbsp;&nbsp;YES &rarr; advance, distance++<br>&nbsp;&nbsp;NO / off-grid / empty &rarr; LEAK, stop</div>`,
+   code:`while (flow.progress >= 1){
+  flow.progress -= 1;
+  board[flow.r][flow.c].filled = true;
+  if (!flow.isSource) distance++;
+  if (distance >= GOAL) return win();
+
+  const [dr,dc] = DELTA[flow.exit];
+  const nr = flow.r+dr, nc = flow.c+dc, entry = OPP[flow.exit];
+  const nb = inBounds(nr,nc) ? board[nr][nc] : null;
+  if (nb && nb.kind === "pipe" && (nb.mask & entry))       // MATCH
+    flow = { r:nr, c:nc, from:entry, exit:pieceExit(nb.mask, entry), progress:flow.progress };
+  else return lose();                                       // LEAK
+}` },
+
+ { title:"8. Win, lose, and the tick",
+   why:"The goal is a distance threshold: fill that many connected pipes and you win the instant the water reaches the count. Spring a leak with fewer filled and you lose. The update tick itself is tiny — burn the fuse in the build phase, run the flow in the flow phase — and a click maps the pointer through the fixed 832×448 canvas onto a grid cell so a placement lands exactly where you aimed.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">distance &gt;= GOAL &rarr; WIN (the moment it is reached)<br>leak with distance &lt; GOAL &rarr; LOSE<br><br>build &rarr; burn fuse&nbsp;&nbsp;·&nbsp;&nbsp;flow &rarr; step water<br>click &rarr; (x-GX)/CELL , (y-GY)/CELL &rarr; cell</div>`,
+   code:`const GOAL = 10;
+function update(dt){
+  if (phase === "build"){ if ((buildTimer -= dt) <= 0) startFlow(); }
+  else if (phase === "flow") stepFlow(dt);
+}
+function onClick(e){
+  const b = canvas.getBoundingClientRect();
+  const x = (e.clientX-b.left)*(canvas.width /b.width);
+  const y = (e.clientY-b.top )*(canvas.height/b.height);
+  const c = Math.floor((x-GX)/CELL), r = Math.floor((y-GY)/CELL);
+  if (inBounds(r,c)) placeAt(r,c);
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>

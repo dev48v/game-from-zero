@@ -59,6 +59,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 55 — Nim](https://dev48v.infy.uk/game/day55-nim.html) — `day55-nim.html`
 - [GameFromZero · Day 56 — Platformer](https://dev48v.infy.uk/game/day56-platformer.html) — `day56-platformer.html`
 - [GameFromZero · Day 57 — Fruit Ninja](https://dev48v.infy.uk/game/day57-fruit-ninja.html) — `day57-fruit-ninja.html`
+- [GameFromZero · Day 58 — Pipe Mania](https://dev48v.infy.uk/game/day58-pipe-mania.html) — `day58-pipe-mania.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
