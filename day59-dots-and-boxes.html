@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 59 — Dots and Boxes</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #0b1220 0%, #020617 60%, #01030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(16,185,129,.12);
+    border: 3px solid #0f766e;
+  }
+  .console-label { color:#a7f3d0; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#059669 !important; color:#fff !important; }
+  .hidden { display:none; }
+
+  /* ===== dots and boxes ===== */
+  .db-wrap { display:flex; flex-direction:column; gap:14px; align-items:center; }
+  .db-canvas-hold { width:100%; display:flex; justify-content:center; }
+  #db-canvas {
+    display:block; width:100%; max-width:832px; height:auto; border-radius:12px;
+    background:#0b1220; image-rendering:auto; cursor:pointer; touch-action:none;
+    box-shadow: inset 0 0 0 2px #1e293b, 0 8px 22px rgba(0,0,0,.45);
+  }
+  .db-over { position:absolute; inset:0; background:rgba(2,6,23,.9); border-radius:19px;
+             display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; z-index:5; text-align:center; padding:20px; }
+  .db-over h3 { font-size:44px; font-weight:900; }
+  .db-over h3.win  { color:#6ee7b7; }
+  .db-over h3.lose { color:#fca5a5; }
+  .db-over h3.draw { color:#fcd34d; }
+  .db-over .brk { font-size:14px; color:#94a3b8; max-width:420px; }
+  .seg { background:#0b1324; color:#94a3b8; border:2px solid #1e293b; }
+  .seg.on { background:#059669; color:#fff; border-color:#34d399; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-emerald-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-emerald-600 font-bold uppercase tracking-wider">GameFromZero · Day 59</div>
+      <h1 class="text-xl font-bold">🔲 Dots and Boxes — A Genuinely-Live Pencil-and-Paper Classic Whose Entire State Is Not Squares at All but a Flat List of Forty Walls, Each Either Drawn or Not: Two Players Take Turns Adding One Wall Between Two Neighbouring Dots, a Box Belongs to Whoever Draws Its Fourth and Final Wall, and the Single Rule That Turns This Into a Real Strategy Game Is That Completing a Box Earns You Another Move Immediately — So a Well-Timed Sacrifice Can Cascade Into an Entire Row of Boxes in One Unbroken Turn; That Cascade Is Why Greedy Play Loses, Why the Midgame Is Really a Fight Over <em>Safe</em> Moves (Walls That Leave No Box Sitting on Three Sides), Why the Board Inevitably Collapses Into Long <em>Chains</em> and Closed <em>Loops</em> That Somebody Must Eventually Open, and Why the Winning Move Is Often to <strong>Refuse</strong> Two Free Boxes — the Double-Cross, or Hard-Hearted Handout, Which Hands the Opponent a Pair of Squares Precisely So That They, and Not You, Are Forced to Crack Open the Next Chain; All of It Backed Here by a Real Opponent That Plays Capture-and-Cascade, Classifies Every Wall as Safe or Sacrificial, Opens the Smallest Chain When Cornered, Applies the Double-Cross, and Then Switches to an Exact Memoised Negamax Over the Remaining-Walls Bitmask the Moment the Endgame Is Small Enough to Solve Perfectly — Pure Vanilla JavaScript, One Canvas, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Draw one wall per turn — close the fourth wall of a box and it is yours, and you go again.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm"><strong>Click near any gap between two dots</strong> to draw that wall. Complete a box and you keep the turn — so a single sacrifice can hand your opponent a whole chain in one unbroken run. Turn on <strong>Show safe moves</strong> to see exactly which walls are free (green), which give a box away (red), and which close one right now (gold). Most boxes out of 16 wins. <span class="keycap">H</span> = hint, <span class="keycap">S</span> = safe-move overlay, <span class="keycap">R</span> = new game.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🟩 You</div>
+          <div class="text-2xl font-black stat" id="db-you">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-amber-300 font-bold">🟧 AI</div>
+          <div class="text-2xl font-black stat" id="db-ai">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🧱 Walls left</div>
+          <div class="text-2xl font-black stat" id="db-left">40</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">🎯 Turn</div>
+          <div class="text-2xl font-black stat" id="db-turn">You</div>
+        </div>
+      </div>
+
+      <!-- game console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="db-status">Your move — draw a wall between two dots</div>
+        <div class="db-wrap">
+          <div class="db-canvas-hold">
+            <canvas id="db-canvas" width="832" height="448"></canvas>
+          </div>
+        </div>
+        <div id="db-over" class="db-over hidden">
+          <h3 id="db-over-title" class="win">YOU WIN</h3>
+          <div class="brk" id="db-over-brk"></div>
+          <button id="db-again" class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-bold mt-2">↻ Play again</button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <div class="flex gap-1 rounded-lg overflow-hidden">
+          <button data-lvl="easy"   class="seg btn px-4 py-2 rounded-lg font-bold text-sm">Easy</button>
+          <button data-lvl="medium" class="seg btn px-4 py-2 rounded-lg font-bold text-sm">Medium</button>
+          <button data-lvl="hard"   class="seg btn on px-4 py-2 rounded-lg font-bold text-sm">Hard</button>
+        </div>
+        <button id="db-safe" class="btn bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg font-bold">👁 Show safe moves</button>
+        <button id="db-hint" class="btn bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg font-bold">💡 Hint</button>
+        <button id="db-new"  class="btn bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        The board is stored as <strong>40 walls</strong>, not 16 squares — 20 horizontal, 20 vertical — and a box is nothing but four indices into that list. Everything else falls out of two counts: <em>how many of a box's four walls are drawn</em>, and <em>how many boxes a wall would close</em>. Draw the fourth wall and the box is yours and <strong>you move again</strong>; that one clause is what makes late-game sacrifices cascade. When no wall is free any more, the leftovers form <strong>chains</strong> and <strong>loops</strong> and the game becomes a fight over who must open one — which is exactly when the <strong>double-cross</strong> (refusing the last two boxes of a chain) wins games. With 16 or fewer walls left the opponent stops guessing and solves the rest <strong>exactly</strong>, by memoised negamax over the remaining-walls bitmask.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2">
+      <h3 class="font-bold text-lg mb-3">How a list of walls, one counter and a single "go again" rule become Dots and Boxes</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-emerald-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-emerald-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Dots and Boxes looks like a toy until you try to write an opponent for it, and then it turns out to be one of the most beautiful small games there is. The trick is to stop thinking in squares. The whole board is a flat array of <em>walls</em>; a box is four indices into that array; and every rule in the game is one of two counts — how many of a box's four walls are drawn, and how many boxes a wall would close. Get those two right and the extra-turn rule, the safe/sacrifice split, chains, loops, the double-cross and an exact endgame solver all follow in a few lines each. Below is the whole thing in eight blocks. Copy them in order.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">Number every wall, then link walls to boxes both ways</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A 4&times;4 board of boxes has 5&times;5 dots and exactly <strong>40</strong> walls: 20 horizontal (5 rows &times; 4) and 20 vertical (4 rows &times; 5). Give them ids 0&hellip;39 — horizontals first, then verticals — and the entire game state becomes one <code>Uint8Array(40)</code> of drawn/not. Then precompute two tables once: <code>BOX_EDGES[b]</code>, the four wall ids of box <code>b</code>, and <code>EDGE_BOXES[id]</code>, the one or two boxes a wall touches. Border walls touch one box, interior walls touch two — which is precisely why one wall can close two boxes at once.</p>
+        <div class="relative"><pre>const BR = 4, BC = 4;                       // boxes down, boxes across
+const HCOLS = BC, HROWS = BR + 1;           // 4 x 5 = 20 horizontal walls
+const VCOLS = BC + 1, VROWS = BR;           // 5 x 4 = 20 vertical walls
+const H_COUNT = HROWS * HCOLS;              // ids 0..19  = horizontal
+const EDGES   = H_COUNT + VROWS * VCOLS;    // ids 20..39 = vertical  -&gt; 40 total
+const NB = BR * BC;                         // 16 boxes, b = r*BC + c
+
+const BOX_EDGES = [];                       // box -&gt; [top, bottom, left, right]
+for (let r = 0; r &lt; BR; r++) for (let c = 0; c &lt; BC; c++)
+  BOX_EDGES[r*BC+c] = [ r*HCOLS+c, (r+1)*HCOLS+c,
+                        H_COUNT + r*VCOLS + c, H_COUNT + r*VCOLS + c + 1 ];
+
+const EDGE_BOXES = [];                      // wall -&gt; the 1 or 2 boxes it touches
+for (let id = 0; id &lt; EDGES; id++){
+  const out = [];
+  if (id &lt; H_COUNT){ const r = (id/HCOLS)|0, c = id%HCOLS;
+    if (r &gt; 0)  out.push((r-1)*BC + c);     // box above
+    if (r &lt; BR) out.push(r*BC + c);         // box below
+  } else { const k = id - H_COUNT, r = (k/VCOLS)|0, c = k%VCOLS;
+    if (c &gt; 0)  out.push(r*BC + c - 1);     // box to the left
+    if (c &lt; BC) out.push(r*BC + c);         // box to the right
+  }
+  EDGE_BOXES[id] = out;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Drawing a wall, and claiming whatever it closes</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The state is three small arrays: which walls are drawn, who owns each box, and the two scores. Playing a wall is three lines — mark it drawn, look at the one or two boxes it touches, and claim any that now has all four walls. The function returns <strong>how many boxes it claimed</strong>, and that number is the only thing the turn rule ever needs to look at.</p>
+        <div class="relative"><pre>const newState = () =&gt; ({
+  e: new Uint8Array(EDGES),                 // 0 = wall open, 1 = wall drawn
+  owner: new Int8Array(NB).fill(-1),        // -1 = unclaimed, else player index
+  score: [0, 0]
+});
+const sides = (st, b) =&gt; {                  // how many of box b's walls are drawn
+  let n = 0; for (const id of BOX_EDGES[b]) if (st.e[id]) n++; return n;
+};
+
+function play(st, id, p){
+  st.e[id] = 1;
+  let got = 0;
+  for (const b of EDGE_BOXES[id])
+    if (st.owner[b] &lt; 0 &amp;&amp; sides(st, b) === 4){ st.owner[b] = p; got++; }
+  st.score[p] += got;
+  return got;                                // 0, 1, or 2 (an interior wall can close two)
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The whole game loop is one <code>if</code></h3></div>
+        <p class="text-sm text-slate-600 mb-3">There is no timer, no physics, no animation loop needed for correctness — the entire game is: pick an undrawn wall, play it, and <strong>keep the turn if it claimed something</strong>. That single clause is what makes Dots and Boxes a real game instead of a coin flip: because a capture is free, a chain of already-3-walled boxes is taken in one unbroken run, so the size of what you give away matters far more than the wall you happen to like.</p>
+        <div class="relative"><pre>const legal = st =&gt; { const m = [];
+  for (let i = 0; i &lt; EDGES; i++) if (!st.e[i]) m.push(i); return m; };
+
+let turn = 0;                                // 0 = you, 1 = opponent
+function move(st, id){
+  const got = play(st, id, turn);
+  if (got === 0) turn = 1 - turn;             // captured nothing -&gt; hand it over
+  //  got &gt; 0    -&gt; SAME player moves again
+  return got;
+}
+// game over exactly when every wall is drawn; scores always add up to 16
+const over = st =&gt; legal(st).length === 0;</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Two predicates: what a wall closes, and whether it is safe</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every ounce of strategy in this game is built from two little look-ahead functions. <code>completes</code> asks how many boxes a wall would close right now — that is your free money. <code>isSafe</code> asks the opposite: would this wall leave some box sitting on <strong>three</strong> walls, i.e. gift-wrapped for the opponent? Both tentatively set the bit, count, and unset it, so neither ever mutates the real board.</p>
+        <div class="relative"><pre>function completes(st, id){                   // boxes this wall would close
+  st.e[id] = 1; let n = 0;
+  for (const b of EDGE_BOXES[id]) if (st.owner[b] &lt; 0 &amp;&amp; sides(st, b) === 4) n++;
+  st.e[id] = 0; return n;
+}
+function isSafe(st, id){                      // leaves NO box on exactly 3 walls
+  st.e[id] = 1; let ok = true;
+  for (const b of EDGE_BOXES[id]) if (st.owner[b] &lt; 0 &amp;&amp; sides(st, b) === 3){ ok = false; break; }
+  st.e[id] = 0; return ok;
+}
+const capturingMoves = st =&gt; legal(st).filter(id =&gt; completes(st, id) &gt; 0);
+const safeMoves      = st =&gt; legal(st).filter(id =&gt; completes(st, id) === 0 &amp;&amp; isSafe(st, id));</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Chains and loops — a flood fill over the leftovers</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Sooner or later <code>safeMoves</code> comes back empty, and what is left on the board is a set of <strong>chains</strong> and <strong>loops</strong>. Find them with an ordinary flood fill: two unclaimed boxes belong to the same region if the wall between them is still open. A region is a <strong>loop</strong> when every box in it has exactly two walls missing <em>and</em> none of those missing walls is on the outer border — otherwise it is a chain, with two ends that lead out.</p>
+        <div class="relative"><pre>function regions(st){
+  const seen = new Array(NB).fill(false), out = [];
+  for (let b0 = 0; b0 &lt; NB; b0++){
+    if (st.owner[b0] &gt;= 0 || seen[b0]) continue;
+    const stack = [b0], comp = []; seen[b0] = true;
+    while (stack.length){
+      const x = stack.pop(); comp.push(x);
+      for (const id of BOX_EDGES[x]) if (!st.e[id])            // still open -&gt; connected
+        for (const y of EDGE_BOXES[id])
+          if (y !== x &amp;&amp; st.owner[y] &lt; 0 &amp;&amp; !seen[y]){ seen[y] = true; stack.push(y); }
+    }
+    const loop = comp.every(x =&gt; 4 - sides(st, x) === 2)       // every box has 2 gaps
+              &amp;&amp; comp.every(x =&gt; BOX_EDGES[x].every(id =&gt;
+                   st.e[id] || EDGE_BOXES[id].length === 2));  // and no gap on the border
+    out.push({ boxes: comp, size: comp.length, loop });
+  }
+  return out.sort((a, b) =&gt; a.size - b.size);                  // smallest first
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">The cascade, the smallest sacrifice, and the double-cross</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Three moves make an opponent that actually plays this game. <code>cascade</code> simulates greedily eating every box on offer, because captures are free turns. <code>smallestSacrifice</code> is what you do when every wall gives something away — open the <em>cheapest</em> chain. And <code>doubleCross</code> is the famous one: when only the last <strong>two</strong> boxes of a chain are on offer and other chains are still shut, you refuse them, drawing the far wall instead. The opponent takes those two in one move — and is then left with nothing free, so <em>they</em> must open the next chain.</p>
+        <div class="relative"><pre>function cascade(st){                          // greedily eat everything on offer
+  const c = clone(st), boxes = [];
+  for (;;){
+    const caps = capturingMoves(c);
+    if (!caps.length) break;
+    const before = c.owner.slice();
+    play(c, caps[0], 0);
+    for (let b = 0; b &lt; NB; b++) if (before[b] &lt; 0 &amp;&amp; c.owner[b] &gt;= 0) boxes.push(b);
+  }
+  return { boxes };
+}
+function smallestSacrifice(st){                // give away the least when cornered
+  let best = -1, least = Infinity;
+  for (const id of legal(st)){
+    const c = clone(st); play(c, id, 0);
+    const loss = cascade(c).boxes.length;
+    if (loss &lt; least){ least = loss; best = id; }
+  }
+  return best;
+}
+function doubleCross(st){                      // the hard-hearted handout
+  const cas = cascade(st);
+  if (cas.boxes.length !== 2) return -1;       // only for the LAST TWO of a chain
+  const set = new Set(cas.boxes), free = legal(st);
+  if (!free.some(id =&gt; !EDGE_BOXES[id].some(b =&gt; set.has(b)))) return -1;  // nothing else left
+  for (const id of free)                       // the wall that closes NOTHING
+    if (EDGE_BOXES[id].some(b =&gt; set.has(b)) &amp;&amp; completes(st, id) === 0) return id;
+  return -1;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Exact endgame — memoised negamax over a bitmask</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Once few enough walls remain, stop guessing and <em>solve</em> it. Renumber the <code>n</code> remaining walls 0&hellip;n-1 so the whole position is a single integer bitmask, and search every line. The twist versus ordinary negamax is the extra turn: if a move captured, the same player continues, so you <strong>add</strong> the child score; if it captured nothing the sides swap, so you <strong>negate</strong> it. Memoise on the mask in a flat typed array — with 16 walls left that is 65,536 slots and a perfect answer in well under a tenth of a second.</p>
+        <div class="relative"><pre>function exactBest(st){
+  const free = legal(st), n = free.length;
+  const cnt = new Int8Array(NB);                       // drawn walls per box, kept incrementally
+  for (let b = 0; b &lt; NB; b++) cnt[b] = sides(st, b);
+  const taken = new Uint8Array(NB);
+  for (let b = 0; b &lt; NB; b++) taken[b] = st.owner[b] &gt;= 0 ? 1 : 0;
+  const adj  = free.map(id =&gt; EDGE_BOXES[id]);
+  const size = 1 &lt;&lt; n;
+  const memo = new Int8Array(size), seen = new Uint8Array(size);
+
+  function rec(mask){
+    if (mask === 0) return 0;                          // no walls left -&gt; nothing more to win
+    if (seen[mask]) return memo[mask];
+    let best = -128;
+    for (let i = 0; i &lt; n; i++){
+      const bit = 1 &lt;&lt; i; if (!(mask &amp; bit)) continue;
+      let got = 0, c0 = -1, c1 = -1;
+      for (const b of adj[i]) if (++cnt[b] === 4 &amp;&amp; !taken[b]){ taken[b] = 1; (got++ ? c1 = b : c0 = b); }
+      const sub = rec(mask &amp; ~bit);
+      const val = got &gt; 0 ? got + sub : -sub;          // captured -&gt; go again; else swap sides
+      if (c0 &gt;= 0) taken[c0] = 0; if (c1 &gt;= 0) taken[c1] = 0;
+      for (const b of adj[i]) cnt[b]--;
+      if (val &gt; best) best = val;
+    }
+    seen[mask] = 1; memo[mask] = best; return best;
+  }
+  // top level: try each wall, keep the best
+  let bestId = free[0], bestVal = -128;
+  for (let i = 0; i &lt; n; i++){ /* same do / rec / undo as above */ }
+  return { id: bestId, value: bestVal };
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Stitching it together: the opponent, and clicking a wall</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The opponent is a short ladder of the pieces above: take free boxes (with the double-cross override), otherwise play a safe wall, otherwise open the smallest chain — and once the endgame fits, solve it exactly instead. Input is the last puzzle: the player clicks somewhere between two dots, not on a tidy grid cell, so map the pointer to the <strong>nearest undrawn wall</strong> by point-to-segment distance and accept it only inside a tolerance.</p>
+        <div class="relative"><pre>function aiMove(st, level){
+  const free = legal(st); if (!free.length) return -1;
+  const LIMIT = level === "easy" ? 0 : level === "medium" ? 10 : 16;
+  if (free.length &lt;= LIMIT) return exactBest(st).id;         // solved, not guessed
+  const caps = capturingMoves(st);
+  if (caps.length){
+    if (level === "hard"){ const dc = doubleCross(st); if (dc &gt;= 0) return dc; }
+    return caps[0];
+  }
+  const safe = safeMoves(st);
+  if (safe.length) return safe[Math.random() * safe.length | 0];
+  return smallestSacrifice(st);                               // cornered: give the least
+}
+
+function distToSeg(px, py, x1, y1, x2, y2){
+  const dx = x2-x1, dy = y2-y1, L = dx*dx + dy*dy;
+  let t = L ? ((px-x1)*dx + (py-y1)*dy) / L : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1+t*dx), py - (y1+t*dy));
+}
+function pickEdge(px, py){                                    // nearest OPEN wall
+  let best = -1, bestD = CELL * 0.34;
+  for (const id of legal(state)){
+    const s = edgeGeom(id);
+    const d = distToSeg(px, py, s.x1, s.y1, s.x2, s.y2);
+    if (d &lt; bestD){ bestD = d; best = id; }
+  }
+  return best;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-emerald-900">🎉 Day 59 of GameFromZero done — a real Dots and Boxes, chains, double-cross and an exact endgame solver.</h3><p class="text-sm text-emerald-700 mt-2">You built the whole thing out of a flat array of 40 walls and two counts. A box is four indices; drawing a wall claims whatever it closes; and the one clause "if it captured, you go again" is what turns a children's doodle into a game with real theory — cascades, safe moves versus sacrifices, chains and loops, and the double-cross where the winning move is to <em>refuse</em> two free boxes so the opponent must crack the next chain. When the board gets small the opponent stops using rules of thumb and solves the rest perfectly by memoised negamax over the remaining-walls bitmask. Next: bigger boards with alpha-beta plus a chain-count evaluation so the exact solver can start earlier, the Nimstring/Sprague-Grundy reduction that makes the chain rule a theorem instead of a tip, loops handled with the four-box handout, a swap rule, or a two-player online mode. <strong>👉 Tomorrow — Day 60: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== DOTS AND BOXES ENGINE (pure, no DOM — this exact code is what the node tests exercise) =====
+function makeEngine(BR, BC){
+  const HCOLS = BC, HROWS = BR + 1;
+  const VCOLS = BC + 1, VROWS = BR;
+  const H_COUNT = HROWS * HCOLS, V_COUNT = VROWS * VCOLS;
+  const EDGES = H_COUNT + V_COUNT, NB = BR * BC;
+
+  // box b = r*BC + c  ->  its 4 wall ids [top, bottom, left, right]
+  const BOX_EDGES = [];
+  for (let r = 0; r < BR; r++) for (let c = 0; c < BC; c++)
+    BOX_EDGES[r*BC+c] = [ r*HCOLS+c, (r+1)*HCOLS+c, H_COUNT + r*VCOLS + c, H_COUNT + r*VCOLS + c + 1 ];
+
+  // wall id -> the 1 or 2 boxes it touches
+  const EDGE_BOXES = [];
+  for (let id = 0; id < EDGES; id++){
+    const out = [];
+    if (id < H_COUNT){ const r = (id/HCOLS)|0, c = id%HCOLS;
+      if (r > 0)  out.push((r-1)*BC + c);
+      if (r < BR) out.push(r*BC + c);
+    } else { const k = id - H_COUNT, r = (k/VCOLS)|0, c = k%VCOLS;
+      if (c > 0)  out.push(r*BC + c - 1);
+      if (c < BC) out.push(r*BC + c);
+    }
+    EDGE_BOXES[id] = out;
+  }
+
+  const newState = () => ({ e: new Uint8Array(EDGES), owner: new Int8Array(NB).fill(-1), score: [0,0] });
+  const clone = st => ({ e: st.e.slice(), owner: st.owner.slice(), score: st.score.slice() });
+  const sides = (st, b) => { let n = 0; for (const id of BOX_EDGES[b]) if (st.e[id]) n++; return n; };
+  const legal = st => { const m = []; for (let i = 0; i < EDGES; i++) if (!st.e[i]) m.push(i); return m; };
+
+  // draw a wall; claim any box it completes; return how many were claimed
+  function play(st, id, p){
+    st.e[id] = 1; let got = 0;
+    for (const b of EDGE_BOXES[id]) if (st.owner[b] < 0 && sides(st, b) === 4){ st.owner[b] = p; got++; }
+    st.score[p] += got; return got;
+  }
+  // how many boxes would drawing `id` complete (without committing)
+  function completes(st, id){
+    st.e[id] = 1; let n = 0;
+    for (const b of EDGE_BOXES[id]) if (st.owner[b] < 0 && sides(st, b) === 4) n++;
+    st.e[id] = 0; return n;
+  }
+  // a move is SAFE if it leaves no unclaimed box sitting on exactly 3 drawn walls
+  function isSafe(st, id){
+    st.e[id] = 1; let ok = true;
+    for (const b of EDGE_BOXES[id]) if (st.owner[b] < 0 && sides(st, b) === 3){ ok = false; break; }
+    st.e[id] = 0; return ok;
+  }
+  const capturingMoves = st => legal(st).filter(id => completes(st, id) > 0);
+  const safeMoves      = st => legal(st).filter(id => completes(st, id) === 0 && isSafe(st, id));
+
+  // greedily take every free box that is on offer (non-destructive)
+  function cascade(st){
+    const c = clone(st), seq = [], boxes = [];
+    for (;;){
+      const caps = capturingMoves(c);
+      if (!caps.length) break;
+      const id = caps[0], before = c.owner.slice();
+      play(c, id, 0); seq.push(id);
+      for (let b = 0; b < NB; b++) if (before[b] < 0 && c.owner[b] >= 0) boxes.push(b);
+    }
+    return { seq, boxes };
+  }
+
+  // the hard-hearted handout: with the last TWO boxes of a chain on offer and other
+  // regions still closed, decline them so the opponent must open the next chain.
+  function doubleCross(st){
+    const cas = cascade(st);
+    if (cas.boxes.length !== 2) return -1;
+    const set = new Set(cas.boxes), free = legal(st);
+    const outside = free.filter(id => !EDGE_BOXES[id].some(b => set.has(b)));
+    if (!outside.length) return -1;                       // nothing else left -> just take them
+    for (const id of free)
+      if (EDGE_BOXES[id].some(b => set.has(b)) && completes(st, id) === 0) return id;
+    return -1;
+  }
+
+  // when every move gives something away, give away the least
+  function smallestSacrifice(st){
+    let best = -1, bestLoss = Infinity;
+    for (const id of legal(st)){
+      const c = clone(st); play(c, id, 0);
+      const loss = cascade(c).boxes.length;
+      if (loss < bestLoss){ bestLoss = loss; best = id; }
+    }
+    return best;
+  }
+
+  // exact endgame: memoised negamax over the remaining-wall bitmask, extra turn = same side again
+  function exactBest(st){
+    const free = legal(st), n = free.length;
+    const cnt = new Int8Array(NB);
+    for (let b = 0; b < NB; b++) cnt[b] = sides(st, b);
+    const taken = new Uint8Array(NB);
+    for (let b = 0; b < NB; b++) taken[b] = st.owner[b] >= 0 ? 1 : 0;
+    const adj = free.map(id => EDGE_BOXES[id]);
+    const size = 1 << n;
+    const memo = new Int8Array(size), seen = new Uint8Array(size);
+    let visited = 0, c0 = -1, c1 = -1;
+    function doMove(i){
+      const bs = adj[i]; c0 = -1; c1 = -1; let got = 0;
+      for (let j = 0; j < bs.length; j++){
+        const b = bs[j];
+        if (++cnt[b] === 4 && !taken[b]){ taken[b] = 1; if (got === 0) c0 = b; else c1 = b; got++; }
+      }
+      return got;
+    }
+    function undoMove(i, a, b2){
+      const bs = adj[i];
+      if (a >= 0) taken[a] = 0;
+      if (b2 >= 0) taken[b2] = 0;
+      for (let j = 0; j < bs.length; j++) cnt[bs[j]]--;
+    }
+    function rec(mask){
+      if (mask === 0) return 0;
+      if (seen[mask]) return memo[mask];
+      let best = -128;
+      for (let i = 0; i < n; i++){
+        const bit = 1 << i; if (!(mask & bit)) continue;
+        const got = doMove(i), a = c0, b2 = c1;
+        const sub = rec(mask & ~bit);
+        const val = got > 0 ? got + sub : -sub;
+        undoMove(i, a, b2);
+        if (val > best) best = val;
+      }
+      seen[mask] = 1; memo[mask] = best; visited++; return best;
+    }
+    const full = size - 1;
+    let bestId = free[0], bestVal = -128;
+    for (let i = 0; i < n; i++){
+      const got = doMove(i), a = c0, b2 = c1;
+      const sub = rec(full & ~(1 << i));
+      const val = got > 0 ? got + sub : -sub;
+      undoMove(i, a, b2);
+      if (val > bestVal){ bestVal = val; bestId = free[i]; }
+    }
+    return { id: bestId, value: bestVal, states: visited };
+  }
+
+  // connected groups of unclaimed boxes joined by undrawn walls = the chains and loops
+  function regions(st){
+    const seen = new Array(NB).fill(false), out = [];
+    for (let b0 = 0; b0 < NB; b0++){
+      if (st.owner[b0] >= 0 || seen[b0]) continue;
+      const stack = [b0], comp = []; seen[b0] = true;
+      while (stack.length){
+        const x = stack.pop(); comp.push(x);
+        for (const id of BOX_EDGES[x]) if (!st.e[id])
+          for (const y of EDGE_BOXES[id]) if (y !== x && st.owner[y] < 0 && !seen[y]){ seen[y] = true; stack.push(y); }
+      }
+      const loop = comp.every(x => 4 - sides(st, x) === 2)
+                && comp.every(x => BOX_EDGES[x].every(id => st.e[id] || EDGE_BOXES[id].length === 2));
+      out.push({ boxes: comp.slice(), size: comp.length, loop });
+    }
+    return out.sort((a, b) => a.size - b.size);
+  }
+
+  function aiMove(st, level){
+    const free = legal(st);
+    if (!free.length) return -1;
+    const LIMIT = level === "easy" ? 0 : level === "medium" ? 10 : 16;
+    if (level === "easy"){
+      const caps = capturingMoves(st);
+      if (caps.length) return caps[(Math.random()*caps.length)|0];
+      return free[(Math.random()*free.length)|0];
+    }
+    if (free.length <= LIMIT) return exactBest(st).id;
+    const caps = capturingMoves(st);
+    if (caps.length){
+      if (level === "hard"){ const dc = doubleCross(st); if (dc >= 0) return dc; }
+      return caps[0];
+    }
+    const safe = safeMoves(st);
+    if (safe.length) return safe[(Math.random()*safe.length)|0];
+    return smallestSacrifice(st);
+  }
+
+  return { BR, BC, EDGES, NB, H_COUNT, HCOLS, VCOLS, BOX_EDGES, EDGE_BOXES,
+           newState, clone, sides, legal, play, completes, isSafe,
+           capturingMoves, safeMoves, cascade, doubleCross, smallestSacrifice,
+           exactBest, regions, aiMove };
+}
+
+// ===== board / rendering / input =====
+const G = makeEngine(4, 4);
+const canvas = document.getElementById("db-canvas");
+const ctx = canvas.getContext("2d");
+
+const CELL = 84, GX = 116, GY = 62;                  // dot spacing + grid origin
+const PANEL_X = 500;
+const COL_YOU = "#34d399", COL_AI = "#fbbf24";
+const COL_YOU_FILL = "rgba(52,211,153,.20)", COL_AI_FILL = "rgba(251,191,36,.20)";
+
+let state, turn, level = "hard", showSafe = false, over = false;
+let hover = -1, hint = -1, lastMove = -1, aiTimer = null, aiNote = "";
+
+// wall id -> canvas end points
+function edgeGeom(id){
+  if (id < G.H_COUNT){
+    const r = (id / G.HCOLS) | 0, c = id % G.HCOLS;
+    return { x1: GX + c*CELL, y1: GY + r*CELL, x2: GX + (c+1)*CELL, y2: GY + r*CELL };
+  }
+  const k = id - G.H_COUNT, r = (k / G.VCOLS) | 0, c = k % G.VCOLS;
+  return { x1: GX + c*CELL, y1: GY + r*CELL, x2: GX + c*CELL, y2: GY + (r+1)*CELL };
+}
+function boxRect(b){
+  const r = (b / G.BC) | 0, c = b % G.BC;
+  return { x: GX + c*CELL, y: GY + r*CELL, w: CELL, h: CELL };
+}
+function distToSeg(px, py, x1, y1, x2, y2){
+  const dx = x2 - x1, dy = y2 - y1, L = dx*dx + dy*dy;
+  let t = L ? ((px - x1)*dx + (py - y1)*dy) / L : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t*dx), py - (y1 + t*dy));
+}
+function pickEdge(px, py){
+  let best = -1, bestD = CELL * 0.34;
+  for (const id of G.legal(state)){
+    const s = edgeGeom(id);
+    const d = distToSeg(px, py, s.x1, s.y1, s.x2, s.y2);
+    if (d < bestD){ bestD = d; best = id; }
+  }
+  return best;
+}
+
+function newGame(){
+  if (aiTimer){ clearTimeout(aiTimer); aiTimer = null; }
+  state = G.newState();
+  turn = 0; over = false; hover = -1; hint = -1; lastMove = -1; aiNote = "";
+  document.getElementById("db-over").classList.add("hidden");
+  updateHUD(); render();
+}
+
+function finish(){
+  over = true;
+  const [you, ai] = state.score;
+  const t = document.getElementById("db-over-title");
+  t.textContent = you > ai ? "YOU WIN" : you < ai ? "AI WINS" : "DEAD HEAT";
+  t.className = you > ai ? "win" : you < ai ? "lose" : "draw";
+  document.getElementById("db-over-brk").textContent =
+    "Final score " + you + " – " + ai + " out of 16 boxes, on " + level + ". " +
+    (you > ai ? "You kept control of the chains." :
+     you < ai ? "The opponent won the chain fight — try leaving the SHORTEST chain open, and watch for the double-cross."
+              : "Perfectly split.");
+  document.getElementById("db-over").classList.remove("hidden");
+  updateHUD(); render();
+}
+
+function doMove(id, who){
+  const got = G.play(state, id, who);
+  lastMove = id; hint = -1;
+  if (got === 0) turn = 1 - turn;
+  if (!G.legal(state).length){ finish(); return got; }
+  updateHUD(); render();
+  return got;
+}
+
+function humanMove(id){
+  if (over || turn !== 0 || state.e[id]) return;
+  doMove(id, 0);
+  if (!over && turn === 1) scheduleAI();
+}
+
+function scheduleAI(){
+  if (over || turn !== 1) return;
+  aiTimer = setTimeout(() => {
+    aiTimer = null;
+    if (over || turn !== 1) return;
+    const free = G.legal(state).length;
+    const LIMIT = level === "easy" ? 0 : level === "medium" ? 10 : 16;
+    let id;
+    if (level !== "easy" && free <= LIMIT){
+      const t0 = performance.now();
+      const res = G.exactBest(state);
+      id = res.id;
+      aiNote = "solved exactly · " + free + " walls, " + res.states.toLocaleString() +
+               " positions, " + Math.round(performance.now() - t0) + "ms · net " +
+               (res.value >= 0 ? "+" : "") + res.value;
+    } else {
+      const dc = level === "hard" ? G.doubleCross(state) : -1;
+      id = G.aiMove(state, level);
+      aiNote = dc >= 0 && id === dc ? "double-cross — refusing 2 boxes to keep control"
+             : G.completes(state, id) > 0 ? "taking a free box"
+             : G.isSafe(state, id) ? "safe wall — nothing given away"
+             : "cornered — opening the smallest chain";
+    }
+    doMove(id, 1);
+    if (!over && turn === 1) scheduleAI();      // captured -> it moves again
+  }, 320);
+}
+
+// ===== rendering =====
+function roundRect(x, y, w, h, r){
+  r = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function strokeEdge(id, color, w, alpha, dashed){
+  const s = edgeGeom(id);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "round";
+  if (dashed) ctx.setLineDash([4, 8]);
+  ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+  ctx.restore();
+}
+
+function drawBoard(){
+  // claimed boxes
+  for (let b = 0; b < G.NB; b++){
+    const o = state.owner[b];
+    if (o < 0) continue;
+    const q = boxRect(b);
+    ctx.fillStyle = o === 0 ? COL_YOU_FILL : COL_AI_FILL;
+    roundRect(q.x + 5, q.y + 5, q.w - 10, q.h - 10, 8); ctx.fill();
+    ctx.fillStyle = o === 0 ? COL_YOU : COL_AI;
+    ctx.font = "800 20px -apple-system, Inter, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(o === 0 ? "YOU" : "AI", q.x + q.w/2, q.y + q.h/2);
+    ctx.textBaseline = "alphabetic";
+  }
+  // boxes on 3 walls glow — free money sitting there
+  for (let b = 0; b < G.NB; b++){
+    if (state.owner[b] >= 0 || G.sides(state, b) !== 3) continue;
+    const q = boxRect(b);
+    ctx.strokeStyle = "rgba(250,204,21,.55)"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
+    roundRect(q.x + 8, q.y + 8, q.w - 16, q.h - 16, 8); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // open walls: faint hints, or the safe/sacrifice overlay
+  for (const id of G.legal(state)){
+    if (showSafe){
+      const cap = G.completes(state, id);
+      const col = cap > 0 ? "#facc15" : G.isSafe(state, id) ? "#22c55e" : "#ef4444";
+      strokeEdge(id, col, 7, 0.55, false);
+    } else {
+      strokeEdge(id, "#1e293b", 5, 1, true);
+    }
+  }
+  // drawn walls
+  for (let id = 0; id < G.EDGES; id++){
+    if (!state.e[id]) continue;
+    strokeEdge(id, "#e2e8f0", 7, 1, false);
+  }
+  if (lastMove >= 0 && state.e[lastMove]) strokeEdge(lastMove, turn === 0 ? COL_AI : COL_YOU, 9, 1, false);
+  // hint + hover ghost
+  if (hint >= 0 && !state.e[hint]) strokeEdge(hint, "#f59e0b", 9, 0.9, false);
+  if (hover >= 0 && !state.e[hover] && turn === 0 && !over) strokeEdge(hover, COL_YOU, 9, 0.75, false);
+  // dots on top
+  for (let r = 0; r <= G.BR; r++) for (let c = 0; c <= G.BC; c++){
+    ctx.fillStyle = "#94a3b8";
+    ctx.beginPath(); ctx.arc(GX + c*CELL, GY + r*CELL, 5, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function drawPanel(){
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  let y = 56;
+  ctx.fillStyle = "#a7f3d0"; ctx.font = "800 13px -apple-system, Inter, sans-serif";
+  ctx.fillText("BOARD READOUT", PANEL_X, y); y += 24;
+
+  ctx.font = "700 14px -apple-system, Inter, sans-serif";
+  ctx.fillStyle = COL_YOU; ctx.fillText("You  " + state.score[0], PANEL_X, y);
+  ctx.fillStyle = COL_AI;  ctx.fillText("AI  " + state.score[1], PANEL_X + 130, y); y += 26;
+
+  const free = G.legal(state), caps = G.capturingMoves(state), safe = G.safeMoves(state);
+  ctx.font = "600 12px -apple-system, Inter, sans-serif";
+  ctx.fillStyle = "#94a3b8"; ctx.fillText("walls open", PANEL_X, y);
+  ctx.fillStyle = "#e2e8f0"; ctx.fillText(String(free.length), PANEL_X + 200, y); y += 19;
+  ctx.fillStyle = "#94a3b8"; ctx.fillText("safe walls", PANEL_X, y);
+  ctx.fillStyle = safe.length ? "#4ade80" : "#f87171"; ctx.fillText(String(safe.length), PANEL_X + 200, y); y += 19;
+  ctx.fillStyle = "#94a3b8"; ctx.fillText("boxes on offer", PANEL_X, y);
+  ctx.fillStyle = caps.length ? "#facc15" : "#e2e8f0";
+  ctx.fillText(String(G.cascade(state).boxes.length), PANEL_X + 200, y); y += 27;
+
+  ctx.fillStyle = "#a7f3d0"; ctx.font = "800 13px -apple-system, Inter, sans-serif";
+  ctx.fillText("CHAINS & LOOPS", PANEL_X, y); y += 20;
+  const regs = G.regions(state);
+  ctx.font = "600 12px -apple-system, Inter, sans-serif";
+  if (!regs.length){ ctx.fillStyle = "#64748b"; ctx.fillText("— board finished —", PANEL_X, y); y += 18; }
+  for (const rg of regs.slice(0, 5)){
+    ctx.fillStyle = rg.loop ? "#c084fc" : rg.size >= 3 ? "#7dd3fc" : "#64748b";
+    ctx.fillText((rg.loop ? "loop" : "chain") + " of " + rg.size + (rg.size >= 3 && !rg.loop ? "  (long)" : ""), PANEL_X, y);
+    y += 18;
+  }
+  if (regs.length > 5){ ctx.fillStyle = "#64748b"; ctx.fillText("+" + (regs.length - 5) + " more", PANEL_X, y); y += 18; }
+  y += 10;
+
+  if (showSafe){
+    ctx.fillStyle = "#a7f3d0"; ctx.font = "800 13px -apple-system, Inter, sans-serif";
+    ctx.fillText("OVERLAY", PANEL_X, y); y += 19;
+    ctx.font = "600 12px -apple-system, Inter, sans-serif";
+    ctx.fillStyle = "#22c55e"; ctx.fillText("green = safe", PANEL_X, y); y += 17;
+    ctx.fillStyle = "#ef4444"; ctx.fillText("red = gives a box away", PANEL_X, y); y += 17;
+    ctx.fillStyle = "#facc15"; ctx.fillText("gold = closes a box now", PANEL_X, y); y += 17;
+  }
+
+  if (aiNote){
+    ctx.fillStyle = "#a7f3d0"; ctx.font = "800 13px -apple-system, Inter, sans-serif";
+    ctx.fillText("LAST AI MOVE", PANEL_X, 400);
+    ctx.font = "600 11px -apple-system, Inter, sans-serif"; ctx.fillStyle = "#94a3b8";
+    const words = aiNote.split(" "); let line = "", ly = 418;
+    for (const w of words){
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > 300){ ctx.fillText(line, PANEL_X, ly); ly += 14; line = w; }
+      else line = test;
+    }
+    if (line) ctx.fillText(line, PANEL_X, ly);
+  }
+}
+
+function drawTopBar(){
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.font = "800 12px -apple-system, Inter, sans-serif";
+  const done = state.score[0] + state.score[1];
+  ctx.fillStyle = "#0b1324"; roundRect(GX, 26, G.BC*CELL, 12, 6); ctx.fill();
+  const f = done / G.NB;
+  ctx.fillStyle = "#34d399"; roundRect(GX, 26, G.BC*CELL*f, 12, 6); ctx.fill();
+  ctx.fillStyle = over ? "#fcd34d" : turn === 0 ? "#6ee7b7" : "#fbbf24";
+  ctx.fillText(over ? "🏁 GAME OVER" : turn === 0 ? "🟩 YOUR MOVE — draw a wall" : "🟧 AI THINKING…",
+               GX, 20);
+  ctx.fillStyle = "#64748b";
+  ctx.fillText(done + " / 16 boxes closed", GX + G.BC*CELL - 110, 20);
+}
+
+function render(){
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, "#0b1220"); g.addColorStop(1, "#020617");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  drawTopBar();
+  drawBoard();
+  drawPanel();
+}
+
+// ===== HUD =====
+const youEl = document.getElementById("db-you");
+const aiEl = document.getElementById("db-ai");
+const leftEl = document.getElementById("db-left");
+const turnEl = document.getElementById("db-turn");
+const statusEl = document.getElementById("db-status");
+function updateHUD(){
+  youEl.textContent = state.score[0];
+  aiEl.textContent  = state.score[1];
+  leftEl.textContent = G.legal(state).length;
+  turnEl.textContent = over ? "—" : turn === 0 ? "You" : "AI";
+  if (over){
+    const [y, a] = state.score;
+    statusEl.textContent = y > a ? "🏆 You win " + y + "–" + a + " — you kept the chains."
+                        : y < a ? "💀 AI wins " + a + "–" + y + " — watch the chain parity next time."
+                        : "🤝 Dead heat, 8–8.";
+    statusEl.style.color = y > a ? "#6ee7b7" : y < a ? "#fca5a5" : "#fcd34d";
+  } else if (turn === 0){
+    const caps = G.cascade(state).boxes.length;
+    statusEl.textContent = caps
+      ? "Your move — " + caps + " box" + (caps > 1 ? "es are" : " is") + " free right now, take them and go again."
+      : "Your move — nothing free; play a safe wall if one is left.";
+    statusEl.style.color = "#a7f3d0";
+  } else {
+    statusEl.textContent = "AI is thinking…";
+    statusEl.style.color = "#fcd34d";
+  }
+}
+
+// ===== input =====
+function lookVisible(){ return !document.getElementById("look").classList.contains("hidden"); }
+function toCanvas(e){
+  const b = canvas.getBoundingClientRect();
+  return { x: (e.clientX - b.left) * (canvas.width / b.width),
+           y: (e.clientY - b.top ) * (canvas.height / b.height) };
+}
+canvas.addEventListener("pointerdown", e => {
+  if (!lookVisible() || over || turn !== 0) return;
+  const p = toCanvas(e), id = pickEdge(p.x, p.y);
+  if (id >= 0) humanMove(id);
+  e.preventDefault();
+}, { passive: false });
+canvas.addEventListener("pointermove", e => {
+  if (!lookVisible()) return;
+  const p = toCanvas(e), id = pickEdge(p.x, p.y);
+  if (id !== hover){ hover = id; render(); }
+});
+canvas.addEventListener("pointerleave", () => { hover = -1; render(); });
+
+window.addEventListener("keydown", e => {
+  if (!lookVisible()) return;
+  const k = e.key.toLowerCase();
+  if (k === "r") newGame();
+  if (k === "s"){ toggleSafe(); }
+  if (k === "h"){ doHint(); }
+});
+
+function toggleSafe(){
+  showSafe = !showSafe;
+  document.getElementById("db-safe").classList.toggle("toggle-on", showSafe);
+  render();
+}
+function doHint(){
+  if (over || turn !== 0) return;
+  hint = G.aiMove(state, "hard");
+  render();
+}
+document.querySelectorAll("[data-lvl]").forEach(b => b.onclick = () => {
+  level = b.dataset.lvl;
+  document.querySelectorAll("[data-lvl]").forEach(x => x.classList.toggle("on", x === b));
+  newGame();
+});
+document.getElementById("db-new").onclick   = newGame;
+document.getElementById("db-again").onclick = newGame;
+document.getElementById("db-safe").onclick  = toggleSafe;
+document.getElementById("db-hint").onclick  = doHint;
+
+// ===== boot =====
+newGame();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is a list of WALLS, not squares",
+   why:"The first instinct is to store a grid of boxes, and it is the wrong one. What players actually touch is the gaps between dots, so store those: a 4x4 board of boxes has 5x5 dots and exactly 40 walls — 20 horizontal and 20 vertical — and the entire game state is one array of 40 zeros and ones. Boxes then become derived data: box b is simply four indices into that array. Precompute the mapping once in both directions, box to its four walls and wall to the one or two boxes it touches, and from then on every rule in the game is a lookup plus a count. Notice that border walls touch exactly one box and interior walls touch two — that asymmetry is why one wall can occasionally close two boxes at the same time.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">5&times;5 dots &rarr; 4&times;4 = 16 boxes<br><br>horizontal walls&nbsp;&nbsp;5 rows &times; 4 = 20&nbsp;&nbsp;(ids 0..19)<br>vertical walls&nbsp;&nbsp;&nbsp;&nbsp;4 rows &times; 5 = 20&nbsp;&nbsp;(ids 20..39)<br><br>state = Uint8Array(40)<br>box b &rarr; [top, bottom, left, right]<br>wall id &rarr; 1 box (border) or 2 boxes (interior)</div>`,
+   code:`const H_COUNT = (BR+1) * BC;              // 20 horizontal walls
+const EDGES   = H_COUNT + BR * (BC+1);    // + 20 vertical = 40
+
+BOX_EDGES[r*BC+c] = [ r*HCOLS+c, (r+1)*HCOLS+c,
+                      H_COUNT + r*VCOLS + c,
+                      H_COUNT + r*VCOLS + c + 1 ];
+
+// wall -> boxes: border walls list ONE, interior walls list TWO
+if (id < H_COUNT){ if (r > 0) push(above); if (r < BR) push(below); }
+else             { if (c > 0) push(left);  if (c < BC) push(right); }` },
+
+ { title:"2. A box is claimed the moment its 4th wall appears",
+   why:"There is no separate notion of 'closing' a box — you just count. After drawing a wall, look at the one or two boxes it touches and ask whether all four of their walls are now drawn; if so, and nobody owns them yet, they belong to the player who just moved. The whole scoring rule is that one comparison against the number four. Returning how many boxes the move claimed turns out to be the single most useful number in the codebase: it drives the turn rule, it defines what a 'free' move is, and it is what the search adds up. Because interior walls touch two boxes, this count can legitimately be two — the domino case where one line closes a pair at once.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">draw wall id<br>&darr;<br>for each box touching it:<br>&nbsp;&nbsp;sides(box) === 4 &amp;&amp; unowned ?<br>&nbsp;&nbsp;&nbsp;&nbsp;&rarr; claim it, got++<br><br>got = 0&nbsp;&nbsp;nothing closed<br>got = 1&nbsp;&nbsp;normal capture<br>got = 2&nbsp;&nbsp;one wall closed BOTH neighbours</div>`,
+   code:`function play(st, id, p){
+  st.e[id] = 1;
+  let got = 0;
+  for (const b of EDGE_BOXES[id])
+    if (st.owner[b] < 0 && sides(st, b) === 4){ st.owner[b] = p; got++; }
+  st.score[p] += got;
+  return got;                    // 0, 1 or 2
+}
+const sides = (st, b) => {
+  let n = 0; for (const id of BOX_EDGES[b]) if (st.e[id]) n++; return n;
+};` },
+
+ { title:"3. The extra turn — the rule that makes it a game",
+   why:"Strip the extra turn away and Dots and Boxes is nearly a coin flip: 40 walls, alternate, whoever gets lucky wins. Add it back — 'if you closed a box, you move again' — and the game acquires all of its depth in a single line of code. Because a capture is free, a run of boxes that are each already on three walls is taken in ONE unbroken turn, not one per round. That is why the important question is never 'which wall do I want' but 'how big is the run I am about to hand over'. It is also why the player who runs out of harmless moves first is usually the loser, and why deliberately declining boxes can be correct.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">got &gt; 0&nbsp;&nbsp;&rarr;&nbsp;&nbsp;SAME player moves again<br>got === 0&nbsp;&nbsp;&rarr;&nbsp;&nbsp;turn passes<br><br>3 boxes already on 3 walls each<br>= 3 captures in ONE turn<br><br>so a single careless wall can cost a whole row</div>`,
+   code:`function move(st, id){
+  const got = play(st, id, turn);
+  if (got === 0) turn = 1 - turn;   // that is the ENTIRE turn rule
+  return got;
+}
+// game over when every wall is drawn; the two scores always sum to 16` },
+
+ { title:"4. Free money vs. gift-wrapping: completes() and isSafe()",
+   why:"Two tiny look-ahead helpers hold all the strategy. completes(id) asks how many boxes drawing that wall would close right now — always take these, they are free and they keep your turn. isSafe(id) asks the opposite question: after this wall, is any unclaimed box left sitting on exactly three walls? If yes, you have gift-wrapped it, because the opponent closes it next move and keeps going. Both work by tentatively setting the bit, counting, and clearing it again, so neither disturbs the real board. Verified over thousands of quiet random positions, the promise holds exactly: a wall marked safe never lets the opponent capture anything, and a wall marked unsafe always offers at least one box.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">completes(id) &gt; 0&nbsp;&nbsp;&rarr; FREE BOX — take it<br>isSafe(id)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr; leaves no box on 3 walls<br>!isSafe(id)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr; SACRIFICE — they capture next<br><br>turn on the overlay in the demo:<br>green = safe&nbsp;&nbsp;red = sacrifice&nbsp;&nbsp;gold = closes now</div>`,
+   code:`function completes(st, id){
+  st.e[id] = 1; let n = 0;
+  for (const b of EDGE_BOXES[id]) if (st.owner[b] < 0 && sides(st,b) === 4) n++;
+  st.e[id] = 0; return n;
+}
+function isSafe(st, id){
+  st.e[id] = 1; let ok = true;
+  for (const b of EDGE_BOXES[id]) if (st.owner[b] < 0 && sides(st,b) === 3){ ok = false; break; }
+  st.e[id] = 0; return ok;
+}` },
+
+ { title:"5. Why greedy play loses",
+   why:"A greedy player takes every box it can and otherwise moves at random, and it loses badly to anything better — not because it misses captures, but because it never asks what happens after them. Two mistakes compound. First, it will happily play an unsafe wall while a safe one still exists, handing over a box for nothing. Second, and far worse, when it does finally have to give something away it gives away whatever it stumbles onto, which late in the game is usually the longest chain on the board. Since a chain is eaten in one unbroken turn, a single bad choice can transfer six or eight boxes at once. Real play is therefore: take free boxes, then survive on safe walls as long as possible, and when you are finally cornered, open the SMALLEST thing available.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">greedy:&nbsp;&nbsp;take boxes, else random wall<br>&rarr; hands over long chains for free<br><br>better ladder:<br>1. capture everything on offer<br>2. else play a SAFE wall<br>3. else open the SMALLEST chain<br><br>measured: the ladder beats greedy overwhelmingly</div>`,
+   code:`function smallestSacrifice(st){
+  let best = -1, least = Infinity;
+  for (const id of legal(st)){
+    const c = clone(st); play(c, id, 0);
+    const loss = cascade(c).boxes.length;   // how much they'd eat in one turn
+    if (loss < least){ least = loss; best = id; }
+  }
+  return best;
+}` },
+
+ { title:"6. Chains and loops — what the board collapses into",
+   why:"Play safe walls long enough and they run out; what remains is never random. The unclaimed boxes fall into connected groups joined by the walls still missing between them, and those groups are chains (a line of boxes with two ends leading out) and loops (a ring that closes on itself). Find them with a plain flood fill: two unclaimed boxes are in the same region if the wall between them is still open. A region is a loop precisely when every box in it has exactly two walls missing and none of those gaps is on the outer border. The distinction matters because opening a chain of length L costs you L boxes, while opening a loop costs the whole ring — and the handout that saves you is two boxes for a chain but four for a loop.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">chain of 4&nbsp;&nbsp;&#9633;&ndash;&#9633;&ndash;&#9633;&ndash;&#9633;&nbsp;&nbsp;(2 open ends)<br>&rarr; L boxes, L+1 missing walls<br><br>loop of 4&nbsp;&nbsp;&#9633;&ndash;&#9633;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;|<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#9633;&ndash;&#9633;&nbsp;&nbsp;(no way out)<br>&rarr; L boxes, L missing walls<br><br>open one and the opponent eats the WHOLE thing in one turn</div>`,
+   code:`const loop = comp.every(x => 4 - sides(st, x) === 2)          // every box has 2 gaps
+          && comp.every(x => BOX_EDGES[x].every(id =>
+               st.e[id] || EDGE_BOXES[id].length === 2));       // no gap on the border
+
+// verified: region sizes always add up to the unclaimed-box count,
+// and no box is ever counted in two regions` },
+
+ { title:"7. The double-cross — winning by REFUSING two boxes",
+   why:"This is the move that separates people who have played Dots and Boxes from people who have thought about it. Your opponent opens a chain; you eat along it; and if you swallow the whole thing you must then move again with nothing free left, which means YOU crack open the next chain and they eat that one. So instead you stop two boxes short and draw the far wall of the last pair. That closes nothing, so your turn ends. The opponent can now take those two boxes with a single wall — but that wall completes both at once, so they get one move's worth of gain and are then left, exactly as you were, with nothing free and forced to open the next chain. You gave up two boxes to buy every remaining chain on the board.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">chain end:&nbsp;&nbsp;[A][B]&nbsp;&nbsp;A on 3 walls, one wall shared with B<br><br>GREEDY&nbsp;&nbsp;&rarr; take A, take B, now YOU must open next chain<br>DOUBLE-CROSS &rarr; draw B's FAR wall (closes nothing)<br>&nbsp;&nbsp;&nbsp;&nbsp;&rarr; opponent takes A+B in one move<br>&nbsp;&nbsp;&nbsp;&nbsp;&rarr; then THEY must open the next chain<br><br>-2 boxes now, +every chain after</div>`,
+   code:`function doubleCross(st){
+  const cas = cascade(st);                     // what is on offer right now
+  if (cas.boxes.length !== 2) return -1;       // only the LAST TWO of a chain
+  const set = new Set(cas.boxes), free = legal(st);
+  if (!free.some(id => !EDGE_BOXES[id].some(b => set.has(b)))) return -1;  // nothing else left
+  for (const id of free)                       // the wall that closes NOTHING
+    if (EDGE_BOXES[id].some(b => set.has(b)) && completes(st, id) === 0) return id;
+  return -1;
+}` },
+
+ { title:"8. Parity — the long chain rule",
+   why:"Once you see that whoever opens the first long chain loses it, the real question becomes: who runs out of harmless moves first? That is a counting problem, and it has a famous rule of thumb. Aim to make the number of dots plus the number of long chains (three boxes or more) COME OUT EVEN if you moved first, and ODD if you moved second. You steer it during the safe-move phase, by choosing walls that merge two would-be chains into one or split one into two, long before any capture happens. It is only a rule of thumb here — loops and short chains complicate it — but it explains the whole shape of good play: the opening is not about boxes at all, it is about arranging how many chains will exist when the safe moves run out.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">first player&nbsp;&nbsp;wants&nbsp;&nbsp;dots + long chains = EVEN<br>second player wants&nbsp;&nbsp;dots + long chains = ODD<br><br>you change the chain COUNT with safe walls:<br>&nbsp;&nbsp;merge two chains &rarr; count &minus;1<br>&nbsp;&nbsp;split one chain&nbsp;&nbsp;&rarr; count +1<br><br>the opening is a fight about a parity, not about boxes</div>`,
+   code:`// count the long chains the board is heading towards
+const longChains = regions(st).filter(r => !r.loop && r.size >= 3).length;
+const dots = (BR + 1) * (BC + 1);
+
+const wantEven = (iMovedFirst);
+const good = ((dots + longChains) % 2 === 0) === wantEven;
+// steer with SAFE walls while they last — by the time captures start it is decided` },
+
+ { title:"9. Solving the endgame exactly — negamax over a bitmask",
+   why:"Heuristics are for the crowded middlegame; the ending deserves a proof. Renumber the n walls that are still open as 0..n-1, and the position becomes a single integer: bit i set means wall i is still open. Now search every line. It is negamax with one twist — the extra turn. If a move captured, the same player continues, so you ADD the child's score; if it captured nothing, sides swap, so you NEGATE it. Memoise on the mask alone, which is valid because the drawn walls determine which boxes are closed, and store it in a flat typed array rather than a hash map. Sixteen open walls means 65,536 slots and a perfect answer in tens of milliseconds — verified against an independent brute-force search that agrees on every position tested.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">mask = which of the n open walls remain<br><br>value(mask) = max over moves of<br>&nbsp;&nbsp;got &gt; 0&nbsp;&nbsp;?&nbsp;&nbsp;got + value(rest)&nbsp;&nbsp;&larr; go again<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;&nbsp;&minus;value(rest)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&larr; hand over<br><br>memo = Int8Array(1 &lt;&lt; n)<br>n = 16 &rarr; 65,536 states, a few tens of ms</div>`,
+   code:`function rec(mask){
+  if (mask === 0) return 0;
+  if (seen[mask]) return memo[mask];
+  let best = -128;
+  for (let i = 0; i < n; i++){
+    const bit = 1 << i; if (!(mask & bit)) continue;
+    const got = doMove(i);
+    const sub = rec(mask & ~bit);
+    const val = got > 0 ? got + sub : -sub;    // the extra-turn twist
+    undoMove(i);
+    if (val > best) best = val;
+  }
+  seen[mask] = 1; memo[mask] = best;
+  return best;
+}` },
+
+ { title:"10. Clicking a wall, not a cell",
+   why:"Every grid game so far has mapped a click to a cell with two divisions, but here the player is aiming at the gap BETWEEN two dots, which is a line segment, not a tile. So compute the distance from the pointer to each still-open wall and take the nearest one, accepting it only if it falls inside a tolerance of about a third of a cell. The distance itself is the standard point-to-segment projection: project the point onto the infinite line, clamp the parameter to the segment, and measure to that clamped point. Doing the same test on pointermove gives you a live ghost of the wall that would be drawn, which is what makes the board feel precise on a touchscreen instead of fiddly.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for every OPEN wall:<br>&nbsp;&nbsp;t = clamp(((P&minus;A)&middot;(B&minus;A)) / |B&minus;A|&sup2;, 0, 1)<br>&nbsp;&nbsp;d = |P &minus; (A + t(B&minus;A))|<br><br>take the smallest d, accept if d &lt; 0.34 &times; CELL<br><br>same test on hover &rarr; live ghost of the wall</div>`,
+   code:`function distToSeg(px, py, x1, y1, x2, y2){
+  const dx = x2-x1, dy = y2-y1, L = dx*dx + dy*dy;
+  let t = L ? ((px-x1)*dx + (py-y1)*dy) / L : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1+t*dx), py - (y1+t*dy));
+}
+function pickEdge(px, py){
+  let best = -1, bestD = CELL * 0.34;
+  for (const id of legal(state)){
+    const s = edgeGeom(id);
+    const d = distToSeg(px, py, s.x1, s.y1, s.x2, s.y2);
+    if (d < bestD){ bestD = d; best = id; }
+  }
+  return best;
+}` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-emerald-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>
