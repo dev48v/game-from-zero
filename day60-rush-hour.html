@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 60 — Rush Hour</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #1a1206 0%, #0b0803 60%, #05030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(245,158,11,.12);
+    border: 3px solid #b45309;
+  }
+  .console-label { color:#fde68a; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#d97706 !important; color:#fff !important; }
+  .hidden { display:none; }
+
+  /* ===== rush hour ===== */
+  .rh-wrap { display:flex; flex-direction:column; gap:14px; align-items:center; }
+  .rh-canvas-hold { width:100%; display:flex; justify-content:center; }
+  #rh-canvas {
+    display:block; width:100%; max-width:832px; height:auto; border-radius:12px;
+    background:#0b0803; image-rendering:auto; cursor:pointer; touch-action:none;
+    box-shadow: inset 0 0 0 2px #1c1917, 0 8px 22px rgba(0,0,0,.45);
+  }
+  .rh-over { position:absolute; inset:0; background:rgba(5,3,10,.9); border-radius:19px;
+             display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; z-index:5; text-align:center; padding:20px; }
+  .rh-over h3 { font-size:44px; font-weight:900; color:#fcd34d; }
+  .rh-over .brk { font-size:14px; color:#a8a29e; max-width:440px; }
+  .seg { background:#1c1310; color:#a8a29e; border:2px solid #292524; }
+  .seg.on { background:#d97706; color:#fff; border-color:#fbbf24; }
+  .pad { display:grid; grid-template-columns:repeat(3, 44px); grid-template-rows:repeat(2, 40px); gap:5px; }
+  .pad button { background:#1c1310; color:#fde68a; border:2px solid #44403c; border-radius:9px; font-weight:800; font-size:16px; }
+  .pad button:hover { background:#292524; }
+  .pad .void { visibility:hidden; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-amber-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="min-w-0 flex-1 break-words">
+      <div class="text-xs text-amber-600 font-bold uppercase tracking-wider">GameFromZero · Day 60</div>
+      <h1 class="text-xl font-bold">🚗 Rush Hour — A Genuinely-Live Sliding-Block Traffic Jam Whose Entire World Is Not a Picture of Cars but a Short List of Records, Each One Nothing More Than <code>{row, col, len, orient}</code>: Every Vehicle Is Axis-Locked, So a Horizontal Car May Only Ever Change Its Column and a Vertical Truck Only Its Row, Which Means the Whole Rulebook Is a Single Question Asked Twice — How Many Empty Cells Lie Ahead of This Piece, and How Many Behind — and the Answer Is Found by Walking Outward From the Piece Across an Occupancy Grid That Is Never Stored but Rebuilt From the Piece List Every Single Time So the Two Can Never Drift Apart; Drag a Piece and the Pointer Is Snapped to Whole Cells and Clamped Into Exactly That Range, Push the Red Car Off the Right-Hand Edge of Row Three and You Are Out — and Because a Board Is Only Thirty-Six Cells It Can Be Flattened Into One Canonical Thirty-Six-Character String, Which Turns the Puzzle Into a Graph and Lets a Real Breadth-First Search Sweep Every Position Layer by Layer and Return the <em>Provably Shortest</em> Escape, Powering an Honest Hint Button (the First Move of a Freshly-Recomputed Optimal Path), a Step-by-Step Auto-Solver, a Live "Optimal 8 · You 14" Scoreboard, and a Random Puzzle Generator That Refuses to Hand You Anything It Has Not First Solved Itself — Pure Vanilla JavaScript, One Canvas, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-6 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Slide the traffic out of the way and drive the red car off the right-hand edge.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm"><strong>Drag any vehicle along its own axis</strong> — cars only move the way they point, never sideways, never through each other. Tap one to select it and use the arrow pad, or tap an empty cell in its lane to slide it there. Every puzzle here has been <strong>solved by a real breadth-first search</strong> before you ever see it, so the <em>optimal</em> number is a fact, not an estimate. <span class="keycap">U</span> undo, <span class="keycap">R</span> reset, <span class="keycap">H</span> hint, <span class="keycap">N</span> new random puzzle, arrow keys nudge the selection.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-amber-300 font-bold">🚦 Your moves</div>
+          <div class="text-2xl font-black stat" id="rh-moves">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-amber-300 font-bold">🏁 Optimal</div>
+          <div class="text-2xl font-black stat" id="rh-opt">—</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-amber-300 font-bold">📉 Left (best)</div>
+          <div class="text-2xl font-black stat" id="rh-left">—</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-amber-300 font-bold">🔎 States searched</div>
+          <div class="text-2xl font-black stat" id="rh-states">0</div>
+        </div>
+      </div>
+
+      <!-- game console -->
+      <div class="console p-4 md:p-5">
+        <div class="mb-3 console-label" id="rh-status">Drag a vehicle — the red car escapes right, on row 3</div>
+        <div class="rh-wrap">
+          <div class="rh-canvas-hold">
+            <canvas id="rh-canvas" width="832" height="540"></canvas>
+          </div>
+        </div>
+        <div id="rh-over" class="rh-over hidden">
+          <h3 id="rh-over-title">ESCAPED</h3>
+          <div class="brk" id="rh-over-brk"></div>
+          <div class="flex gap-2 mt-2">
+            <button id="rh-again" class="btn bg-amber-600 hover:bg-amber-700 text-white px-6 py-2.5 rounded-lg font-bold">↻ Replay this jam</button>
+            <button id="rh-next"  class="btn bg-slate-700 hover:bg-slate-600 text-white px-6 py-2.5 rounded-lg font-bold">🎲 New jam</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-3 flex-wrap">
+        <div class="pad" id="rh-pad">
+          <button class="void">·</button><button data-dir="up">▲</button><button class="void">·</button>
+          <button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button>
+        </div>
+        <button id="rh-undo"  class="btn bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg font-bold">↶ Undo</button>
+        <button id="rh-reset" class="btn bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold">↻ Reset</button>
+        <button id="rh-hint"  class="btn bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg font-bold">💡 Hint</button>
+        <button id="rh-solve" class="btn bg-orange-700 hover:bg-orange-800 text-white px-5 py-2.5 rounded-lg font-bold">▶ Solve it</button>
+        <button id="rh-gen"   class="btn bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg font-bold">🎲 Generate</button>
+      </div>
+      <div class="mt-3 flex items-center justify-center gap-1.5 flex-wrap" id="rh-picker"></div>
+
+      <p class="text-xs text-slate-400 mt-5 text-center max-w-2xl mx-auto">
+        The board is <strong>a list of pieces</strong>, never a bitmap: <code>{id, row, col, len, orient}</code> and nothing else. The 6&times;6 occupancy grid you can see is <em>derived</em> — rebuilt from that list on every query — so the drawing and the rules can never disagree. A move is a <strong>delta along the piece's own axis</strong>, clamped to the run of empty cells found by walking outward in both directions, which is why nothing ever overlaps and nothing ever leaves the board. Flatten the 36 cells into one canonical string and the puzzle becomes a graph: <strong>breadth-first search</strong> sweeps it layer by layer, so the first time it touches a winning position it has found the <em>provably shortest</em> escape. That single search powers the hint, the auto-solver, the "optimal" number, and the generator — which refuses to hand you a jam it has not already solved.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2 min-w-0">
+      <h3 class="font-bold text-lg mb-3">How four numbers per vehicle, one derived grid and a queue become Rush Hour</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-amber-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4 min-w-0">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 min-w-0"><div class="text-xs uppercase font-bold text-amber-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center overflow-x-auto"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-amber-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-amber-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Rush Hour is the friendliest introduction to state-space search there is, because the puzzle is small enough to hold in your head and the search is small enough to run on every single move. The whole game is a list of <code>{row, col, len, orient}</code> records, one derived occupancy grid, and a function that counts empty cells in front of and behind a piece. Once you can turn a board into a string, you get breadth-first search — and with it a provably optimal solver, an honest hint, an auto-play, and a puzzle generator that verifies its own output. Nine blocks, in order, from an empty file.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">The piece list, and the occupancy grid you never store</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A vehicle is four numbers and a letter: where its top-left cell is, how long it is, and which way it points. That is the entire board — typically ten to thirteen little records. The 6&times;6 grid of "who is standing here" is <strong>derived</strong>, rebuilt from the list whenever a rule needs it, which is the single most important decision in the file: there is only one copy of the truth, so the picture and the rules can never drift apart.</p>
+        <div class="relative"><pre>const N = 6, EXIT_ROW = 2;                 // the red car always escapes along row index 2
+
+// a piece is just: { id, row, col, len, orient }   orient = "H" or "V"
+function cellsOf(p){
+  const out = [];
+  for (let k = 0; k &lt; p.len; k++)
+    out.push(p.orient === "H" ? [p.row, p.col + k] : [p.row + k, p.col]);
+  return out;
+}
+
+// derived, never stored: cell -&gt; index of the piece sitting there, or -1
+function occupancy(pieces){
+  const g = new Int8Array(N * N).fill(-1);
+  for (let i = 0; i &lt; pieces.length; i++)
+    for (const [r, c] of cellsOf(pieces[i])) g[r * N + c] = i;
+  return g;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The slide range — how far can this vehicle actually go</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Every rule in Rush Hour collapses into one function. A piece is axis-locked, so it has exactly one degree of freedom, and the only question is how far it can travel each way. Walk outward from its nose until you hit a wall or another vehicle, then walk outward from its tail the same way. The two counts are a closed interval <code>[min, max]</code> of legal deltas — and because you never step <em>past</em> an occupied cell, a piece can never tunnel through traffic.</p>
+        <div class="relative"><pre>function slideRange(pieces, i, grid){
+  const g = grid || occupancy(pieces), p = pieces[i];
+  let back = 0, fwd = 0;
+  if (p.orient === "H"){
+    let c = p.col - 1;         while (c &gt;= 0 &amp;&amp; g[p.row*N + c] === -1){ back--; c--; }
+    c = p.col + p.len;         while (c &lt;  N &amp;&amp; g[p.row*N + c] === -1){ fwd++;  c++; }
+  } else {
+    let r = p.row - 1;         while (r &gt;= 0 &amp;&amp; g[r*N + p.col] === -1){ back--; r--; }
+    r = p.row + p.len;         while (r &lt;  N &amp;&amp; g[r*N + p.col] === -1){ fwd++;  r++; }
+  }
+  return { min: back, max: fwd };     // e.g. { min: -2, max: 1 }
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Every legal move, and applying one without mutating anything</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The move list is just the ranges of all pieces flattened, skipping the do-nothing delta of zero. Note that a slide of <em>any</em> distance counts as one move — that is the standard Rush Hour metric, and it is what makes "optimal 8" mean something. Applying a move copies the list and adds the delta to one field: column for a horizontal piece, row for a vertical one. Copying instead of mutating is what lets the search hold thousands of boards at once without them corrupting each other.</p>
+        <div class="relative"><pre>function legalMoves(pieces){
+  const g = occupancy(pieces), out = [];
+  for (let i = 0; i &lt; pieces.length; i++){
+    const { min, max } = slideRange(pieces, i, g);
+    for (let d = min; d &lt;= max; d++) if (d !== 0) out.push({ i, d });
+  }
+  return out;
+}
+
+function applyMove(pieces, i, d){
+  const next = pieces.map(p =&gt; ({ ...p }));   // immutable: the search depends on it
+  if (next[i].orient === "H") next[i].col += d; else next[i].row += d;
+  return next;
+}
+
+const isWin = pieces =&gt; { const red = pieces.find(p =&gt; p.id === 0);
+  return red.row === EXIT_ROW &amp;&amp; red.col + red.len === N; };</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Squashing a board into one canonical string</h3></div>
+        <p class="text-sm text-slate-600 mb-3">To search, you need to recognise a position you have already seen — and the piece <em>list</em> is a terrible identity, because the same picture written in a different array order would look like a new board. So paint the 36 cells instead, labelling each one by what kind of thing occupies it: the red car, a car or a truck, horizontal or vertical. Two identical trucks are genuinely interchangeable, so this key deliberately merges them, which collapses whole families of duplicate states into one.</p>
+        <div class="relative"><pre>function key(pieces){
+  const s = new Array(N * N).fill(".");
+  for (const p of pieces){
+    const ch = p.id === 0 ? "X"
+             : p.orient === "H" ? (p.len === 2 ? "h" : "H")
+                                : (p.len === 2 ? "v" : "V");
+    for (const [r, c] of cellsOf(p)) s[r * N + c] = ch;
+  }
+  return s.join("");        // 36 chars, independent of the order of the array
+}
+// "..v..H" + "..v..H" + "XX...H" + ... -&gt; one string, one Set entry</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Breadth-first search — the shortest escape, provably</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Positions are nodes, moves are edges, and BFS explores that graph in rings: everything one move away, then everything two moves away, and so on. Because a ring is finished before the next one starts, the <strong>first</strong> winning board it reaches is reached in the fewest possible moves — that is the whole guarantee, and it is why a plain queue beats any amount of clever guessing here. Keep a parent pointer beside every node and walk it backwards to recover the actual move list.</p>
+        <div class="relative"><pre>function solve(pieces, cap = 400000){
+  const start = pieces.map(p =&gt; ({ ...p }));
+  const q = [start], parent = [-1], moveOf = [null];
+  const seen = new Set([key(start)]);
+  let head = 0, explored = 0;
+  while (head &lt; q.length &amp;&amp; explored &lt; cap){
+    const cur = q[head], idx = head++; explored++;
+    if (isWin(cur)){                             // first hit = shortest, by construction
+      const moves = [];
+      for (let k = idx; parent[k] !== -1; k = parent[k]) moves.push(moveOf[k]);
+      return { solvable: true, moves: moves.reverse(), states: explored };
+    }
+    for (const m of legalMoves(cur)){
+      const nx = applyMove(cur, m.i, m.d), kk = key(nx);
+      if (seen.has(kk)) continue;                // already reached, and never slower
+      seen.add(kk); q.push(nx); parent.push(idx); moveOf.push(m);
+    }
+  }
+  return { solvable: false, moves: null, states: explored };
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Hint and auto-solve are the same search, twice</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Because the solver is fast enough to run on every move, there is no reason to store a plan. A hint is simply "solve from where we are now, show move zero" — which stays correct no matter how badly the player has wandered off the original path. Auto-solve is the same call with a timer draining the list. Re-solving after each move also gives you the honest "moves left at best" counter, and the little humiliation of watching it go <em>up</em> when you make a bad move.</p>
+        <div class="relative"><pre>function hint(pieces){
+  const res = solve(pieces);
+  return res.solvable &amp;&amp; res.moves.length ? res.moves[0] : null;   // recomputed, never cached
+}
+
+function autoSolve(pieces, step){          // step(move) applies it and redraws
+  const res = solve(pieces);
+  if (!res.solvable) return;
+  const seq = res.moves.slice(); let k = 0;
+  const t = setInterval(() =&gt; { if (k &gt;= seq.length){ clearInterval(t); return; }
+                                step(seq[k++]); }, 430);
+}
+// scoreboard: optimal from the START vs the player's count -&gt; "optimal 8 · you 14"</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Generate-then-verify: never ship a jam you have not solved</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Random vehicles almost never make a good puzzle — most scatters are trivially open, and plenty are impossible. So do not be clever: scatter, then <em>ask the solver</em>, and throw away anything it cannot solve or solves too quickly. One rule saves most of the failures — a horizontal vehicle parked on the exit row can never leave that row, so if one sits to the right of the red car the jam is unwinnable by construction; forbid it while placing.</p>
+        <div class="relative"><pre>function generate(rng, opts = {}){
+  const { minMoves = 10, maxMoves = 60, want = 11, tries = 4000 } = opts;
+  const ri = n =&gt; Math.floor(rng() * n);
+  for (let t = 0; t &lt; tries; t++){
+    const pieces = [{ id:0, row:EXIT_ROW, col: ri(3), len:2, orient:"H" }];
+    for (let guard = 0; pieces.length &lt; want &amp;&amp; guard &lt; 300; guard++){
+      const orient = rng() &lt; 0.5 ? "H" : "V", len = rng() &lt; 0.68 ? 2 : 3;
+      const cand = { id: pieces.length, len, orient,
+                     row: ri(orient === "V" ? N - len + 1 : N),
+                     col: ri(orient === "H" ? N - len + 1 : N) };
+      if (orient === "H" &amp;&amp; cand.row === EXIT_ROW) continue;   // would be a permanent wall
+      if (!fits(pieces, cand)) continue;
+      pieces.push(cand);
+    }
+    const res = solve(pieces, 200000);                          // VERIFY, do not hope
+    if (res.solvable &amp;&amp; res.moves.length &gt;= minMoves &amp;&amp; res.moves.length &lt;= maxMoves)
+      return { pieces, optimal: res.moves.length, attempts: t + 1 };
+  }
+  return null;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Pointer drag that snaps to whole cells and refuses to cheat</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Dragging feels analogue but the model is not, so convert immediately: divide the pointer's travel along the piece's axis by the cell size, round to the nearest integer, and clamp that integer into the slide range you already computed at grab time. The clamp is the important half — it means the piece visibly refuses to pass through a car even while your finger keeps going. Set <code>touch-action:none</code> on the canvas or the browser will steal the gesture and scroll the page instead.</p>
+        <div class="relative"><pre>canvas.addEventListener("pointerdown", e =&gt; {
+  const p = toCanvas(e), cell = cellAt(p.x, p.y); if (!cell) return;
+  const i = occupancy(pieces)[cell.r * N + cell.c];
+  if (i &lt; 0) return;                                  // empty cell: nothing grabbed
+  canvas.setPointerCapture(e.pointerId);
+  drag = { i, x: p.x, y: p.y, range: slideRange(pieces, i), off: 0 };
+});
+canvas.addEventListener("pointermove", e =&gt; {
+  if (!drag) return;
+  const p = toCanvas(e), pc = pieces[drag.i];
+  const raw = pc.orient === "H" ? (p.x - drag.x) / CELL : (p.y - drag.y) / CELL;
+  const d = Math.max(drag.range.min, Math.min(drag.range.max, Math.round(raw)));
+  if (d !== drag.off){ drag.off = d; render(); }       // snapped AND clamped
+});
+canvas.addEventListener("pointerup", () =&gt; {
+  if (drag &amp;&amp; drag.off !== 0) doMove(drag.i, drag.off);
+  drag = null; render();
+});</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Undo, and the move that ties it all together</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Because <code>applyMove</code> never mutates, undo is embarrassingly cheap: push a snapshot before the move, pop it afterwards. No inverse move to derive, no edge cases when the auto-solver is halfway through a run. Every path into the game — a drag, a tap on an empty cell in the lane, the arrow pad, the keyboard, the solver's timer — funnels into the same <code>doMove</code>, so there is exactly one place where the move counter, the win test and the re-solve happen.</p>
+        <div class="relative"><pre>const history = [];
+
+function doMove(i, d){
+  if (over || !d) return;
+  history.push(pieces.map(p =&gt; ({ ...p })));      // snapshot BEFORE
+  pieces = applyMove(pieces, i, d);
+  moves++; hint = null; sel = i;
+  if (isWin(pieces)) return finish();
+  const res = solve(pieces);                     // honest "left (best)" + states counter
+  remaining = res.moves.length; lastStates = res.states;
+  render();
+}
+
+function undo(){
+  const prev = history.pop(); if (!prev) return;
+  pieces = prev; moves = Math.max(0, moves - 1); over = false;
+  render();
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-amber-900">🎉 Day 60 of GameFromZero done — a real Rush Hour with a provably optimal solver.</h3><p class="text-sm text-amber-800 mt-2">You built the whole thing out of a list of <code>{row, col, len, orient}</code> records and one function that counts empty cells ahead and behind. Everything else fell out of it: legal moves, immutable board updates, a canonical 36-character key, and a breadth-first search whose first winning node is the shortest escape by construction — which is what makes the hint honest, the auto-solve exact, and the generator trustworthy. Next: A* with a "blockers ahead of the red car" heuristic to search bigger boards, bidirectional BFS from both the start and the win row, a reverse-move walk to build puzzles at a chosen difficulty instead of rejection-sampling them, packing the board into a bitboard so the whole search fits in typed arrays, or 8&times;8 boards where the state space finally starts to bite. <strong>👉 Tomorrow — Day 61: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== RUSH HOUR ENGINE START (this exact block is extracted and run by the node tests) =====
+function makeRush(){
+  const N = 6, EXIT_ROW = 2;
+
+  const clonePieces = ps => ps.map(p => ({ id:p.id, row:p.row, col:p.col, len:p.len, orient:p.orient }));
+
+  // the cells a piece covers, top-left first
+  function cellsOf(p){
+    const out = [];
+    for (let k = 0; k < p.len; k++)
+      out.push(p.orient === "H" ? [p.row, p.col + k] : [p.row + k, p.col]);
+    return out;
+  }
+
+  function inBounds(p){
+    if (p.row < 0 || p.col < 0 || p.row >= N || p.col >= N) return false;
+    return p.orient === "H" ? p.col + p.len <= N : p.row + p.len <= N;
+  }
+
+  // derived, never stored: cell -> piece index, or -1
+  function occupancy(pieces){
+    const g = new Int8Array(N * N).fill(-1);
+    for (let i = 0; i < pieces.length; i++)
+      for (const [r, c] of cellsOf(pieces[i])) g[r * N + c] = i;
+    return g;
+  }
+
+  // no overlap, nothing off-board, lengths sane, exactly one red car on the exit row
+  function validBoard(pieces){
+    const g = new Int8Array(N * N).fill(-1);
+    let reds = 0;
+    for (let i = 0; i < pieces.length; i++){
+      const p = pieces[i];
+      if (p.len < 2 || p.len > 3) return false;
+      if (p.orient !== "H" && p.orient !== "V") return false;
+      if (!inBounds(p)) return false;
+      if (p.id === 0){ reds++; if (p.orient !== "H" || p.row !== EXIT_ROW) return false; }
+      for (const [r, c] of cellsOf(p)){
+        if (r < 0 || r >= N || c < 0 || c >= N) return false;
+        if (g[r * N + c] !== -1) return false;
+        g[r * N + c] = i;
+      }
+    }
+    return reds === 1;
+  }
+
+  // would this candidate sit on the board without touching anything already placed?
+  function fits(pieces, cand){
+    if (!inBounds(cand)) return false;
+    const g = occupancy(pieces);
+    for (const [r, c] of cellsOf(cand)) if (g[r * N + c] !== -1) return false;
+    return true;
+  }
+
+  // how far piece i may slide backwards (negative) and forwards (positive)
+  function slideRange(pieces, i, grid){
+    const g = grid || occupancy(pieces), p = pieces[i];
+    let back = 0, fwd = 0;
+    if (p.orient === "H"){
+      let c = p.col - 1;  while (c >= 0 && g[p.row * N + c] === -1){ back--; c--; }
+      c = p.col + p.len;  while (c <  N && g[p.row * N + c] === -1){ fwd++;  c++; }
+    } else {
+      let r = p.row - 1;  while (r >= 0 && g[r * N + p.col] === -1){ back--; r--; }
+      r = p.row + p.len;  while (r <  N && g[r * N + p.col] === -1){ fwd++;  r++; }
+    }
+    return { min: back, max: fwd };
+  }
+
+  // every non-zero delta of every piece; a slide of any distance is ONE move
+  function legalMoves(pieces){
+    const g = occupancy(pieces), out = [];
+    for (let i = 0; i < pieces.length; i++){
+      const rg = slideRange(pieces, i, g);
+      for (let d = rg.min; d <= rg.max; d++) if (d !== 0) out.push({ i, d });
+    }
+    return out;
+  }
+
+  // immutable: the search holds thousands of these at once
+  function applyMove(pieces, i, d){
+    const next = clonePieces(pieces);
+    if (next[i].orient === "H") next[i].col += d; else next[i].row += d;
+    return next;
+  }
+
+  const redOf = pieces => pieces.find(p => p.id === 0);
+  const isWin = pieces => { const r = redOf(pieces); return !!r && r.row === EXIT_ROW && r.col + r.len === N; };
+
+  // canonical 36-char key: painted from the GRID, so array order cannot matter,
+  // and two identical vehicles are deliberately merged into one state
+  function key(pieces){
+    const s = new Array(N * N).fill(".");
+    for (const p of pieces){
+      const ch = p.id === 0 ? "X"
+               : p.orient === "H" ? (p.len === 2 ? "h" : "H")
+                                  : (p.len === 2 ? "v" : "V");
+      for (const [r, c] of cellsOf(p)) s[r * N + c] = ch;
+    }
+    return s.join("");
+  }
+  const keyRows = pieces => { const k = key(pieces), out = [];
+    for (let r = 0; r < N; r++) out.push(k.slice(r * N, r * N + N)); return out; };
+
+  // breadth-first over board states: the first winning node is the shortest escape
+  function solve(pieces, cap){
+    const CAP = cap || 400000;
+    const start = clonePieces(pieces);
+    const q = [start], parent = [-1], moveOf = [null];
+    const seen = new Set([key(start)]);
+    let head = 0, explored = 0;
+    while (head < q.length && explored < CAP){
+      const cur = q[head], idx = head; head++; explored++;
+      if (isWin(cur)){
+        const moves = [];
+        for (let k = idx; parent[k] !== -1; k = parent[k]) moves.push(moveOf[k]);
+        moves.reverse();
+        return { solvable:true, moves, states:explored, queued:q.length };
+      }
+      for (const m of legalMoves(cur)){
+        const nx = applyMove(cur, m.i, m.d), kk = key(nx);
+        if (seen.has(kk)) continue;
+        seen.add(kk); q.push(nx); parent.push(idx); moveOf.push(m);
+      }
+    }
+    return { solvable:false, moves:null, states:explored, queued:q.length };
+  }
+
+  // replay a move list through the real applier and report whether it truly wins
+  function replay(pieces, moves){
+    let cur = clonePieces(pieces);
+    for (const m of moves){
+      const rg = slideRange(cur, m.i);
+      if (m.d < rg.min || m.d > rg.max || m.d === 0) return { ok:false, why:"illegal move", cur };
+      cur = applyMove(cur, m.i, m.d);
+      if (!validBoard(cur)) return { ok:false, why:"invalid board", cur };
+    }
+    return { ok:isWin(cur), why:isWin(cur) ? "win" : "did not reach the exit", cur };
+  }
+
+  // "AABB" style grid strings -> piece list (X = the red car)
+  function parse(rows){
+    const src = typeof rows === "string" ? rows.trim().split(/\s*\n\s*/) : rows;
+    const map = new Map();
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++){
+      const ch = src[r][c];
+      if (ch === "." || ch === " ") continue;
+      if (!map.has(ch)) map.set(ch, []);
+      map.get(ch).push([r, c]);
+    }
+    const pieces = []; let nextId = 1;
+    for (const entry of map){
+      const ch = entry[0], cs = entry[1];
+      const rs = cs.map(x => x[0]), cls = cs.map(x => x[1]);
+      const orient = new Set(rs).size === 1 ? "H" : "V";
+      pieces.push({ id: ch === "X" ? 0 : nextId++, row: Math.min.apply(null, rs),
+                    col: Math.min.apply(null, cls), len: cs.length, orient });
+    }
+    pieces.sort((a, b) => a.id - b.id);
+    return pieces;
+  }
+  const toRows = pieces => keyRows(pieces);
+
+  // scatter, then ASK THE SOLVER; never ship a jam we have not solved ourselves
+  function generate(rng, opts){
+    const o = Object.assign({ minMoves:10, maxMoves:60, want:11, tries:4000, cap:200000 }, opts || {});
+    const ri = n => Math.floor(rng() * n);
+    for (let t = 0; t < o.tries; t++){
+      const pieces = [{ id:0, row:EXIT_ROW, col:ri(3), len:2, orient:"H" }];
+      for (let guard = 0; pieces.length < o.want && guard < 300; guard++){
+        const orient = rng() < 0.5 ? "H" : "V";
+        const len = rng() < 0.68 ? 2 : 3;
+        const cand = { id: pieces.length, len, orient,
+                       row: ri(orient === "V" ? N - len + 1 : N),
+                       col: ri(orient === "H" ? N - len + 1 : N) };
+        // a horizontal vehicle stuck on the exit row is a permanent wall -> never place one
+        if (orient === "H" && cand.row === EXIT_ROW) continue;
+        if (!fits(pieces, cand)) continue;
+        pieces.push(cand);
+      }
+      const res = solve(pieces, o.cap);
+      if (res.solvable && res.moves.length >= o.minMoves && res.moves.length <= o.maxMoves)
+        return { pieces, optimal:res.moves.length, states:res.states, attempts:t + 1 };
+    }
+    return null;
+  }
+
+  // snapshot stack — undo is a pop, because applyMove never mutates
+  function makeHistory(){
+    const stack = [];
+    return { push(p){ stack.push(clonePieces(p)); },
+             pop(){ return stack.length ? stack.pop() : null; },
+             depth(){ return stack.length; },
+             clear(){ stack.length = 0; } };
+  }
+
+  // every one of these was mined by the generator above and then SOLVED by the BFS
+  // below before it was written down; the node tests re-prove it on every run
+  const PUZZLES = [
+    { name:"Warm-up", grid:[            // optimal 4
+      "...DD.",
+      "CCCG.A",
+      ".XXG.A",
+      ".E.BBB",
+      "FE....",
+      "FE...." ] },
+    { name:"School run", grid:[         // optimal 9
+      "CC.G..",
+      "...GAH",
+      ".XXGAH",
+      "BFFFA.",
+      "B.II.E",
+      "B.DD.E" ] },
+    { name:"Gridlock", grid:[           // optimal 12
+      "H.G...",
+      "H.GFII",
+      "XXBFD.",
+      "EEBFD.",
+      ".C..JA",
+      ".C..JA" ] },
+    { name:"Jammed solid", grid:[       // optimal 16
+      "H.JGG.",
+      "HBJ..E",
+      ".BXXDE",
+      "CCC.DE",
+      "KKAAA.",
+      "FF..II" ] },
+    { name:"Deadlock", grid:[           // optimal 22
+      "..FAA.",
+      ".DF.CB",
+      "GDXXCB",
+      "G...HJ",
+      ".EEEHJ",
+      "KKIII." ] },
+    { name:"Rush hour", grid:[          // optimal 24, 26,229 states searched
+      "JJJEH.",
+      "...EH.",
+      ".GXXH.",
+      "BGF.II",
+      "B.FKKA",
+      "DDCC.A" ] }
+  ];
+
+  return { N, EXIT_ROW, clonePieces, cellsOf, inBounds, occupancy, validBoard, fits,
+           slideRange, legalMoves, applyMove, isWin, redOf, key, keyRows, solve, replay,
+           parse, toRows, generate, makeHistory, PUZZLES };
+}
+// ===== RUSH HOUR ENGINE END =====
+
+// ===== board / rendering / input =====
+const R = makeRush();
+const canvas = document.getElementById("rh-canvas");
+const ctx = canvas.getContext("2d");
+
+const CELL = 76, GX = 42, GY = 60, PANEL_X = 552, N6 = 6;
+const CAR_COLORS   = ["#38bdf8", "#a78bfa", "#34d399", "#f472b6", "#22d3ee", "#facc15", "#c084fc", "#4ade80", "#fb923c", "#60a5fa"];
+const TRUCK_COLORS = ["#0ea5e9", "#8b5cf6", "#10b981", "#e879f9", "#f59e0b", "#14b8a6"];
+
+let pieces = [], startPieces = [], history = R.makeHistory();
+let moves = 0, sel = 0, drag = null, hint = null, over = false, autoRun = false;
+let optimal = 0, remaining = 0, lastStates = 0, lastQueued = 0, solveTimer = null;
+let puzzleName = "", puzzleTag = "", genNote = "";
+
+function pieceColor(p, i){
+  if (p.id === 0) return "#ef4444";
+  return p.len === 3 ? TRUCK_COLORS[i % TRUCK_COLORS.length] : CAR_COLORS[i % CAR_COLORS.length];
+}
+
+// ---- lifecycle ----
+function loadPieces(ps, name, tag){
+  stopSolve();
+  startPieces = R.clonePieces(ps);
+  pieces = R.clonePieces(ps);
+  history.clear(); moves = 0; over = false; hint = null; drag = null;
+  sel = pieces.findIndex(p => p.id === 0);
+  puzzleName = name; puzzleTag = tag || "";
+  const res = R.solve(pieces);
+  optimal = res.solvable ? res.moves.length : -1;
+  remaining = optimal; lastStates = res.states; lastQueued = res.queued;
+  document.getElementById("rh-over").classList.add("hidden");
+  updateHUD(); render();
+}
+function loadPuzzle(idx){
+  const pz = R.PUZZLES[idx];
+  loadPieces(R.parse(pz.grid), pz.name, "built-in #" + (idx + 1));
+  document.querySelectorAll("[data-pz]").forEach(b => b.classList.toggle("on", +b.dataset.pz === idx));
+  genNote = "";
+}
+function generatePuzzle(){
+  const t0 = performance.now();
+  const g = R.generate(Math.random, { minMoves: 9, maxMoves: 45, want: 11, tries: 400, cap: 120000 })
+         || R.generate(Math.random, { minMoves: 5, maxMoves: 60, want: 9,  tries: 600, cap: 120000 });
+  document.querySelectorAll("[data-pz]").forEach(b => b.classList.remove("on"));
+  if (!g){ loadPuzzle(0); return; }
+  loadPieces(g.pieces, "Random jam", "generated");
+  genNote = "generated in " + g.attempts + " attempt" + (g.attempts > 1 ? "s" : "") +
+            " · verified solvable in " + g.optimal + " · " + Math.round(performance.now() - t0) + "ms";
+}
+function resetPuzzle(){ loadPieces(startPieces, puzzleName, puzzleTag); }
+
+function refreshSearch(){
+  const res = R.solve(pieces);
+  remaining = res.solvable ? res.moves.length : -1;
+  lastStates = res.states; lastQueued = res.queued;
+}
+function doMove(i, d){
+  if (over || !d) return;
+  history.push(pieces);
+  pieces = R.applyMove(pieces, i, d);
+  moves++; hint = null; sel = i;
+  if (R.isWin(pieces)){ remaining = 0; finish(); return; }
+  refreshSearch(); updateHUD(); render();
+}
+function undo(){
+  stopSolve();
+  const prev = history.pop(); if (!prev) return;
+  pieces = prev; moves = Math.max(0, moves - 1); over = false; hint = null;
+  document.getElementById("rh-over").classList.add("hidden");
+  refreshSearch(); updateHUD(); render();
+}
+function finish(){
+  over = true; stopSolve();
+  document.getElementById("rh-over-title").textContent = autoRun ? "SOLVED" : "ESCAPED";
+  document.getElementById("rh-over-brk").textContent =
+    (autoRun ? "The breadth-first path ran to the exit in " : "Out in ") + moves + " move" + (moves === 1 ? "" : "s") +
+    " — the optimal is " + optimal + "." +
+    (moves === optimal ? "  Perfect: you found the shortest escape there is."
+                       : "  " + (moves - optimal) + " move" + (moves - optimal === 1 ? "" : "s") + " longer than the proven shortest path.");
+  document.getElementById("rh-over").classList.remove("hidden");
+  autoRun = false;
+  updateHUD(); render();
+}
+
+// ---- hint / auto-solve ----
+function doHint(){
+  if (over) return;
+  const res = R.solve(pieces);
+  lastStates = res.states; lastQueued = res.queued;
+  remaining = res.solvable ? res.moves.length : -1;
+  hint = res.solvable && res.moves.length ? res.moves[0] : null;
+  if (hint) sel = hint.i;
+  updateHUD(); render();
+}
+const solveBtn = document.getElementById("rh-solve");
+function stopSolve(){
+  if (solveTimer){ clearInterval(solveTimer); solveTimer = null; }
+  solveBtn.textContent = "▶ Solve it";
+}
+function startSolve(){
+  if (over) return;
+  const res = R.solve(pieces);
+  lastStates = res.states; lastQueued = res.queued;
+  if (!res.solvable) return;
+  const seq = res.moves.slice(); let k = 0;
+  autoRun = true;
+  solveBtn.textContent = "⏹ Stop";
+  solveTimer = setInterval(() => {
+    if (over || k >= seq.length){ stopSolve(); return; }
+    const m = seq[k++]; doMove(m.i, m.d);
+  }, 430);
+}
+
+// ---- rendering ----
+function roundRect(x, y, w, h, r){
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function pieceRect(p, off){
+  off = off || 0;
+  const r = p.orient === "V" ? p.row + off : p.row;
+  const c = p.orient === "H" ? p.col + off : p.col;
+  return { x: GX + c * CELL, y: GY + r * CELL,
+           w: (p.orient === "H" ? p.len : 1) * CELL,
+           h: (p.orient === "V" ? p.len : 1) * CELL };
+}
+function drawVehicle(p, i, off, alpha){
+  const q = pieceRect(p, off), pad = 7;
+  ctx.save();
+  ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+  const col = pieceColor(p, i);
+  roundRect(q.x + pad, q.y + pad, q.w - 2 * pad, q.h - 2 * pad, 12);
+  ctx.fillStyle = col; ctx.fill();
+  ctx.strokeStyle = "rgba(2,6,23,.55)"; ctx.lineWidth = 3; ctx.stroke();
+  // windscreen strip along the travel axis
+  ctx.fillStyle = "rgba(2,6,23,.24)";
+  if (p.orient === "H") roundRect(q.x + pad + 10, q.y + pad + 12, q.w - 2 * pad - 20, q.h - 2 * pad - 24, 7);
+  else                  roundRect(q.x + pad + 12, q.y + pad + 10, q.w - 2 * pad - 24, q.h - 2 * pad - 20, 7);
+  ctx.fill();
+  if (p.id === 0){
+    ctx.fillStyle = "#fff"; ctx.font = "900 22px -apple-system, Inter, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("🚗", q.x + q.w / 2, q.y + q.h / 2 + 1);
+    ctx.textBaseline = "alphabetic";
+  }
+  ctx.restore();
+}
+function drawBoard(){
+  // plate
+  roundRect(GX - 14, GY - 14, N6 * CELL + 28, N6 * CELL + 28, 18);
+  ctx.fillStyle = "#161009"; ctx.fill();
+  ctx.strokeStyle = "#b45309"; ctx.lineWidth = 3; ctx.stroke();
+  // cells
+  for (let r = 0; r < N6; r++) for (let c = 0; c < N6; c++){
+    roundRect(GX + c * CELL + 3, GY + r * CELL + 3, CELL - 6, CELL - 6, 8);
+    ctx.fillStyle = r === R.EXIT_ROW ? "#0d1526" : "#0b1220"; ctx.fill();
+    ctx.strokeStyle = "#1f2937"; ctx.lineWidth = 1; ctx.stroke();
+  }
+  // exit
+  const ey = GY + R.EXIT_ROW * CELL;
+  ctx.fillStyle = "#fbbf24";
+  ctx.beginPath();
+  ctx.moveTo(GX + N6 * CELL + 6, ey + CELL / 2 - 16);
+  ctx.lineTo(GX + N6 * CELL + 26, ey + CELL / 2);
+  ctx.lineTo(GX + N6 * CELL + 6, ey + CELL / 2 + 16);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#fcd34d"; ctx.font = "800 11px -apple-system, Inter, sans-serif";
+  ctx.textAlign = "center"; ctx.fillText("EXIT", GX + N6 * CELL + 16, ey + CELL / 2 + 32);
+  ctx.textAlign = "left";
+
+  // legal range of the selected piece
+  if (sel >= 0 && sel < pieces.length && !over){
+    const p = pieces[sel], rg = R.slideRange(pieces, sel);
+    ctx.save(); ctx.setLineDash([5, 6]); ctx.strokeStyle = "rgba(251,191,36,.45)"; ctx.lineWidth = 2;
+    for (let d = rg.min; d <= rg.max; d++){
+      if (d === 0) continue;
+      const q = pieceRect(p, d);
+      roundRect(q.x + 10, q.y + 10, q.w - 20, q.h - 20, 9); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // vehicles
+  for (let i = 0; i < pieces.length; i++){
+    if (drag && drag.i === i) continue;
+    drawVehicle(pieces[i], i, 0, 1);
+  }
+  if (drag){
+    drawVehicle(pieces[drag.i], drag.i, 0, 0.25);
+    drawVehicle(pieces[drag.i], drag.i, drag.off, 1);
+  }
+  // selection ring
+  if (sel >= 0 && sel < pieces.length){
+    const q = pieceRect(pieces[sel], drag && drag.i === sel ? drag.off : 0);
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 3;
+    roundRect(q.x + 4, q.y + 4, q.w - 8, q.h - 8, 14); ctx.stroke();
+  }
+  // hint
+  if (hint){
+    const q = pieceRect(pieces[hint.i], hint.d);
+    ctx.save(); ctx.setLineDash([7, 5]); ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 4;
+    roundRect(q.x + 6, q.y + 6, q.w - 12, q.h - 12, 12); ctx.stroke(); ctx.restore();
+    ctx.fillStyle = "#fcd34d"; ctx.font = "900 20px -apple-system, Inter, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const arrow = pieces[hint.i].orient === "H" ? (hint.d > 0 ? "→" : "←") : (hint.d > 0 ? "↓" : "↑");
+    ctx.fillText(arrow + " " + Math.abs(hint.d), q.x + q.w / 2, q.y + q.h / 2);
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  }
+}
+function drawPanel(){
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  let y = 62;
+  ctx.fillStyle = "#fde68a"; ctx.font = "800 13px -apple-system, Inter, sans-serif";
+  ctx.fillText("SEARCH READOUT", PANEL_X, y); y += 24;
+
+  ctx.font = "600 12px -apple-system, Inter, sans-serif";
+  const rows = [
+    ["puzzle",            puzzleName + (puzzleTag ? "  (" + puzzleTag + ")" : ""), "#e2e8f0"],
+    ["your moves",        String(moves), "#e2e8f0"],
+    ["optimal from start", optimal < 0 ? "unsolvable" : String(optimal), "#fbbf24"],
+    ["moves left at best", over ? "0" : remaining < 0 ? "unsolvable" : String(remaining), remaining === 0 ? "#4ade80" : "#7dd3fc"],
+    ["legal moves now",   String(R.legalMoves(pieces).length), "#e2e8f0"],
+    ["BFS states popped", lastStates.toLocaleString(), "#c4b5fd"],
+    ["BFS states seen",   lastQueued.toLocaleString(), "#c4b5fd"]
+  ];
+  for (const row of rows){
+    ctx.fillStyle = "#94a3b8"; ctx.fillText(row[0], PANEL_X, y);
+    ctx.fillStyle = row[2];    ctx.fillText(row[1], PANEL_X + 150, y);
+    y += 19;
+  }
+  y += 10;
+
+  ctx.fillStyle = "#fde68a"; ctx.font = "800 13px -apple-system, Inter, sans-serif";
+  ctx.fillText("CANONICAL STATE KEY", PANEL_X, y); y += 20;
+  ctx.font = "700 15px ui-monospace, Menlo, monospace";
+  for (const line of R.keyRows(pieces)){
+    let x = PANEL_X;
+    for (const ch of line){
+      ctx.fillStyle = ch === "." ? "#334155" : ch === "X" ? "#f87171"
+                    : ch === "h" || ch === "H" ? "#38bdf8" : "#a78bfa";
+      ctx.fillText(ch, x, y); x += 14;
+    }
+    y += 17;
+  }
+  y += 8;
+  ctx.font = "600 11px -apple-system, Inter, sans-serif"; ctx.fillStyle = "#64748b";
+  ctx.fillText("X red car · h/H car/truck across · v/V down", PANEL_X, y); y += 22;
+
+  if (genNote){
+    ctx.fillStyle = "#fde68a"; ctx.font = "800 12px -apple-system, Inter, sans-serif";
+    ctx.fillText("GENERATOR", PANEL_X, y); y += 16;
+    ctx.font = "600 11px -apple-system, Inter, sans-serif"; ctx.fillStyle = "#94a3b8";
+    let line = "", ly = y;
+    for (const w of genNote.split(" ")){
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > 250){ ctx.fillText(line, PANEL_X, ly); ly += 14; line = w; }
+      else line = test;
+    }
+    if (line) ctx.fillText(line, PANEL_X, ly);
+  }
+}
+function drawTopBar(){
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.font = "800 13px -apple-system, Inter, sans-serif";
+  ctx.fillStyle = over ? "#4ade80" : "#fcd34d";
+  ctx.fillText(over ? "🏁 THE RED CAR IS OUT" : "🚗 GET THE RED CAR OUT — ROW 3, RIGHT EDGE", GX, 30);
+  ctx.fillStyle = "#94a3b8"; ctx.textAlign = "right";
+  ctx.fillText("optimal " + (optimal < 0 ? "?" : optimal) + " · you " + moves, canvas.width - 26, 30);
+  ctx.textAlign = "left";
+}
+function render(){
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, "#140e06"); g.addColorStop(1, "#05030a");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  drawTopBar(); drawBoard(); drawPanel();
+}
+
+// ---- HUD ----
+const movesEl  = document.getElementById("rh-moves");
+const optEl    = document.getElementById("rh-opt");
+const leftEl   = document.getElementById("rh-left");
+const statesEl = document.getElementById("rh-states");
+const statusEl = document.getElementById("rh-status");
+function updateHUD(){
+  movesEl.textContent  = moves;
+  optEl.textContent    = optimal < 0 ? "—" : optimal;
+  leftEl.textContent   = over ? 0 : remaining < 0 ? "—" : remaining;
+  statesEl.textContent = lastStates.toLocaleString();
+  if (over){
+    statusEl.textContent = "🏁 Out in " + moves + " — the proven shortest escape is " + optimal + ".";
+    statusEl.style.color = "#86efac";
+  } else if (hint){
+    const p = pieces[hint.i];
+    const dir = p.orient === "H" ? (hint.d > 0 ? "right" : "left") : (hint.d > 0 ? "down" : "up");
+    statusEl.textContent = "💡 Optimal next move: slide the " + (p.id === 0 ? "red car" : p.len === 3 ? "truck" : "car") +
+                           " at row " + (p.row + 1) + ", column " + (p.col + 1) + " " + dir + " " + Math.abs(hint.d) + ".";
+    statusEl.style.color = "#fcd34d";
+  } else {
+    statusEl.textContent = remaining < 0
+      ? "This jam has no escape — generate another."
+      : "Drag a vehicle along its own axis — " + remaining + " move" + (remaining === 1 ? "" : "s") + " left if you play perfectly.";
+    statusEl.style.color = "#fde68a";
+  }
+}
+
+// ---- input ----
+function lookVisible(){ return !document.getElementById("look").classList.contains("hidden"); }
+function toCanvas(e){
+  const b = canvas.getBoundingClientRect();
+  return { x: (e.clientX - b.left) * (canvas.width / b.width),
+           y: (e.clientY - b.top ) * (canvas.height / b.height) };
+}
+function cellAt(x, y){
+  const c = Math.floor((x - GX) / CELL), r = Math.floor((y - GY) / CELL);
+  if (r < 0 || r >= N6 || c < 0 || c >= N6) return null;
+  return { r, c };
+}
+// tapping an empty cell in the selected piece's lane slides it there
+function deltaToCell(i, cell){
+  const p = pieces[i];
+  if (p.orient === "H"){
+    if (cell.r !== p.row) return 0;
+    if (cell.c < p.col) return cell.c - p.col;
+    if (cell.c >= p.col + p.len) return cell.c - (p.col + p.len - 1);
+    return 0;
+  }
+  if (cell.c !== p.col) return 0;
+  if (cell.r < p.row) return cell.r - p.row;
+  if (cell.r >= p.row + p.len) return cell.r - (p.row + p.len - 1);
+  return 0;
+}
+canvas.addEventListener("pointerdown", e => {
+  if (!lookVisible() || over) return;
+  stopSolve();
+  const p = toCanvas(e), cell = cellAt(p.x, p.y);
+  e.preventDefault();
+  if (!cell) return;
+  const i = R.occupancy(pieces)[cell.r * N6 + cell.c];
+  if (i < 0){
+    if (sel >= 0){
+      const d = deltaToCell(sel, cell), rg = R.slideRange(pieces, sel);
+      if (d !== 0 && d >= rg.min && d <= rg.max) doMove(sel, d);
+    }
+    return;
+  }
+  sel = i; hint = null;
+  drag = { i, x: p.x, y: p.y, range: R.slideRange(pieces, i), off: 0 };
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  updateHUD(); render();
+}, { passive: false });
+canvas.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const p = toCanvas(e), pc = pieces[drag.i];
+  const raw = pc.orient === "H" ? (p.x - drag.x) / CELL : (p.y - drag.y) / CELL;
+  const d = Math.max(drag.range.min, Math.min(drag.range.max, Math.round(raw)));
+  if (d !== drag.off){ drag.off = d; render(); }
+  e.preventDefault();
+}, { passive: false });
+function endDrag(){
+  if (!drag) return;
+  const d = drag.off, i = drag.i;
+  drag = null;
+  if (d !== 0) doMove(i, d); else render();
+}
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", () => { drag = null; render(); });
+
+function nudge(dir){
+  if (over || sel < 0) return;
+  const p = pieces[sel], rg = R.slideRange(pieces, sel);
+  let d = 0;
+  if (p.orient === "H") d = dir === "left" ? -1 : dir === "right" ? 1 : 0;
+  else                  d = dir === "up"   ? -1 : dir === "down"  ? 1 : 0;
+  if (!d || d < rg.min || d > rg.max) return;
+  doMove(sel, d);
+}
+document.querySelectorAll("#rh-pad button[data-dir]").forEach(b => b.onclick = () => nudge(b.dataset.dir));
+window.addEventListener("keydown", e => {
+  if (!lookVisible()) return;
+  const k = e.key.toLowerCase();
+  if (k === "arrowleft")  { nudge("left");  e.preventDefault(); }
+  if (k === "arrowright") { nudge("right"); e.preventDefault(); }
+  if (k === "arrowup")    { nudge("up");    e.preventDefault(); }
+  if (k === "arrowdown")  { nudge("down");  e.preventDefault(); }
+  if (k === "u") undo();
+  if (k === "r") resetPuzzle();
+  if (k === "h") doHint();
+  if (k === "n") generatePuzzle();
+});
+
+document.getElementById("rh-undo").onclick  = undo;
+document.getElementById("rh-reset").onclick = resetPuzzle;
+document.getElementById("rh-hint").onclick  = doHint;
+document.getElementById("rh-gen").onclick   = generatePuzzle;
+document.getElementById("rh-again").onclick = resetPuzzle;
+document.getElementById("rh-next").onclick  = generatePuzzle;
+solveBtn.onclick = () => { if (solveTimer) stopSolve(); else startSolve(); };
+
+// puzzle picker
+const picker = document.getElementById("rh-picker");
+R.PUZZLES.forEach((pz, i) => {
+  const b = document.createElement("button");
+  b.className = "seg btn px-3 py-1.5 rounded-lg font-bold text-xs";
+  b.dataset.pz = i; b.textContent = (i + 1) + ". " + pz.name;
+  b.onclick = () => loadPuzzle(i);
+  picker.appendChild(b);
+});
+
+// ===== boot =====
+loadPuzzle(0);
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is a LIST OF PIECES, not a picture",
+   why:"The tempting model is a 6x6 array of characters, and it quietly ruins everything downstream. What actually exists in Rush Hour is about a dozen vehicles, and each one is fully described by four facts: which row and column its top-left cell sits in, how long it is, and whether it points across or down. Store that list and nothing else, because it is the smallest thing that is still the whole truth. Every question the game can ask — what is here, can this move, have I seen this position — is then a short computation over the list rather than a second copy of reality that can drift out of sync. It is also why the file has no separate 'redraw the grid' bug class at all: there is only one place a vehicle's position lives.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a vehicle = { id, row, col, len, orient }<br><br>{ id:0, row:2, col:0, len:2, orient:"H" }&nbsp;&nbsp;&larr; the red car<br>{ id:3, row:0, col:3, len:3, orient:"V" }&nbsp;&nbsp;&larr; a truck, pointing down<br><br>whole board &asymp; 11 records &asymp; 44 numbers<br>no 6x6 array is ever stored</div>`,
+   code:`const N = 6, EXIT_ROW = 2;
+
+const pieces = [
+  { id:0, row:2, col:0, len:2, orient:"H" },   // red car, always on the exit row
+  { id:1, row:0, col:2, len:2, orient:"V" },
+  { id:2, row:2, col:3, len:3, orient:"V" },
+];
+
+function cellsOf(p){
+  const out = [];
+  for (let k = 0; k < p.len; k++)
+    out.push(p.orient === "H" ? [p.row, p.col + k] : [p.row + k, p.col]);
+  return out;
+}` },
+
+ { title:"2. The occupancy grid is DERIVED, every single time",
+   why:"You still need to answer 'who is standing on this cell' constantly, so build a 36-slot grid — but build it fresh from the piece list whenever you need it, and throw it away. Caching it looks like an optimisation and is really an invitation for the two representations to disagree after some move you forgot to update. Rebuilding costs about thirty writes, which is nothing next to the thousands of board states the search will visit. Store the piece's index in the cell rather than a boolean, because 'which vehicle is blocking me' turns out to be the more useful answer, and the empty marker is -1 rather than 0 so that piece zero is not mistaken for emptiness.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">pieces &rarr; occupancy( ) &rarr; Int8Array(36)<br><br>-1&nbsp;-1&nbsp;&nbsp;1&nbsp;-1&nbsp;-1&nbsp;-1<br>-1&nbsp;-1&nbsp;&nbsp;1&nbsp;-1&nbsp;-1&nbsp;-1<br>&nbsp;0&nbsp;&nbsp;0&nbsp;-1&nbsp;&nbsp;2&nbsp;-1&nbsp;-1&nbsp;&nbsp;&larr; exit row<br>-1&nbsp;-1&nbsp;-1&nbsp;&nbsp;2&nbsp;-1&nbsp;-1<br><br>one source of truth &rarr; rules and pixels cannot drift</div>`,
+   code:`function occupancy(pieces){
+  const g = new Int8Array(N * N).fill(-1);   // -1 = empty
+  for (let i = 0; i < pieces.length; i++)
+    for (const [r, c] of cellsOf(pieces[i]))
+      g[r * N + c] = i;                      // store WHO, not just "taken"
+  return g;
+}
+// never cached, never mutated in place — rebuilt on demand` },
+
+ { title:"3. Axis-locked: one degree of freedom per vehicle",
+   why:"This is the rule that makes Rush Hour a puzzle rather than a sliding-tile game. A vehicle can only travel along the line it points down: a horizontal car changes its column and never its row, a vertical truck changes its row and never its column. Nothing rotates, nothing lifts over anything, and no vehicle ever leaves the board — including the red car, whose escape is defined as 'its right-hand cell reaches the last column', not as it driving off into nowhere. Because there is exactly one degree of freedom, a move can be written as a single signed integer, and the entire move generator becomes 'which integers are allowed'.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">orient "H"&nbsp;&nbsp;&rarr;&nbsp;&nbsp;col += d&nbsp;&nbsp;&nbsp;(row is frozen)<br>orient "V"&nbsp;&nbsp;&rarr;&nbsp;&nbsp;row += d&nbsp;&nbsp;&nbsp;(col is frozen)<br><br>no rotation&nbsp;&nbsp;no jumping&nbsp;&nbsp;no leaving the board<br><br>win = red.col + red.len === 6</div>`,
+   code:`function applyMove(pieces, i, d){
+  const next = pieces.map(p => ({ ...p }));
+  if (next[i].orient === "H") next[i].col += d;   // across only
+  else                        next[i].row += d;   // down only
+  return next;
+}
+
+const isWin = pieces => {
+  const red = pieces.find(p => p.id === 0);
+  return red.row === EXIT_ROW && red.col + red.len === N;
+};` },
+
+ { title:"4. The slide range — counting empties in both directions",
+   why:"Here is the heart of the whole file, and it is twelve lines. To know how far a vehicle can move, step outward from its nose one cell at a time while the cell ahead is empty, counting as you go; then do the same backwards from its tail, counting negatively. The result is a closed interval of legal deltas such as -2 to +1. Two properties fall out for free and are worth naming. Because you stop at the first occupied cell, a piece can never pass through another; and because you stop at the wall, it can never leave the board. There is no separate collision test anywhere in the codebase — the range IS the collision test.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">row:&nbsp;&nbsp;.&nbsp;&nbsp;.&nbsp;&nbsp;[C&nbsp;&nbsp;C]&nbsp;&nbsp;.&nbsp;&nbsp;T<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&larr;&nbsp;2 empty&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1 empty&nbsp;&rarr;<br><br>slideRange &rarr; { min: -2, max: +1 }<br><br>stop at the first occupied cell&nbsp;&rarr;&nbsp;no tunnelling<br>stop at the wall&nbsp;&rarr;&nbsp;nothing leaves the board</div>`,
+   code:`function slideRange(pieces, i, grid){
+  const g = grid || occupancy(pieces), p = pieces[i];
+  let back = 0, fwd = 0;
+  if (p.orient === "H"){
+    let c = p.col - 1;   while (c >= 0 && g[p.row*N + c] === -1){ back--; c--; }
+    c = p.col + p.len;   while (c <  N && g[p.row*N + c] === -1){ fwd++;  c++; }
+  } else {
+    let r = p.row - 1;   while (r >= 0 && g[r*N + p.col] === -1){ back--; r--; }
+    r = p.row + p.len;   while (r <  N && g[r*N + p.col] === -1){ fwd++;  r++; }
+  }
+  return { min: back, max: fwd };
+}` },
+
+ { title:"5. A move is a DELTA, not a swap",
+   why:"Tile puzzles teach you to think in swaps — exchange the blank with a neighbour — and that instinct is wrong here, because a Rush Hour vehicle covers two or three cells and can travel several cells in one go. So a move is a pair: which piece, and by how much. Crucially, a slide of any distance counts as a single move, which is the standard scoring for the physical puzzle and is what makes an 'optimal 8' meaningful rather than arbitrary. Generating them is then just the ranges of every piece flattened out with the do-nothing delta removed. On a typical jam that is roughly twenty to thirty options, which is a small branching factor as puzzles go, and it is why the search below stays fast.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">move = { i: pieceIndex, d: signedDistance }<br><br>{ i:4, d:-2 }&nbsp;&nbsp;&rarr; slide piece 4 two cells back<br><br>ONE move, however far it travels<br>(that is the standard Rush Hour metric)<br><br>legalMoves(board).length &asymp; 20&ndash;30</div>`,
+   code:`function legalMoves(pieces){
+  const g = occupancy(pieces), out = [];
+  for (let i = 0; i < pieces.length; i++){
+    const { min, max } = slideRange(pieces, i, g);
+    for (let d = min; d <= max; d++) if (d !== 0) out.push({ i, d });
+  }
+  return out;
+}
+// fuzz-tested: applying ANY of these to ANY board leaves a board
+// with no overlap and nothing off the edge` },
+
+ { title:"6. Squashing the board into one canonical string",
+   why:"To search a puzzle you must be able to say 'I have been here before', and comparing lists of objects is both slow and wrong. Slow because it is a deep comparison; wrong because the same picture written in a different array order would look like a brand new position. So paint the 36 cells instead and label each by what kind of thing sits on it: X for the red car, h or H for a car or truck lying across, v or V for one standing down. The key is built from the grid, so array order cannot leak into it — and two identical trucks are genuinely interchangeable in this puzzle, so merging them is not a lossy shortcut, it is a real collapse of duplicate states that shrinks the search.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">..v..V<br>..v..V<br>XX...V<br>HHH...<br>..h h.<br>......<br><br>&rarr; "..v..V..v..VXX...VHHH.....hh.........."<br><br>36 chars &middot; one Set entry &middot; order-independent</div>`,
+   code:`function key(pieces){
+  const s = new Array(N * N).fill(".");
+  for (const p of pieces){
+    const ch = p.id === 0 ? "X"
+             : p.orient === "H" ? (p.len === 2 ? "h" : "H")
+                                : (p.len === 2 ? "v" : "V");
+    for (const [r, c] of cellsOf(p)) s[r * N + c] = ch;
+  }
+  return s.join("");
+}
+// shuffle the piece array and the key is byte-for-byte identical` },
+
+ { title:"7. BFS finds the SHORTEST escape; DFS finds only *an* escape",
+   why:"Once positions are nodes and moves are edges, solving is graph search, and the choice of container decides what you get. A queue explores in rings: every position one move from the start, then every position two moves away, and so on. Because a ring is finished before the next begins, the first winning board you touch is the one reached in the fewest moves — that is a proof, not a hope. Swap the queue for a stack and you get depth-first search, which dives down one branch until it dead-ends and will happily return a wandering hundred-move solution to a twelve-move puzzle. Both find an answer; only one finds the answer worth showing a player next to their own move count.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">QUEUE (BFS)&nbsp;&nbsp;&rarr; ring 1, ring 2, ring 3 &hellip;<br>&nbsp;&nbsp;first win found = SHORTEST, guaranteed<br><br>STACK (DFS)&nbsp;&nbsp;&rarr; dive, dive, dive, backtrack<br>&nbsp;&nbsp;first win found = whatever it stumbled on<br><br>same code, one line different, totally different promise</div>`,
+   code:`const q = [start], parent = [-1], moveOf = [null];
+let head = 0;
+while (head < q.length){
+  const cur = q[head], idx = head++;      // SHIFT from the front = breadth-first
+  if (isWin(cur)){                        // first hit is optimal, by construction
+    const moves = [];
+    for (let k = idx; parent[k] !== -1; k = parent[k]) moves.push(moveOf[k]);
+    return moves.reverse();
+  }
+  for (const m of legalMoves(cur)){ /* push children */ }
+}` },
+
+ { title:"8. The visited set must key on the WHOLE board",
+   why:"Beginners often try to remember 'which piece I moved last' or the position of the red car alone, and both are catastrophic: two boards where the red car sits in the same place can be utterly different puzzles, so pruning on that would throw away the solution. The visited set must therefore key on the entire configuration — every piece, every cell — which is exactly what the canonical string gives you. The second half of the trick is where you mark: insert the key when you PUSH a child, not when you pop it, or the same position gets queued a dozen times over by different parents before any of them are examined. On these boards the set typically holds a few thousand entries and the whole search finishes in a couple of milliseconds.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">seen = Set of 36-char keys<br><br>mark on PUSH, not on POP<br>&nbsp;&nbsp;&rarr; a position is queued at most once<br><br>keying on "where is the red car" = WRONG<br>keying on the whole board&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= right<br><br>typical jam: 1k&ndash;20k states, a few ms</div>`,
+   code:`const seen = new Set([key(start)]);
+for (const m of legalMoves(cur)){
+  const nx = applyMove(cur, m.i, m.d), kk = key(nx);
+  if (seen.has(kk)) continue;      // already reached — and never on a shorter path
+  seen.add(kk);                    // mark HERE, at push time
+  q.push(nx); parent.push(idx); moveOf.push(m);
+}` },
+
+ { title:"9. Branching, blow-up, and why Rush Hour is PSPACE-complete",
+   why:"A 6x6 jam has maybe twenty to thirty moves available and a few thousand reachable positions, so brute force wins outright. That comfort is an accident of the board size. Generalise the puzzle to an n by n grid and the number of configurations grows exponentially in n, while any single solution can also be exponentially long — and the generalised problem is known to be PSPACE-complete, in the same class as generalised sliding-block puzzles and many two-player games. Practically this means nobody has a shortcut that scales: for big boards you switch to A* with an admissible heuristic such as 'vehicles blocking the red car, plus the vehicles blocking those', or search from both ends at once, and you accept memory as the real limit rather than time.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">6x6&nbsp;&nbsp;&rarr; ~10&ndash;30 moves per state, few thousand states<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; plain BFS is instant<br><br>n x n&nbsp;&rarr; states grow exponentially<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; solutions can be exponentially long<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; generalised Rush Hour is PSPACE-complete<br><br>bigger boards &rarr; A*, bidirectional search, bitboards</div>`,
+   code:`// admissible heuristic for A* on larger boards:
+// at least one move per distinct vehicle standing between
+// the red car and the exit  (never overestimates)
+function blockers(pieces){
+  const g = occupancy(pieces), red = pieces.find(p => p.id === 0);
+  const set = new Set();
+  for (let c = red.col + red.len; c < N; c++){
+    const i = g[EXIT_ROW * N + c];
+    if (i >= 0) set.add(i);
+  }
+  return set.size;
+}` },
+
+ { title:"10. Generate-then-verify: a random jam you have already solved",
+   why:"Scattering vehicles at random almost never produces a puzzle worth playing: most boards are trivially open and a good number are impossible. Rather than trying to be clever about placement, be honest about verification — scatter, run the solver, and reject anything unsolvable or shorter than the difficulty you asked for. Rejection sampling sounds wasteful and is not, because each solve takes milliseconds. One placement rule removes most of the failures for free: a horizontal vehicle parked on the exit row can never leave that row, so any one of them to the right of the red car makes escape impossible by construction. The alternative approach, walking backwards from a solved board by undoing random moves, is guaranteed solvable but tends to produce shallow puzzles unless you work at it.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">loop:<br>&nbsp;&nbsp;scatter red + ~10 vehicles (none horizontal on row 3)<br>&nbsp;&nbsp;res = solve(board)<br>&nbsp;&nbsp;keep if solvable AND optimal &ge; minMoves<br><br>the puzzle you are handed has ALREADY been solved<br>so "no solution" is impossible by construction</div>`,
+   code:`for (let t = 0; t < tries; t++){
+  const pieces = [{ id:0, row:EXIT_ROW, col:ri(3), len:2, orient:"H" }];
+  while (pieces.length < want){
+    const cand = randomVehicle();
+    if (cand.orient === "H" && cand.row === EXIT_ROW) continue;  // permanent wall
+    if (!fits(pieces, cand)) continue;
+    pieces.push(cand);
+  }
+  const res = solve(pieces, 200000);        // VERIFY — do not hope
+  if (res.solvable && res.moves.length >= minMoves) return pieces;
+}` },
+
+ { title:"11. An honest hint is a freshly recomputed optimal path",
+   why:"The lazy hint stores the solution when the puzzle loads and reads the next move off it, and it breaks the moment the player deviates — which is the exact moment they wanted help. Since a solve takes a couple of milliseconds, just run it again from wherever the board actually is and show move zero of the fresh path. The same call gives you a genuinely useful second number: how many moves remain if you now play perfectly. Watch it go up after a careless slide and you have built a teaching tool rather than a walkthrough, because the player can see precisely which move cost them and how much.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">hint = solve(CURRENT board).moves[0]<br><br>never cached &rarr; always correct, however far you wandered<br><br>optimal from start:&nbsp;&nbsp;8<br>your moves so far:&nbsp;&nbsp;&nbsp;11<br>left at best:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3&nbsp;&nbsp;&larr; went UP? that move cost you</div>`,
+   code:`function doHint(){
+  const res = solve(pieces);                  // from HERE, not from the start
+  hint = res.solvable && res.moves.length ? res.moves[0] : null;
+  remaining = res.solvable ? res.moves.length : -1;
+  render();
+}
+// auto-solve is the same search with a timer draining the list` },
+
+ { title:"12. Pointer drag, snapped to whole cells and clamped",
+   why:"A drag feels continuous but the model is discrete, so convert at the earliest possible moment instead of carrying pixels around. On grab, record the pointer position and compute the slide range once. On every move, take the travel along the piece's own axis, divide by the cell size, round to the nearest whole cell, and clamp that integer into the range. The clamp is the part players actually feel: the vehicle visibly refuses to pass through a car even while your finger keeps travelling, which teaches the rule better than any message could. Release with a delta of zero and it was just a tap that selected the piece. Finally, set touch-action:none on the canvas or a phone will interpret the drag as a scroll and the game will be unplayable.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">raw = (pointer travel along the axis) / CELL<br>d&nbsp;&nbsp; = round(raw)<br>d&nbsp;&nbsp; = clamp(d, range.min, range.max)<br><br>release with d !== 0&nbsp;&nbsp;&rarr; commit one move<br>release with d === 0&nbsp;&nbsp;&rarr; it was just a tap<br><br>CSS: #canvas { touch-action: none; }</div>`,
+   code:`canvas.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const p = toCanvas(e), pc = pieces[drag.i];
+  const raw = pc.orient === "H" ? (p.x - drag.x) / CELL : (p.y - drag.y) / CELL;
+  const d = Math.max(drag.range.min, Math.min(drag.range.max, Math.round(raw)));
+  if (d !== drag.off){ drag.off = d; render(); }   // snapped AND clamped
+});
+// undo needs no inverse move: push a snapshot before, pop it after` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-amber-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-amber-500 bg-amber-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-amber-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>
