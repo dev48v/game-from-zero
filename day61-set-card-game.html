@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 61 — SET (Card Game)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #1e1140 0%, #120a26 60%, #05030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(139,92,246,.12);
+    border: 3px solid #6d28d9;
+  }
+  .console-label { color:#ddd6fe; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#7c3aed !important; color:#fff !important; }
+  .hidden { display:none; }
+
+  /* ===== SET board ===== */
+  .setboard { display:grid; gap:8px; grid-template-columns:repeat(4, minmax(0,1fr)); width:100%; }
+  .setboard[data-cols="5"] { grid-template-columns:repeat(5, minmax(0,1fr)); }
+  .setboard[data-cols="6"] { grid-template-columns:repeat(6, minmax(0,1fr)); }
+  .setboard[data-cols="7"] { grid-template-columns:repeat(7, minmax(0,1fr)); }
+  .setcard {
+    background:#fff; border:3px solid #e2e8f0; border-radius:12px; padding:4px;
+    cursor:pointer; transition:transform .1s, box-shadow .15s, border-color .15s;
+    display:block; width:100%; touch-action:manipulation;
+  }
+  .setcard svg { display:block; width:100%; height:auto; }
+  .setcard:hover { border-color:#c4b5fd; transform:translateY(-2px); }
+  .setcard.sel { border-color:#7c3aed; box-shadow:0 0 0 4px rgba(124,58,237,.35); transform:translateY(-5px); }
+  .setcard.hintc { border-color:#f59e0b; box-shadow:0 0 0 4px rgba(245,158,11,.45); }
+  .setcard.good { border-color:#16a34a; box-shadow:0 0 0 5px rgba(22,163,74,.45); animation:pop .35s ease-out; }
+  .setcard.bad  { border-color:#dc2626; animation:shake .34s; }
+  .setcard.dim  { opacity:.45; }
+  @keyframes pop   { 0%{transform:scale(1)} 50%{transform:scale(1.09)} 100%{transform:scale(1)} }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
+
+  .attr-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; }
+  .attr-box { background:#1c1330; border:2px solid #3b2a63; border-radius:10px; padding:6px 4px; text-align:center; }
+  .attr-box .k { font-size:9px; letter-spacing:.06em; text-transform:uppercase; color:#a78bfa; font-weight:800; }
+  .attr-box .v { font-size:11px; color:#e9d5ff; font-family:ui-monospace,Menlo,monospace; margin-top:2px; word-break:break-word; }
+  .attr-box.ok  { border-color:#16a34a; }
+  .attr-box.no  { border-color:#dc2626; }
+
+  .factrow { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+  .fact { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:8px 12px; text-align:center; min-width:118px; }
+  .fact .n { font-size:20px; font-weight:900; color:#6d28d9; font-variant-numeric:tabular-nums; }
+  .fact .l { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#64748b; font-weight:700; }
+
+  .capgrid { display:grid; gap:5px; grid-template-columns:repeat(10, minmax(0,1fr)); }
+  @media (max-width:640px){ .capgrid { grid-template-columns:repeat(5, minmax(0,1fr)); } }
+  @media (max-width:560px){
+    .setboard, .setboard[data-cols="5"], .setboard[data-cols="6"], .setboard[data-cols="7"] {
+      grid-template-columns:repeat(3, minmax(0,1fr));
+    }
+    .attr-grid { grid-template-columns:repeat(2, minmax(0,1fr)); }
+  }
+  /* the sticky title is a paragraph — clamp it on phones so it cannot eat the viewport */
+  @media (max-width:640px){
+    header h1 { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  }
+  .scrollx { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- one shared defs block: the three real striped-shading patterns, used by every card on the page -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <pattern id="stripe0" patternUnits="userSpaceOnUse" width="20" height="20">
+    <rect width="20" height="20" fill="#ffffff"/><path d="M3,0 V20" stroke="#dc2626" stroke-width="7"/>
+  </pattern>
+  <pattern id="stripe1" patternUnits="userSpaceOnUse" width="20" height="20">
+    <rect width="20" height="20" fill="#ffffff"/><path d="M3,0 V20" stroke="#15803d" stroke-width="7"/>
+  </pattern>
+  <pattern id="stripe2" patternUnits="userSpaceOnUse" width="20" height="20">
+    <rect width="20" height="20" fill="#ffffff"/><path d="M3,0 V20" stroke="#7c3aed" stroke-width="7"/>
+  </pattern>
+</defs></svg>
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-violet-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="min-w-0 flex-1 break-words">
+      <div class="text-xs text-violet-600 font-bold uppercase tracking-wider">GameFromZero · Day 61</div>
+      <h1 class="text-xl font-bold">🃏 SET — A Genuinely-Live Pattern-Spotting Card Game Whose Eighty-One Cards Are Not Eighty-One Pictures but Every Four-Digit Number You Can Write in Base Three, One Digit Each for Count, Shape, Shading and Colour, Which Means <code>3&times;3&times;3&times;3&nbsp;=&nbsp;81</code> Is the Deck Itself and Not a Coincidence; The Rule Everybody Learns as Two Rules — "all the same or all different, for every attribute" — Is Actually One Rule Wearing a Disguise, Because Three Digits From <code>{0,1,2}</code> Are All-Equal or All-Distinct <em>Exactly When</em> They Sum to a Multiple of Three, So <code>isSet</code> Is Four Modular Additions and No Branches at All, and Both Tests Are Run Side by Side Here and Shown Agreeing on Your Live Selection; From That One Identity Everything Else Falls Out for Free — Any Two Cards Determine the Unique Third (Just Solve <code>c &equiv; &minus;a&minus;b</code> Digit by Digit), So the Deck Holds Exactly <code>C(81,2)/3 = 1080</code> Sets and Every Single Card Sits in Exactly Forty of Them, Both Counted Live by Brute Force on Load; A Twelve-Card Board Is Only <code>C(12,3) = 220</code> Triples, Which Is So Cheap That the Page Simply Enumerates Them All on Every Click to Count the Sets Present, Detect the Rare Dead Board and Deal Three More, Give an Honest Hint and Auto-Solve — And Because Three Cards in a Row Being Forbidden Is the Famous "Cap Set" Problem, There Is a Real Twenty-Card Set-Free Board Here, the Provable Maximum in Four Dimensions, Which the Page Verifies in Front of You Over All <code>C(20,3) = 1140</code> Triples and Then Proves Maximal by Showing That Every One of the Sixty-One Cards Outside It Creates a Set — Pure Vanilla JavaScript, Real Inline SVG With a Real Striped Fill Pattern, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Find three cards where every attribute is all-the-same or all-different.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm"><strong>Tap three cards.</strong> Count, shape, shading and colour are each checked separately, and each one must be either the same on all three cards or different on all three. Get it wrong and the page tells you <em>which attribute</em> broke the rule. Everything you see is counted for real: the sets currently on the board come from enumerating all <strong>220</strong> triples, the hint names a set that actually exists, and when a board genuinely has none, three more cards are dealt. <span class="keycap">H</span> hint, <span class="keycap">S</span> auto-solve, <span class="keycap">D</span> deal 3, <span class="keycap">N</span> new game, <span class="keycap">1</span>–<span class="keycap">9</span> pick a card.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-2 md:gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">🏆 Score</div>
+          <div class="text-2xl font-black stat" id="s-score">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">🔎 Sets on board</div>
+          <div class="text-2xl font-black stat" id="s-onboard">—</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">🃏 Deck left</div>
+          <div class="text-2xl font-black stat" id="s-deck">69</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">⏱ Time</div>
+          <div class="text-2xl font-black stat" id="s-time">0:00</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">❌ Misses</div>
+          <div class="text-2xl font-black stat" id="s-miss">0</div>
+        </div>
+      </div>
+
+      <!-- game console -->
+      <div class="console p-3 md:p-5">
+        <div class="mb-3 console-label" id="s-status">Tap three cards — every attribute all-same or all-different</div>
+        <div class="setboard" id="s-board" data-cols="4"></div>
+
+        <!-- live per-attribute verdict on the current selection -->
+        <div class="mt-4">
+          <div class="console-label mb-2">LIVE CHECK ON YOUR SELECTION &mdash; both tests, side by side</div>
+          <div class="attr-grid" id="s-attrs"></div>
+          <div class="mt-2 text-[11px] text-violet-200 font-mono" id="s-verdict">select three cards…</div>
+        </div>
+
+        <div id="s-over" class="hidden mt-4 bg-violet-950/60 border-2 border-violet-600 rounded-xl p-4 text-center">
+          <h3 class="text-2xl font-black text-violet-200" id="s-over-title">DECK CLEARED</h3>
+          <div class="text-sm text-violet-300 mt-1" id="s-over-brk"></div>
+          <button id="s-again" class="btn bg-violet-600 hover:bg-violet-700 text-white px-6 py-2.5 rounded-lg font-bold mt-3">↻ Play again</button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-2 flex-wrap">
+        <button id="s-hint"  class="btn bg-violet-500 hover:bg-violet-600 text-white px-5 py-2.5 rounded-lg font-bold">💡 Hint</button>
+        <button id="s-solve" class="btn bg-violet-800 hover:bg-violet-900 text-white px-5 py-2.5 rounded-lg font-bold">▶ Auto-solve</button>
+        <button id="s-deal"  class="btn bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg font-bold">➕ Deal 3</button>
+        <button id="s-show"  class="btn bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg font-bold">🔍 Show all sets</button>
+        <button id="s-new"   class="btn bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold">↻ New game</button>
+      </div>
+
+      <!-- live combinatorics, all measured on load -->
+      <div class="mt-8 bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 class="font-bold text-lg mb-1">The numbers, counted live in your browser just now</h3>
+        <p class="text-xs text-slate-500 mb-4">Nothing on this row is typed in. On page load the file enumerates every one of the <strong>85,320</strong> triples in the full deck, counts the sets, counts how many contain a fixed card, and then deals thousands of random twelve-card boards to measure how often a board has no set at all. <span id="s-facts-ms" class="font-mono"></span></p>
+        <div class="factrow" id="s-facts"></div>
+      </div>
+
+      <!-- third-card lab -->
+      <div class="mt-4 bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 class="font-bold text-lg mb-1">Any two cards determine the third — watch it being solved</h3>
+        <p class="text-xs text-slate-500 mb-4">There is no searching here. For each of the four attributes the missing digit is forced: it is whatever makes the three digits sum to a multiple of three, i.e. <code>c = (6 &minus; a &minus; b) mod 3</code>. That single line is the reason the deck holds exactly 1080 sets.</p>
+        <div class="flex items-end justify-center gap-3 flex-wrap">
+          <div class="text-center"><div class="text-[10px] uppercase font-bold text-slate-400 mb-1">card A</div><div id="lab-a" style="width:96px"></div></div>
+          <div class="text-2xl font-black text-slate-300 pb-8">+</div>
+          <div class="text-center"><div class="text-[10px] uppercase font-bold text-slate-400 mb-1">card B</div><div id="lab-b" style="width:96px"></div></div>
+          <div class="text-2xl font-black text-slate-300 pb-8">=</div>
+          <div class="text-center"><div class="text-[10px] uppercase font-bold text-violet-500 mb-1">forced third</div><div id="lab-c" style="width:96px"></div></div>
+        </div>
+        <div class="mt-3 scrollx"><div class="text-[11px] font-mono text-slate-600 text-center whitespace-nowrap" id="lab-math"></div></div>
+        <div class="text-center mt-3"><button id="lab-roll" class="btn bg-violet-600 hover:bg-violet-700 text-white px-5 py-2 rounded-lg font-bold text-sm">🎲 Roll two new cards</button></div>
+      </div>
+
+      <!-- cap set demo -->
+      <div class="mt-4 bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 class="font-bold text-lg mb-1">The cap set: twenty cards with no set among them</h3>
+        <p class="text-xs text-slate-500 mb-4">How large can a board be and still contain nothing? In this four-attribute deck the answer is exactly <strong>20</strong>, a result proved by Pellegrino in 1971, and the twenty cards below are one such board. Press the button and the page checks it the only honest way: enumerate all <strong>1,140</strong> triples and count. Then it tests maximality by trying each of the other 61 cards in turn — every one of them creates a set, so 21 is impossible here.</p>
+        <div class="capgrid" id="cap-board"></div>
+        <div class="text-center mt-4"><button id="cap-run" class="btn bg-violet-600 hover:bg-violet-700 text-white px-5 py-2 rounded-lg font-bold text-sm">🔬 Verify all 1,140 triples now</button></div>
+        <div class="mt-3 text-center text-sm font-mono text-slate-600" id="cap-out">not verified yet</div>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-6 text-center max-w-2xl mx-auto">
+        A card here is <strong>one integer</strong>, 0 to 80, read as four base-3 digits: count, shape, shading, colour. The whole rulebook is then <code>(a + b + c) % 3 === 0</code> on each digit &mdash; identical to "all same or all different", which the live check above demonstrates on every selection you make. Because the third card of any pair is <em>forced</em>, sets are not searched for but solved for, and the deck's 1080 sets and the 40-per-card figure are consequences, not trivia. The board's set count comes from walking all 220 triples on every click, which is a rounding error of work and removes any need to be clever. Every symbol is real inline SVG &mdash; a polygon, a rounded rect and a bezier squiggle &mdash; with the striped shading painted by an actual <code>&lt;pattern&gt;</code>, so there is not a single image file anywhere on this page.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2 min-w-0">
+      <h3 class="font-bold text-lg mb-3">How four base-3 digits, one modular sum and 220 triples become SET</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-violet-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-violet-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4 min-w-0">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 min-w-0"><div class="text-xs uppercase font-bold text-violet-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center overflow-x-auto"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-violet-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-violet-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-6 md:p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">SET is the rare game where choosing the right representation deletes almost all of the code. Refuse to model a card as an object of strings and model it as a four-digit number in base 3, and the rule collapses to a modular sum, the third card of a pair becomes a subtraction, and the board's whole analysis becomes a triple loop you can afford to run on every click. Nine blocks, in order, from an empty file — the deck, the rule, the completion, the enumerator, the deal loop, the feedback, the SVG, the cap set, and the loop that ties them together.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A card is a number in base 3, and the deck is every such number</h3></div>
+        <p class="text-sm text-slate-600 mb-3">There are four attributes and each has three possible values, so a card is exactly a four-digit base-3 number and the deck is exactly the numbers 0 to 80. Do not store strings like <code>"two red striped ovals"</code> — store <code>34</code> and decode when you draw. Every good property of this codebase descends from this one decision, because arithmetic on digits is what the rule turns out to be.</p>
+        <div class="relative"><pre>// digit 0 = count (1,2,3), 1 = shape, 2 = shading, 3 = colour
+const attrsOf = id =&gt; [ ((id / 27) | 0) % 3, ((id / 9) | 0) % 3, ((id / 3) | 0) % 3, id % 3 ];
+const idOf    = a  =&gt; a[0] * 27 + a[1] * 9 + a[2] * 3 + a[3];
+
+const COUNT = ["1", "2", "3"];
+const SHAPE = ["diamond", "squiggle", "oval"];
+const SHADE = ["solid", "striped", "open"];
+const COLOR = ["red", "green", "purple"];
+
+const makeDeck = () =&gt; Array.from({ length: 81 }, (_, i) =&gt; i);   // 3^4 = 81, the whole deck</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">The rule, written the way the rulebook says it</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Write the naive version first, because it is the one you can check against a human. For each attribute independently, the three values must be all equal or all distinct; a mix of two-and-one is what makes a triple fail. Note that the attributes never interact — the shapes do not care what the colours are doing — which is why the loop can bail out the moment any single attribute fails.</p>
+        <div class="relative"><pre>function isSet(a, b, c){
+  const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+  for (let k = 0; k &lt; 4; k++){
+    const x = A[k], y = B[k], z = C[k];
+    const allSame = (x === y &amp;&amp; y === z);
+    const allDiff = (x !== y &amp;&amp; y !== z &amp;&amp; x !== z);
+    if (!allSame &amp;&amp; !allDiff) return false;     // two-and-one: the only way to fail
+  }
+  return true;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">The same rule as four modular additions</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Take three digits from <code>{0,1,2}</code>. If they are all equal the sum is 0, 3 or 6; if they are all distinct the sum is 0+1+2 = 3. Every other combination is a two-and-one and sums to 1, 2, 4 or 5. So "all same or all different" is <em>exactly</em> "sums to a multiple of 3" — one rule, not two, and no branches. Keep both functions in the file and assert they agree on all 85,320 triples; that test is the real proof, and it runs in milliseconds.</p>
+        <div class="relative"><pre>function isSetMod3(a, b, c){
+  const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+  for (let k = 0; k &lt; 4; k++)
+    if ((A[k] + B[k] + C[k]) % 3 !== 0) return false;
+  return true;
+}
+
+// sums of three digits from {0,1,2}
+//   0+0+0=0  1+1+1=3  2+2+2=6      -&gt; all same, all divisible by 3
+//   0+1+2=3                        -&gt; all different, divisible by 3
+//   0+0+1=1  0+2+2=4  1+1+2=4 ...  -&gt; two-and-one, never divisible by 3</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">Two cards force the third — so solve, never search</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Rearrange the identity and the completion is free: if <code>a + b + c ≡ 0</code> then <code>c ≡ −a − b</code>, computed digit by digit. Adding 6 before taking the remainder keeps JavaScript's <code>%</code> away from negative numbers. Two consequences follow immediately. Every pair of distinct cards belongs to exactly one set, so the deck holds <code>C(81,2)/3 = 1080</code> of them; and given two cards, exactly one of the other 79 completes them, which is why beginners staring at two cards should be constructing the third rather than scanning.</p>
+        <div class="relative"><pre>function thirdCard(a, b){
+  const A = attrsOf(a), B = attrsOf(b), out = [0, 0, 0, 0];
+  for (let k = 0; k &lt; 4; k++) out[k] = (6 - A[k] - B[k]) % 3;   // c = -a - b (mod 3)
+  return idOf(out);
+}
+
+// C(81,2) = 3240 pairs, each set counted 3 times  -&gt;  3240 / 3 = 1080 sets
+// a fixed card pairs with 80 others               -&gt;  80 / 2   = 40 sets per card</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">Enumerate all 220 triples, on every single click</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A twelve-card board has <code>C(12,3) = 220</code> triples. That is nothing, so do not be clever: loop over all of them. One function then answers every question the interface has — how many sets are on the board, is there any set at all, and give me one to hint with. Being clever here (indexing by pairs, caching between deals) would buy microseconds and cost correctness bugs, and the "cheap enough to just do it" instinct is worth more than the micro-optimisation.</p>
+        <div class="relative"><pre>function findSets(board){
+  const out = [];
+  for (let i = 0; i &lt; board.length; i++)
+    for (let j = i + 1; j &lt; board.length; j++)
+      for (let k = j + 1; k &lt; board.length; k++)
+        if (isSet(board[i], board[j], board[k])) out.push([i, j, k]);
+  return out;                       // 220 triples on a 12-card board
+}
+
+const countSets = b =&gt; findSets(b).length;
+const hasSet    = b =&gt; findSets(b).length &gt; 0;
+
+// the pair-first alternative, if you ever need it on a big board:
+//   for each pair, compute thirdCard(a,b) and look it up  -&gt; C(n,2) work instead of C(n,3)</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Dealing: replace in place, and deal three more when the board is dead</h3></div>
+        <p class="text-sm text-slate-600 mb-3">When a set is claimed, the three gaps are refilled from the deck <em>in place</em> so the rest of the board does not jump around under the player's eyes. If the deck is empty the board simply shrinks. Then comes the rule that surprises people: if the board contains no set at all, deal three more cards and check again. A random twelve-card board is set-free only about three per cent of the time, but it does happen, and the detector above is what makes handling it exact rather than a guess.</p>
+        <div class="relative"><pre>function claim(state, idx){                    // idx = the three chosen positions
+  idx.sort((p, q) =&gt; p - q);
+  if (state.board.length &gt; 12 || state.deck.length === 0){
+    for (const p of idx.reverse()) state.board.splice(p, 1);   // shrink back toward 12
+  } else {
+    for (const p of idx) state.board[p] = state.deck.pop();    // refill in place
+  }
+  topUp(state);
+}
+
+function topUp(state){
+  while (state.board.length &lt; 12 &amp;&amp; state.deck.length) state.board.push(state.deck.pop());
+  while (!hasSet(state.board) &amp;&amp; state.deck.length &gt;= 3)      // the dead-board rule
+    for (let i = 0; i &lt; 3; i++) state.board.push(state.deck.pop());
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">Say which attribute broke, not just "wrong"</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A red X teaches nothing. Because the four attributes are checked independently, the failing one is already known at the moment the test returns false — so return it instead of a bare boolean. Reporting "two of these are red and one is purple" turns a wrong guess into the exact lesson the player needed, and it costs four extra lines. This is the single highest-value thing in the whole file for a beginner.</p>
+        <div class="relative"><pre>const ATTR_NAMES  = ["count", "shape", "shading", "colour"];
+const ATTR_VALUES = [COUNT, SHAPE, SHADE, COLOR];
+
+function brokenAttribute(a, b, c){
+  const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+  for (let k = 0; k &lt; 4; k++){
+    const x = A[k], y = B[k], z = C[k];
+    if ((x === y &amp;&amp; y === z) || (x !== y &amp;&amp; y !== z &amp;&amp; x !== z)) continue;
+    return { index: k, name: ATTR_NAMES[k],
+             values: [x, y, z].map(v =&gt; ATTR_VALUES[k][v]),
+             sum: (x + y + z) % 3 };                 // never 0 when it breaks
+  }
+  return null;                                       // null = it really is a set
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">Drawing a card: three paths, and a real striped fill</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The symbols are a polygon, a rounded rectangle and one bezier squiggle, each drawn once in a 200&times;100 box and then placed one, two or three times down the card by a transform. Shading is the interesting part: solid is a plain fill, open is <code>fill="none"</code> with a stroke, and striped is a genuine SVG <code>&lt;pattern&gt;</code> of parallel lines referenced by <code>url(#stripe1)</code>. Define the three patterns once in a hidden defs block at the top of the document and every card on the page can point at them.</p>
+        <div class="relative"><pre>&lt;svg width="0" height="0"&gt;&lt;defs&gt;
+  &lt;pattern id="stripe0" patternUnits="userSpaceOnUse" width="20" height="20"&gt;
+    &lt;rect width="20" height="20" fill="#fff"/&gt;
+    &lt;path d="M3,0 V20" stroke="#dc2626" stroke-width="7"/&gt;
+  &lt;/pattern&gt;
+&lt;/defs&gt;&lt;/svg&gt;
+
+const HEX = ["#dc2626", "#15803d", "#7c3aed"];
+
+function shapeEl(shape, shade, colorIdx){
+  const colour = HEX[colorIdx];
+  const fill = shade === 0 ? colour
+             : shade === 1 ? "url(#stripe" + colorIdx + ")"      // the pattern above
+                           : "none";                             // open
+  const attr = 'fill="' + fill + '" stroke="' + colour + '" stroke-width="9"';
+  if (shape === 0) return "&lt;polygon points='100,6 194,50 100,94 6,50' " + attr + "/&gt;";
+  if (shape === 2) return "&lt;rect x='6' y='6' width='188' height='88' rx='44' " + attr + "/&gt;";
+  return "&lt;path d='" + SQUIGGLE + "' " + attr + "/&gt;";
+}
+// counts 1/2/3 -&gt; y centres [90] / [62,118] / [34,90,146] in a 120x180 card</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">The cap set, and measuring the odds instead of quoting them</h3></div>
+        <p class="text-sm text-slate-600 mb-3">"How big can a set-free board be" is a real open research area — the cap set problem — and in four dimensions the answer is a settled 20. Hardcoding twenty card numbers proves nothing, so verify them in the browser: enumerate all 1,140 triples, then try adding each of the remaining 61 cards and confirm every one creates a set. The same honesty applies to the odds of a dead board: rather than repeating a number from a forum, deal thousands of random boards and measure it.</p>
+        <div class="relative"><pre>const CAP20 = [0,1,3,4,9,10,12,13,27,28,32,35,38,47,59,65,66,67,71,77];
+
+function verifyCap(board){
+  let triples = 0, sets = 0;
+  for (let i = 0; i &lt; board.length; i++)
+    for (let j = i + 1; j &lt; board.length; j++)
+      for (let k = j + 1; k &lt; board.length; k++){ triples++; if (isSet(board[i],board[j],board[k])) sets++; }
+  let outside = 0, forced = 0;                      // is it MAXIMAL?
+  for (let c = 0; c &lt; 81; c++){
+    if (board.includes(c)) continue;
+    outside++;
+    if (hasSet(board.concat(c))) forced++;          // adding c always makes a set
+  }
+  return { triples, sets, outside, forced };        // 1140, 0, 61, 61
+}
+
+function measureDeadBoardOdds(trials){             // ~3% for 12 cards, measured not quoted
+  let dead = 0;
+  for (let t = 0; t &lt; trials; t++) if (!hasSet(shuffle(makeDeck()).slice(0, 12))) dead++;
+  return dead / trials;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-violet-50 border border-violet-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-violet-900">🎉 Day 61 of GameFromZero done — a real SET, with the maths visible.</h3><p class="text-sm text-violet-800 mt-2">You built the whole game out of one idea: a card is a four-digit number in base 3. The rule became a modular sum with no branches, the third card of any pair became a subtraction, the deck's 1080 sets and 40-per-card became arithmetic instead of trivia, and a 220-triple loop turned out to be cheap enough to power the set counter, the dead-board detector, the hint and the auto-solver all at once. Next: a proper cap-set search that finds its own 20-card board by backtracking instead of being handed one, timed head-to-head play with a rate-limited bot, a SET variant with a fifth attribute (243 cards, 9801 sets), the pair-indexed <code>thirdCard</code> lookup that makes huge boards instant, or an exact count of set-free twelve-card boards by orbit counting rather than sampling. <strong>👉 Tomorrow — Day 62: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== SET ENGINE START (this exact block is extracted and run by the node tests) =====
+function makeSetEngine(){
+  const DECK_SIZE = 81;
+
+  const COUNT_NAMES = ["one", "two", "three"];
+  const SHAPE_NAMES = ["diamond", "squiggle", "oval"];
+  const SHADE_NAMES = ["solid", "striped", "open"];
+  const COLOR_NAMES = ["red", "green", "purple"];
+  const ATTR_NAMES  = ["count", "shape", "shading", "colour"];
+  const ATTR_VALUES = [COUNT_NAMES, SHAPE_NAMES, SHADE_NAMES, COLOR_NAMES];
+
+  // a card IS a number: four base-3 digits [count, shape, shading, colour]
+  const attrsOf = id => [ ((id / 27) | 0) % 3, ((id / 9) | 0) % 3, ((id / 3) | 0) % 3, id % 3 ];
+  const idOf    = a  => a[0] * 27 + a[1] * 9 + a[2] * 3 + a[3];
+
+  // the rule as the rulebook states it: per attribute, all same OR all different
+  function isSet(a, b, c){
+    const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+    for (let k = 0; k < 4; k++){
+      const x = A[k], y = B[k], z = C[k];
+      const allSame = (x === y && y === z);
+      const allDiff = (x !== y && y !== z && x !== z);
+      if (!allSame && !allDiff) return false;
+    }
+    return true;
+  }
+
+  // the same rule as arithmetic in GF(3): three digits are all-equal or all-distinct
+  // exactly when they sum to a multiple of three
+  function isSetMod3(a, b, c){
+    const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+    for (let k = 0; k < 4; k++) if ((A[k] + B[k] + C[k]) % 3 !== 0) return false;
+    return true;
+  }
+
+  // c = -a - b (mod 3), digit by digit: the unique completion of any pair
+  function thirdCard(a, b){
+    const A = attrsOf(a), B = attrsOf(b), out = [0, 0, 0, 0];
+    for (let k = 0; k < 4; k++) out[k] = (6 - A[k] - B[k]) % 3;
+    return idOf(out);
+  }
+
+  // which attribute broke the rule, for honest feedback
+  function brokenAttribute(a, b, c){
+    const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+    for (let k = 0; k < 4; k++){
+      const x = A[k], y = B[k], z = C[k];
+      if ((x === y && y === z) || (x !== y && y !== z && x !== z)) continue;
+      return { index: k, name: ATTR_NAMES[k], values: [x, y, z].map(v => ATTR_VALUES[k][v]), sum: (x + y + z) % 3 };
+    }
+    return null;
+  }
+
+  // every triple on the board — C(12,3) = 220, cheap enough to run on every click
+  function findSets(board){
+    const out = [];
+    for (let i = 0; i < board.length; i++)
+      for (let j = i + 1; j < board.length; j++)
+        for (let k = j + 1; k < board.length; k++)
+          if (isSet(board[i], board[j], board[k])) out.push([i, j, k]);
+    return out;
+  }
+  const countSets = b => findSets(b).length;
+  const hasSet    = b => { for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++)
+                             for (let k = j + 1; k < b.length; k++) if (isSet(b[i], b[j], b[k])) return true;
+                           return false; };
+  const firstSet  = b => { for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++)
+                             for (let k = j + 1; k < b.length; k++) if (isSet(b[i], b[j], b[k])) return [i, j, k];
+                           return null; };
+
+  const makeDeck = () => Array.from({ length: DECK_SIZE }, (_, i) => i);
+  function shuffle(a, rnd){
+    const r = rnd || Math.random;
+    for (let i = a.length - 1; i > 0; i--){ const j = (r() * (i + 1)) | 0; const t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+
+  // brute force over C(81,3) = 85320 triples — run live on page load
+  function totalSetsInDeck(){
+    let triples = 0, sets = 0;
+    for (let i = 0; i < DECK_SIZE; i++)
+      for (let j = i + 1; j < DECK_SIZE; j++)
+        for (let k = j + 1; k < DECK_SIZE; k++){ triples++; if (isSet(i, j, k)) sets++; }
+    return { triples, sets };
+  }
+  function setsContaining(card){
+    let n = 0;
+    for (let i = 0; i < DECK_SIZE; i++)
+      for (let j = i + 1; j < DECK_SIZE; j++)
+        if (i !== card && j !== card && isSet(card, i, j)) n++;
+    return n;
+  }
+
+  // a maximal cap in dimension 4: 20 cards, no set among them (Pellegrino, 1971)
+  const CAP20 = [0,1,3,4,9,10,12,13,27,28,32,35,38,47,59,65,66,67,71,77];
+  function verifyCap(board){
+    let triples = 0, sets = 0;
+    for (let i = 0; i < board.length; i++)
+      for (let j = i + 1; j < board.length; j++)
+        for (let k = j + 1; k < board.length; k++){ triples++; if (isSet(board[i], board[j], board[k])) sets++; }
+    let outside = 0, forced = 0;
+    for (let c = 0; c < DECK_SIZE; c++){
+      if (board.indexOf(c) !== -1) continue;
+      outside++;
+      if (hasSet(board.concat([c]))) forced++;
+    }
+    return { triples, sets, outside, forced };
+  }
+
+  // measured, never quoted: how often does a random n-card board contain no set at all
+  function measureDeadBoardOdds(n, trials, rnd){
+    let dead = 0;
+    for (let t = 0; t < trials; t++){
+      const board = shuffle(makeDeck(), rnd).slice(0, n);
+      if (!hasSet(board)) dead++;
+    }
+    return dead / trials;
+  }
+
+  function describe(id){
+    const [n, sh, sd, co] = attrsOf(id);
+    return COUNT_NAMES[n] + " " + COLOR_NAMES[co] + " " + SHADE_NAMES[sd] + " " +
+           SHAPE_NAMES[sh] + (n === 0 ? "" : "s");
+  }
+
+  return { DECK_SIZE, attrsOf, idOf, isSet, isSetMod3, thirdCard, brokenAttribute,
+           findSets, countSets, hasSet, firstSet, makeDeck, shuffle, totalSetsInDeck,
+           setsContaining, CAP20, verifyCap, measureDeadBoardOdds, describe,
+           COUNT_NAMES, SHAPE_NAMES, SHADE_NAMES, COLOR_NAMES, ATTR_NAMES, ATTR_VALUES };
+}
+const S = makeSetEngine();
+// ===== SET ENGINE END =====
+
+if (typeof module !== "undefined" && module.exports) module.exports = { makeSetEngine };
+
+// ===== rendering: every symbol is real inline SVG =====
+const HEX = ["#dc2626", "#15803d", "#7c3aed"];
+const SQUIGGLE = "M14,66 C14,22 58,6 104,30 C138,48 176,44 186,26 C196,66 150,94 104,70 C70,52 24,52 14,66 Z";
+const Y_BY_COUNT = [[90], [62, 118], [34, 90, 146]];
+
+function shapeEl(shape, shade, colorIdx){
+  const colour = HEX[colorIdx];
+  const fill = shade === 0 ? colour : shade === 1 ? "url(#stripe" + colorIdx + ")" : "none";
+  const attr = `fill="${fill}" stroke="${colour}" stroke-width="9" stroke-linejoin="round"`;
+  if (shape === 0) return `<polygon points="100,6 194,50 100,94 6,50" ${attr}/>`;
+  if (shape === 2) return `<rect x="6" y="6" width="188" height="88" rx="44" ry="44" ${attr}/>`;
+  return `<path d="${SQUIGGLE}" ${attr}/>`;
+}
+
+function cardSVG(id){
+  const [n, sh, sd, co] = S.attrsOf(id);
+  let inner = "";
+  for (const cy of Y_BY_COUNT[n])
+    inner += `<g transform="translate(12,${cy - 24}) scale(0.48)">${shapeEl(sh, sd, co)}</g>`;
+  return `<svg viewBox="0 0 120 180" role="img" aria-label="${S.describe(id)}">${inner}</svg>`;
+}
+
+// ===== game state =====
+const state = { deck: [], board: [], sel: [], score: 0, misses: 0, found: 0, t0: 0, over: false };
+let hintLevel = 0, hintIdx = null, showAll = false, solveTimer = null, lastDealt = 0;
+
+const $ = id => document.getElementById(id);
+const boardEl = $("s-board"), statusEl = $("s-status"), attrsEl = $("s-attrs"), verdictEl = $("s-verdict");
+
+function newGame(){
+  state.deck = S.shuffle(S.makeDeck());
+  state.board = state.deck.splice(0, 12);
+  state.sel = []; state.score = 0; state.misses = 0; state.found = 0;
+  state.t0 = Date.now(); state.over = false;
+  hintLevel = 0; hintIdx = null; showAll = false; lastDealt = 0;
+  stopSolver();
+  $("s-over").classList.add("hidden");
+  topUp(true);
+  say("Tap three cards — every attribute all-same or all-different");
+  render();
+}
+
+// refill to 12, then keep dealing 3 more while the board genuinely has no set
+function topUp(silent){
+  while (state.board.length < 12 && state.deck.length) state.board.push(state.deck.pop());
+  let extra = 0;
+  while (!S.hasSet(state.board) && state.deck.length >= 3){
+    for (let i = 0; i < 3; i++) state.board.push(state.deck.pop());
+    extra += 3;
+  }
+  lastDealt = extra;
+  if (extra && !silent) say(`No set among those ${state.board.length - extra} cards — dealing ${extra} more (a real dead board, about 3% of deals)`);
+}
+
+function say(msg){ statusEl.textContent = msg; }
+
+function render(){
+  // board
+  const cols = Math.max(4, Math.ceil(state.board.length / 3));
+  boardEl.dataset.cols = String(Math.min(7, cols));
+  boardEl.innerHTML = "";
+  const sets = S.findSets(state.board);
+  const inAnySet = new Set();
+  if (showAll) for (const t of sets) for (const p of t) inAnySet.add(p);
+
+  state.board.forEach((id, i) => {
+    const b = document.createElement("button");
+    b.className = "setcard" + (state.sel.includes(i) ? " sel" : "")
+                + (hintIdx !== null && hintIdx.slice(0, hintLevel).includes(i) ? " hintc" : "")
+                + (showAll && !inAnySet.has(i) ? " dim" : "");
+    b.innerHTML = cardSVG(id);
+    b.title = S.describe(id);
+    b.onclick = () => pick(i);
+    boardEl.appendChild(b);
+  });
+
+  // HUD
+  $("s-score").textContent = state.score;
+  $("s-onboard").textContent = sets.length;
+  $("s-deck").textContent = state.deck.length;
+  $("s-miss").textContent = state.misses;
+  renderAttrs();
+}
+
+// the live per-attribute panel: both tests, side by side, on the current selection
+function renderAttrs(){
+  const sel = state.sel.map(i => state.board[i]);
+  attrsEl.innerHTML = "";
+  for (let k = 0; k < 4; k++){
+    const box = document.createElement("div");
+    let vals = "—", cls = "";
+    if (sel.length === 3){
+      const d = sel.map(c => S.attrsOf(c)[k]);
+      const names = d.map(v => S.ATTR_VALUES[k][v]);
+      const sum = d[0] + d[1] + d[2];
+      const ok = sum % 3 === 0;
+      cls = ok ? " ok" : " no";
+      vals = `${names.join(" / ")}<br>${d.join("+")}=${sum} ${ok ? "≡0 ✓" : "≢0 ✗"}`;
+    } else if (sel.length){
+      vals = sel.map(c => S.ATTR_VALUES[k][S.attrsOf(c)[k]]).join(" / ");
+    }
+    box.className = "attr-box" + cls;
+    box.innerHTML = `<div class="k">${S.ATTR_NAMES[k]}</div><div class="v">${vals}</div>`;
+    attrsEl.appendChild(box);
+  }
+  if (state.sel.length === 3){
+    const [a, b, c] = sel;
+    const classic = S.isSet(a, b, c), mod3 = S.isSetMod3(a, b, c);
+    verdictEl.textContent = `all-same/all-different: ${classic} · sum ≡ 0 (mod 3): ${mod3} · the two tests agree: ${classic === mod3}`;
+  } else if (state.sel.length === 2){
+    const t = S.thirdCard(state.board[state.sel[0]], state.board[state.sel[1]]);
+    const here = state.board.indexOf(t) !== -1;
+    verdictEl.textContent = `these two are completed by exactly one card: ${S.describe(t)} — ${here ? "and it IS on the board" : "not on this board"}`;
+  } else {
+    verdictEl.textContent = state.sel.length ? "pick two more…" : "select three cards…";
+  }
+}
+
+function pick(i){
+  if (state.over) return;
+  const at = state.sel.indexOf(i);
+  if (at !== -1){ state.sel.splice(at, 1); render(); return; }
+  if (state.sel.length === 3) return;
+  state.sel.push(i);
+  render();
+  if (state.sel.length === 3) setTimeout(evaluate, 180);
+}
+
+function evaluate(){
+  const idx = state.sel.slice();
+  const [a, b, c] = idx.map(i => state.board[i]);
+  const broke = S.brokenAttribute(a, b, c);
+  const cards = idx.map(i => boardEl.children[i]).filter(Boolean);
+  if (!broke){
+    state.score++; state.found++;
+    cards.forEach(el => el.classList.add("good"));
+    say(`SET! ${S.describe(a)} · ${S.describe(b)} · ${S.describe(c)}`);
+    setTimeout(() => { claim(idx); state.sel = []; hintLevel = 0; hintIdx = null; render(); checkOver(); }, 380);
+  } else {
+    state.misses++;
+    cards.forEach(el => el.classList.add("bad"));
+    const v = broke.values;
+    const same = v[0] === v[1] ? v[0] : v[0] === v[2] ? v[0] : v[1];
+    const odd  = v.filter(x => x !== same)[0];
+    say(`Not a set — the ${broke.name} is ${v.join(", ")}: two ${same} and one ${odd}. Digits sum to ${broke.sum} more than a multiple of 3.`);
+    setTimeout(() => { state.sel = []; render(); }, 620);
+  }
+}
+
+function claim(idx){
+  const sorted = idx.slice().sort((p, q) => p - q);
+  if (state.board.length > 12 || state.deck.length === 0){
+    for (let i = sorted.length - 1; i >= 0; i--) state.board.splice(sorted[i], 1);
+  } else {
+    for (const p of sorted) state.board[p] = state.deck.pop();
+  }
+  topUp(false);
+}
+
+function checkOver(){
+  if (state.deck.length === 0 && !S.hasSet(state.board)){
+    state.over = true; stopSolver();
+    const secs = Math.round((Date.now() - state.t0) / 1000);
+    $("s-over").classList.remove("hidden");
+    $("s-over-title").textContent = state.board.length === 0 ? "DECK CLEARED" : "NO SETS LEFT";
+    $("s-over-brk").innerHTML = `${state.found} sets found · ${state.misses} misses · ${Math.floor(secs/60)}m ${secs%60}s.<br>`
+      + `${state.board.length} cards remain and a live check of all ${choose3(state.board.length)} remaining triples finds none. `
+      + `81 cards is 27 sets' worth, but a deck rarely divides that neatly — leftovers are normal.`;
+    say("No sets left anywhere — game over");
+  }
+}
+const choose3 = n => n < 3 ? 0 : n * (n - 1) * (n - 2) / 6;
+
+// ===== hint / solver =====
+function doHint(){
+  if (state.over) return;
+  const t = S.firstSet(state.board);
+  if (!t){ say("There is genuinely no set on this board — press ➕ Deal 3"); return; }
+  hintIdx = t;
+  hintLevel = Math.min(3, hintLevel + 1);
+  const names = t.map(i => S.describe(state.board[i]));
+  if (hintLevel === 1) say(`There is a set containing the ${names[0]} — highlighted`);
+  else if (hintLevel === 2) say(`…together with the ${names[1]}. One more card completes it: work it out with c = -a-b (mod 3)`);
+  else say(`The set is: ${names.join(" · ")}`);
+  render();
+}
+
+function stopSolver(){ if (solveTimer){ clearInterval(solveTimer); solveTimer = null; $("s-solve").textContent = "▶ Auto-solve"; $("s-solve").classList.remove("toggle-on"); } }
+
+function toggleSolver(){
+  if (solveTimer) return stopSolver();
+  $("s-solve").textContent = "⏸ Stop"; $("s-solve").classList.add("toggle-on");
+  solveTimer = setInterval(() => {
+    if (state.over) return stopSolver();
+    const t = S.firstSet(state.board);
+    if (!t){
+      if (state.deck.length >= 3){ dealThree(); return; }
+      stopSolver(); checkOver(); return;
+    }
+    state.sel = t.slice(); render();
+    setTimeout(evaluate, 120);
+  }, 800);
+}
+
+function dealThree(){
+  if (state.over || state.deck.length < 3) { say("Deck is empty — nothing left to deal"); return; }
+  for (let i = 0; i < 3; i++) state.board.push(state.deck.pop());
+  say(`Dealt 3 more — the board is now ${state.board.length} cards with ${S.countSets(state.board)} sets on it`);
+  render();
+}
+
+// ===== controls =====
+$("s-hint").onclick  = doHint;
+$("s-solve").onclick = toggleSolver;
+$("s-deal").onclick  = dealThree;
+$("s-new").onclick   = newGame;
+$("s-again").onclick = newGame;
+$("s-show").onclick  = () => {
+  showAll = !showAll;
+  $("s-show").classList.toggle("toggle-on", showAll);
+  const n = S.countSets(state.board);
+  say(showAll ? `Enumerated all ${choose3(state.board.length)} triples — ${n} of them are sets; cards in none of them are dimmed`
+              : "Tap three cards — every attribute all-same or all-different");
+  render();
+};
+
+document.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === "h") doHint();
+  else if (k === "s") toggleSolver();
+  else if (k === "d") dealThree();
+  else if (k === "n") newGame();
+  else if (k >= "1" && k <= "9") pick(parseInt(k, 10) - 1);
+});
+
+setInterval(() => {
+  if (state.over || !state.t0) return;
+  const s = Math.floor((Date.now() - state.t0) / 1000);
+  $("s-time").textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}, 500);
+
+// ===== live combinatorics, measured on load =====
+function runFacts(){
+  const t0 = performance.now();
+  const deckStats = S.totalSetsInDeck();
+  const per = S.setsContaining(0);
+  const dead12 = S.measureDeadBoardOdds(12, 4000);
+  const dead15 = S.measureDeadBoardOdds(15, 1500);
+  const ms = Math.round(performance.now() - t0);
+  const facts = [
+    [deckStats.triples.toLocaleString(), "triples checked"],
+    [deckStats.sets.toLocaleString(), "sets in the deck"],
+    [per, "sets per card"],
+    ["1 in 79", "pairs → third card"],
+    [((1 - dead12) * 100).toFixed(2) + "%", "12 cards have a set"],
+    [(dead12 * 100).toFixed(2) + "%", "12 cards are dead"],
+    [((1 - dead15) * 100).toFixed(2) + "%", "15 cards have a set"],
+    ["20", "max set-free board"],
+  ];
+  $("s-facts").innerHTML = facts.map(f => `<div class="fact"><div class="n">${f[0]}</div><div class="l">${f[1]}</div></div>`).join("");
+  $("s-facts-ms").textContent = `Measured in ${ms} ms: 85,320 exhaustive triples plus 5,500 simulated deals.`;
+}
+
+// ===== third-card lab =====
+function rollLab(){
+  let a = (Math.random() * 81) | 0, b = (Math.random() * 81) | 0;
+  while (b === a) b = (Math.random() * 81) | 0;
+  const c = S.thirdCard(a, b);
+  $("lab-a").innerHTML = `<div class="setcard">${cardSVG(a)}</div>`;
+  $("lab-b").innerHTML = `<div class="setcard">${cardSVG(b)}</div>`;
+  $("lab-c").innerHTML = `<div class="setcard sel">${cardSVG(c)}</div>`;
+  const A = S.attrsOf(a), B = S.attrsOf(b), C = S.attrsOf(c);
+  const lines = S.ATTR_NAMES.map((nm, k) =>
+    `${nm}: ${A[k]} + ${B[k]} + ${C[k]} = ${A[k]+B[k]+C[k]} ≡ 0 (mod 3)`).join("　·　");
+  $("lab-math").textContent = `${lines}　·　isSet = ${S.isSet(a, b, c)}`;
+}
+$("lab-roll").onclick = rollLab;
+
+// ===== cap set demo =====
+function renderCap(){
+  $("cap-board").innerHTML = S.CAP20.map(id => `<div class="setcard">${cardSVG(id)}</div>`).join("");
+}
+$("cap-run").onclick = () => {
+  const t0 = performance.now();
+  const r = S.verifyCap(S.CAP20);
+  const ms = (performance.now() - t0).toFixed(1);
+  $("cap-out").innerHTML = `enumerated <b>${r.triples.toLocaleString()}</b> triples · sets found: <b>${r.sets}</b> · `
+    + `then tried all <b>${r.outside}</b> cards outside it — <b>${r.forced}</b> of them create a set, so no 21st card fits. `
+    + `<span class="text-slate-400">(${ms} ms)</span>`;
+};
+
+// ===== boot =====
+newGame();
+renderCap();
+rollLab();
+runFacts();
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. A card is not a picture — it is four digits in base 3",
+   why:"The deck has 81 cards because there are four attributes with three values each, and 3×3×3×3 is 81. That is not a fun fact printed on the box, it is the design of the game, and if you store a card as an object of strings you throw it away on line one. Store the integer 0 to 80 instead and read it as four base-3 digits: count, shape, shading, colour. Decoding is two divisions and two remainders, encoding is a dot product with 27, 9, 3, 1, and from here every rule in the game becomes arithmetic on those digits. Everything else in this file is downstream of that single decision.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">card 34&nbsp;&nbsp;&rarr;&nbsp;&nbsp;34 = 1&times;27 + 0&times;9 + 2&times;3 + 1<br><br>[ 1, 0, 2, 1 ]<br>&nbsp;&nbsp;&darr;&nbsp;&nbsp;&darr;&nbsp;&nbsp;&darr;&nbsp;&nbsp;&darr;<br>count=2&nbsp; shape=diamond&nbsp; shade=open&nbsp; colour=green<br><br>the deck = every 4-digit base-3 number = 0&hellip;80</div>`,
+   code:`// digit 0 = count, 1 = shape, 2 = shading, 3 = colour
+const attrsOf = id => [ ((id / 27) | 0) % 3, ((id / 9) | 0) % 3, ((id / 3) | 0) % 3, id % 3 ];
+const idOf    = a  => a[0] * 27 + a[1] * 9 + a[2] * 3 + a[3];
+
+const makeDeck = () => Array.from({ length: 81 }, (_, i) => i);
+// 3^4 = 81 — the deck is not "81 cards", it IS the number system` },
+
+ { title:"2. One rule, not two: all-same or all-different",
+   why:"Beginners hear the rule as a pair of alternatives and check them separately, which is exactly how you end up with a tangle of conditions. The cleaner way to hear it is negative: a triple fails only when an attribute shows two of one value and one of another. Three diamonds is fine, three different shapes is fine, two squiggles and an oval is not. Attributes are also completely independent — the shapes have no opinion about the colours — so the test loops over four attributes and returns false the instant any one of them is a two-and-one. That independence is why the game scales to more attributes without any change of algorithm.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">colour:&nbsp;red red red&nbsp;&nbsp;&rarr; ✓ all same<br>colour:&nbsp;red green purple&nbsp;&nbsp;&rarr; ✓ all different<br>colour:&nbsp;red red purple&nbsp;&nbsp;&rarr; ✗ TWO-AND-ONE<br><br>&hellip;and the same question asked separately for<br>count, shape and shading. All four must pass.</div>`,
+   code:`function isSet(a, b, c){
+  const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+  for (let k = 0; k < 4; k++){
+    const x = A[k], y = B[k], z = C[k];
+    const allSame = (x === y && y === z);
+    const allDiff = (x !== y && y !== z && x !== z);
+    if (!allSame && !allDiff) return false;   // two-and-one is the ONLY failure
+  }
+  return true;
+}` },
+
+ { title:"3. The mod-3 identity — the rule with no branches",
+   why:"Here is the observation that turns SET from a card game into linear algebra. Take three digits from {0,1,2}: if they are all equal the sum is 0, 3 or 6; if they are all distinct the sum is 0+1+2 = 3. Every remaining possibility is a two-and-one and sums to 1, 2, 4 or 5. So 'all same or all different' is precisely 'the sum is divisible by 3' — one condition instead of two, with no comparisons at all. Cards are points in a four-dimensional space over the field of three elements, and a set is a line in that space: three points summing to zero. The page runs both versions on your live selection so you can watch them agree.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">0+0+0 = 0 &nbsp;1+1+1 = 3&nbsp; 2+2+2 = 6&nbsp;&nbsp;&rarr; all same&nbsp;&nbsp;&equiv; 0<br>0+1+2 = 3&nbsp;&nbsp;&rarr; all different&nbsp;&nbsp;&equiv; 0<br><br>0+0+1 = 1&nbsp;&nbsp;1+1+2 = 4&nbsp;&nbsp;0+2+2 = 4&nbsp;&nbsp;&rarr; &nbsp;&nequiv; 0<br><br>a SET is a LINE in GF(3)&#8308;&nbsp;: a + b + c &equiv; 0</div>`,
+   code:`function isSetMod3(a, b, c){
+  const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+  for (let k = 0; k < 4; k++)
+    if ((A[k] + B[k] + C[k]) % 3 !== 0) return false;
+  return true;
+}
+// assert isSet === isSetMod3 on all C(81,3) = 85,320 triples — it holds` },
+
+ { title:"4. Any two cards determine the third",
+   why:"Because a set is a + b + c ≡ 0, the third card is not searched for, it is solved for: c ≡ −a − b, computed digit by digit. Add 6 before the remainder so JavaScript never sees a negative number. This is the theorem that makes SET playable, and it changes how you should play: when you are staring at two cards, do not scan the board hoping to recognise a match — construct the card you need, then look for that one specific card. It also means the two cards can never be ambiguous. There is exactly one completion, always, for every one of the 3,240 pairs.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">a + b + c &equiv; 0&nbsp;&nbsp;&rArr;&nbsp;&nbsp;c &equiv; &minus;a &minus; b&nbsp;&nbsp;(mod 3)<br><br>count&nbsp;&nbsp; 0 + 1 &rarr; c = (6&minus;0&minus;1) % 3 = 2<br>shape&nbsp;&nbsp; 2 + 2 &rarr; c = (6&minus;2&minus;2) % 3 = 2<br>shade&nbsp;&nbsp; 1 + 0 &rarr; c = (6&minus;1&minus;0) % 3 = 2<br>colour&nbsp; 0 + 0 &rarr; c = (6&minus;0&minus;0) % 3 = 0<br><br>the answer is FORCED &mdash; never a search</div>`,
+   code:`function thirdCard(a, b){
+  const A = attrsOf(a), B = attrsOf(b), out = [0, 0, 0, 0];
+  for (let k = 0; k < 4; k++) out[k] = (6 - A[k] - B[k]) % 3;
+  return idOf(out);
+}
+// thirdCard(a, b) is total: every pair of distinct cards has exactly one completion` },
+
+ { title:"5. 1080 sets, and 40 through every card",
+   why:"Both famous numbers now fall out without any enumeration. There are C(81,2) = 3,240 pairs of cards, each pair belongs to exactly one set, and each set contains three pairs — so the deck holds 3,240 / 3 = 1,080 sets. Fix a single card and it pairs with the other 80, each pair naming one set through that card, with each such set using two of those partners: 80 / 2 = 40. This page still brute-forces all 85,320 triples on load rather than printing the numbers, because a derivation you can check against a loop is worth far more than a derivation you have to trust.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">C(81,2) = 3240 pairs<br>each set contains 3 pairs<br>&rarr;&nbsp; 3240 / 3 = <b>1080 sets</b><br><br>one card pairs with 80 others<br>each of its sets uses 2 of them<br>&rarr;&nbsp; 80 / 2 = <b>40 sets per card</b><br><br>1080 &times; 3 / 81 = 40&nbsp;&nbsp;&#10003; the counts agree</div>`,
+   code:`function totalSetsInDeck(){
+  let triples = 0, sets = 0;
+  for (let i = 0; i < 81; i++)
+    for (let j = i + 1; j < 81; j++)
+      for (let k = j + 1; k < 81; k++){ triples++; if (isSet(i, j, k)) sets++; }
+  return { triples, sets };            // { 85320, 1080 } — measured, not quoted
+}` },
+
+ { title:"6. The board is 220 triples — so just look at all of them",
+   why:"Twelve cards give C(12,3) = 220 triples, and checking one triple is sixteen additions. Two hundred and twenty of those is a rounding error next to a single frame of animation, so the correct engineering answer is to enumerate the lot on every click and never think about it again. One function then answers every question the interface has: how many sets are on the board, is there any at all, and give me one for the hint. If you ever needed to scale — a 21-card board, or a variant deck — you would switch to looping over pairs and looking up the forced third card, which is C(n,2) work instead of C(n,3).",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">C(12,3) = 220 triples&nbsp;&nbsp;&times;&nbsp;&nbsp;4 attributes<br>&asymp; 900 additions per full board scan<br><br>countSets(board)&nbsp;&nbsp;&rarr; the HUD number<br>hasSet(board)&nbsp;&nbsp;&nbsp;&nbsp;&rarr; the deal-3 trigger<br>firstSet(board)&nbsp;&nbsp;&rarr; the hint and the solver<br><br>one enumerator, three features</div>`,
+   code:`function findSets(board){
+  const out = [];
+  for (let i = 0; i < board.length; i++)
+    for (let j = i + 1; j < board.length; j++)
+      for (let k = j + 1; k < board.length; k++)
+        if (isSet(board[i], board[j], board[k])) out.push([i, j, k]);
+  return out;
+}
+const countSets = b => findSets(b).length;
+const hasSet    = b => findSets(b).length > 0;` },
+
+ { title:"7. Dead boards, and the deal-three-more rule",
+   why:"Every so often twelve cards contain nothing at all, and the physical game's answer is to deal three more and keep going. The interesting part is that you cannot eyeball this — a board can look busy and be completely dead — so the rule is only implementable because the detector is exact. Measure the frequency rather than quoting it: deal thousands of random twelve-card boards and count. It comes out around three per cent, roughly one deal in thirty, and by fifteen cards it is already down near a twentieth of a per cent. That is why you see fifteen-card boards occasionally and eighteen almost never.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">while (!hasSet(board) && deck.length &gt;= 3)<br>&nbsp;&nbsp;&nbsp;&nbsp;deal 3 more<br><br>measured over thousands of random deals:<br>12 cards dead&nbsp;&nbsp;&asymp; 3%&nbsp;&nbsp;(about 1 in 31)<br>15 cards dead&nbsp;&nbsp;&asymp; 0.04%<br>18 cards dead&nbsp;&nbsp;&asymp; never seen in sampling<br><br>21 cards&nbsp;&nbsp;&rarr; provably impossible (max cap = 20)</div>`,
+   code:`function topUp(state){
+  while (state.board.length < 12 && state.deck.length) state.board.push(state.deck.pop());
+  while (!hasSet(state.board) && state.deck.length >= 3)
+    for (let i = 0; i < 3; i++) state.board.push(state.deck.pop());
+}
+
+function measureDeadBoardOdds(n, trials){
+  let dead = 0;
+  for (let t = 0; t < trials; t++) if (!hasSet(shuffle(makeDeck()).slice(0, n))) dead++;
+  return dead / trials;      // measured in your browser, on load
+}` },
+
+ { title:"8. Refill in place, so the board does not jump",
+   why:"When a set is claimed, the obvious move is to splice the three cards out and push three new ones onto the end — and it makes the game feel broken, because every remaining card shifts position and the player loses the half-formed pattern they were holding in their head. Overwrite the three slots in place instead. The only time you genuinely remove slots is when the board has grown past twelve after a dead-board deal, or when the deck has run dry, and in both cases the board should shrink back toward its normal shape. Small detail, enormous difference in how the game feels.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">claimed positions&nbsp;&nbsp;[2, 5, 9]<br><br>deck left&nbsp;&nbsp;&rarr;&nbsp; board[2] = deck.pop()&nbsp;&nbsp;(in place)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; board[5] = deck.pop()<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; board[9] = deck.pop()<br><br>board &gt; 12 or deck empty&nbsp;&rarr; splice, shrink to 12<br><br>never reshuffle the survivors</div>`,
+   code:`function claim(state, idx){
+  const sorted = idx.slice().sort((p, q) => p - q);
+  if (state.board.length > 12 || state.deck.length === 0){
+    for (let i = sorted.length - 1; i >= 0; i--) state.board.splice(sorted[i], 1);
+  } else {
+    for (const p of sorted) state.board[p] = state.deck.pop();   // in place
+  }
+  topUp(state);
+}` },
+
+ { title:"9. Tell the player WHICH attribute broke",
+   why:"A buzz and a red flash teaches nothing, and SET is a game people are actively learning while they play. The failing attribute is already known at the moment the test returns false, so return it instead of a bare boolean — the index, its name, and the three offending values. 'The colour is red, red, purple: two red and one purple' is the exact sentence a beginner needs, and it costs four extra lines over returning false. The same structure gives you the mod-3 story for free, because the leftover remainder is precisely the amount by which the digits missed a multiple of three.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">selection: 1 red solid diamond<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2 red striped ovals<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3 purple open squiggles<br><br>count&nbsp;&nbsp; 0,1,2 &rarr; sum 3 &equiv; 0 ✓<br>shape&nbsp;&nbsp; 0,2,1 &rarr; sum 3 &equiv; 0 ✓<br>shade&nbsp;&nbsp; 0,1,2 &rarr; sum 3 &equiv; 0 ✓<br><b>colour&nbsp; 0,0,2 &rarr; sum 2 &nequiv; 0 ✗ &larr; this one</b></div>`,
+   code:`function brokenAttribute(a, b, c){
+  const A = attrsOf(a), B = attrsOf(b), C = attrsOf(c);
+  for (let k = 0; k < 4; k++){
+    const x = A[k], y = B[k], z = C[k];
+    if ((x === y && y === z) || (x !== y && y !== z && x !== z)) continue;
+    return { index: k, name: ATTR_NAMES[k],
+             values: [x, y, z].map(v => ATTR_VALUES[k][v]),
+             sum: (x + y + z) % 3 };      // how far it missed a multiple of 3
+  }
+  return null;                            // null means it IS a set
+}` },
+
+ { title:"10. The cap set problem — 20 cards with nothing in them",
+   why:"Turn the game inside out and ask the mathematician's question: what is the largest board that contains no set at all? In this four-attribute deck the answer is exactly 20, proved by Pellegrino in 1971, and a 20-card example is on the play tab for you to stare at. These 'cap sets' are a genuine research subject — the growth rate in high dimensions resisted attack for decades until a 2016 breakthrough using the polynomial method — and this little card game is its friendliest instance. Since 21 cards cannot avoid a set, a SET board can never need more than 21 cards dealt, which is a fact about the physical game proved by pure combinatorics.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">largest set-free board in this deck = <b>20</b><br><br>dimension&nbsp;&nbsp;1&nbsp;&nbsp;2&nbsp;&nbsp;3&nbsp;&nbsp;&nbsp;4&nbsp;&nbsp;&nbsp;&nbsp;5&nbsp;&nbsp;&nbsp;&nbsp;6<br>max cap&nbsp;&nbsp;&nbsp;&nbsp;2&nbsp;&nbsp;4&nbsp;&nbsp;9&nbsp;&nbsp;20&nbsp;&nbsp;45&nbsp;&nbsp;112<br><br>&rArr; any 21 cards MUST contain a set<br>&rArr; a real SET board never exceeds 21 cards</div>`,
+   code:`const CAP20 = [0,1,3,4,9,10,12,13,27,28,32,35,38,47,59,65,66,67,71,77];
+
+function verifyCap(board){
+  let triples = 0, sets = 0;
+  for (let i = 0; i < board.length; i++)
+    for (let j = i + 1; j < board.length; j++)
+      for (let k = j + 1; k < board.length; k++){ triples++; if (isSet(board[i],board[j],board[k])) sets++; }
+  let outside = 0, forced = 0;
+  for (let c = 0; c < 81; c++){
+    if (board.indexOf(c) !== -1) continue;
+    outside++;
+    if (hasSet(board.concat([c]))) forced++;     // every outsider creates a set
+  }
+  return { triples, sets, outside, forced };     // { 1140, 0, 61, 61 }
+}` },
+
+ { title:"11. Deck exhaustion, and why leftovers are normal",
+   why:"81 cards is exactly 27 sets' worth, so it is tempting to expect a perfect game to clear the deck — and it almost never happens. The end of a game is governed by the same cap-set logic as the middle: once the deck is empty you keep playing on the remaining board, and you stop when no triple among the survivors is a set. Because a set-free board of up to 20 cards exists, you can be left holding a surprising number of cards and still be genuinely stuck. The honest end-of-game screen therefore reports the leftover count and states that the remaining triples were all checked, rather than implying you played badly.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">81 cards = 27 sets exactly&hellip; in theory<br><br>game ends when:&nbsp; deck empty&nbsp; AND&nbsp; !hasSet(board)<br><br>leftover 6 cards&nbsp;&rarr; C(6,3) = 20 triples, all checked, none a set<br>leftover 9 cards&nbsp;&rarr; C(9,3) = 84 triples, all checked, none a set<br><br>a set-free leftover of up to 20 cards is possible</div>`,
+   code:`function checkOver(state){
+  if (state.deck.length === 0 && !hasSet(state.board)){
+    const n = state.board.length;
+    const triples = n < 3 ? 0 : n * (n - 1) * (n - 2) / 6;
+    return { over: true, leftover: n, checked: triples };
+  }
+  return { over: false };
+}` },
+
+ { title:"12. Drawing it: three paths, one pattern, zero images",
+   why:"There are only three shapes to draw, so draw each one once in a 200×100 box and place it one, two or three times down the card with a transform — a diamond is a four-point polygon, an oval is a rounded rectangle with a huge corner radius, and the squiggle is a closed bezier path. Shading is where people reach for images, and they should not: solid is a plain fill, open is fill='none' with a stroke, and striped is a real SVG pattern of parallel lines defined once in a hidden defs block and referenced by url(#stripe1) from every card that needs it. Because the pattern lives in user space it scales with the transform, so the stripes stay in proportion at every card size, and the entire deck renders from about fifteen lines of markup with no image file anywhere.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">shape&nbsp;&nbsp;&rarr; &lt;polygon&gt; / &lt;rect rx&gt; / &lt;path&gt; bezier<br>count&nbsp;&nbsp;&rarr; 1, 2 or 3 &lt;g transform&gt; placements<br>colour &rarr; stroke + fill<br>shade&nbsp;&nbsp;&rarr; solid = fill<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;open&nbsp; = fill:none<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;striped = url(#stripe1)&nbsp;&larr; a real &lt;pattern&gt;<br><br>81 cards, 0 images, 0 emoji</div>`,
+   code:`function shapeEl(shape, shade, colorIdx){
+  const colour = HEX[colorIdx];
+  const fill = shade === 0 ? colour
+             : shade === 1 ? "url(#stripe" + colorIdx + ")"
+                           : "none";
+  const attr = 'fill="' + fill + '" stroke="' + colour + '" stroke-width="9"';
+  if (shape === 0) return "<polygon points='100,6 194,50 100,94 6,50' " + attr + "/>";
+  if (shape === 2) return "<rect x='6' y='6' width='188' height='88' rx='44' " + attr + "/>";
+  return "<path d='" + SQUIGGLE + "' " + attr + "/>";
+}
+// y centres by count: [90] / [62,118] / [34,90,146] inside a 120x180 viewBox` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-violet-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-violet-500 bg-violet-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-violet-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>

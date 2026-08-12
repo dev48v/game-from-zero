@@ -62,6 +62,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 58 — Pipe Mania](https://dev48v.infy.uk/game/day58-pipe-mania.html) — `day58-pipe-mania.html`
 - [GameFromZero · Day 59 — Dots and Boxes](https://dev48v.infy.uk/game/day59-dots-and-boxes.html) — `day59-dots-and-boxes.html`
 - [GameFromZero · Day 60 — Rush Hour](https://dev48v.infy.uk/game/day60-rush-hour.html) — `day60-rush-hour.html`
+- [GameFromZero · Day 61 — SET (Card Game)](https://dev48v.infy.uk/game/day61-set-card-game.html) — `day61-set-card-game.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
