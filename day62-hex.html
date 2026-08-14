@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 62 — Hex</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .copy-btn:hover { background:#1e293b; }
+  .stat { font-variant-numeric:tabular-nums; }
+  .keycap { display:inline-block; min-width:22px; text-align:center; padding:2px 7px; border-radius:6px;
+            background:#e2e8f0; border:1px solid #cbd5e1; border-bottom-width:3px; font-size:12px;
+            font-weight:700; color:#334155; font-family:ui-monospace,Menlo,monospace; }
+  .hud-pill { background:#0f172a; color:#fff; }
+
+  /* game console */
+  .console {
+    position:relative;
+    background: radial-gradient(ellipse at 50% -10%, #1e1140 0%, #120a26 60%, #05030a 100%);
+    border-radius:22px;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.6), 0 20px 45px rgba(2,6,23,.45), 0 0 0 6px rgba(139,92,246,.12);
+    border: 3px solid #6d28d9;
+  }
+  .console-label { color:#ddd6fe; font-size:12px; letter-spacing:.06em; font-weight:800; }
+  .btn { transition:transform .08s, box-shadow .15s; }
+  .btn:active { transform:translateY(1px); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .toggle-on { background:#7c3aed !important; color:#fff !important; }
+  .hidden { display:none; }
+
+  /* ===== hex board ===== */
+  #hx-board { width:100%; }
+  #hx-board svg { display:block; width:100%; height:auto; }
+  .hexcell { cursor:pointer; transition: fill .12s, stroke .12s; }
+  .hexcell:hover { stroke:#c4b5fd; stroke-width:3.2; }
+  .hexcell.taken { cursor:default; }
+  .hexcell.taken:hover { stroke:#0b0618; stroke-width:1.4; }
+  .hexlast { fill:none; stroke:#ffffff; stroke-width:3; pointer-events:none; }
+  .hexcarrier { fill:none; stroke:#facc15; stroke-width:2.6; stroke-dasharray:5 4; pointer-events:none; }
+  .hexlink { stroke:#facc15; stroke-width:2.6; stroke-dasharray:5 4; pointer-events:none; }
+  .hexwin { fill:none; stroke:#fde047; stroke-width:3.4; pointer-events:none; }
+  .heatnum { font-size:9px; font-family:ui-monospace,Menlo,monospace; font-weight:700; pointer-events:none; }
+
+  .factrow { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+  .fact { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:8px 12px; text-align:center; min-width:118px; }
+  .fact .n { font-size:20px; font-weight:900; color:#6d28d9; font-variant-numeric:tabular-nums; }
+  .fact .l { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#64748b; font-weight:700; }
+
+  .ufgrid { display:inline-block; font-family:ui-monospace,Menlo,monospace; font-size:10px; line-height:1.35; white-space:pre; }
+  .ufcell { display:inline-block; width:26px; text-align:center; }
+  .ufR { color:#fca5a5; }
+  .ufB { color:#93c5fd; }
+  .ufE { color:#4c3a7a; }
+
+  .ctlbox { background:#1c1330; border:2px solid #3b2a63; border-radius:10px; padding:8px 10px; }
+  .ctlbox .k { font-size:9px; letter-spacing:.06em; text-transform:uppercase; color:#a78bfa; font-weight:800; }
+  input[type=range] { accent-color:#a78bfa; width:100%; }
+  select { background:#0f172a; color:#e9d5ff; border:1px solid #4c3a7a; border-radius:8px; padding:4px 6px; font-size:12px; font-weight:700; }
+
+  .scrollx { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
+  /* the sticky title is a paragraph — clamp it on phones so it cannot eat the viewport */
+  @media (max-width:640px){
+    header h1 { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  }
+  /* mobile guard: a sticky header plus a long h1 eats a phone viewport, and the console
+     paddings/radii are tuned for desktop — stand the header down below the lg breakpoint */
+  @media (max-width:1023px){
+    header.sticky { position:static; }
+    header h1 { font-size:15px; line-height:1.35; }
+    .console { border-radius:14px; }
+    .fact { min-width:96px; }
+    .ufcell { width:22px; }
+  }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+  <a href="../gamefromzero.php" title="back" class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500 hover:text-violet-600" style="text-decoration:none;">&larr; back</a>
+  <div class="max-w-7xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="min-w-0 flex-1 break-words">
+      <div class="text-xs text-violet-600 font-bold uppercase tracking-wider">GameFromZero · Day 62</div>
+      <h1 class="text-xl font-bold">&#11041; HEX &mdash; A Genuinely-Live Connection Game on a Rhombus of Hexagons Whose Entire Rulebook Is One Sentence &mdash; Red Joins Top to Bottom, Blue Joins Left to Right, Stones Never Move and Never Die &mdash; and Whose Entire Engine Is Therefore a <em>Disjoint-Set Forest With Four Virtual Border Nodes</em>: a Move Is at Most Seven <code>union</code> Calls, and &ldquo;Has Anybody Won?&rdquo; Collapses to <code>find(RED_TOP) === find(RED_BOTTOM)</code>, One Integer Comparison, With No Path Search Anywhere on the Page; Hex Is Also the One Classic Board Game That <strong>Cannot Be Drawn</strong> &mdash; a Filled Board Always Holds Exactly One Winner &mdash; and Rather Than Quote That Theorem the Page Enumerates All <code>2&#8313;&nbsp;=&nbsp;512</code> Complete Colourings of a 3&times;3 on Load and All <code>2&sup1;&#8310;&nbsp;=&nbsp;65,536</code> of a 4&times;4 Behind a Button, Asserting Red-Wins Xor Blue-Wins Every Single Time; That Theorem Is the Licence for the AI, Because a Random Fill Always Produces a Winner, So the Monte-Carlo Player Here Needs <em>No Heuristic and No Draw Branch at All</em> and You Can Watch Its Per-Cell Win Rates Converge as a Live Heat Overlay; Then the Honest Part &mdash; the Obvious Claim That Invading a <strong>Bridge</strong> Barely Moves the Evaluation Was <em>Measured Here and Came Out False by About Eighteen Points</em>, Because a Uniform Random Finish Has No Idea What a Bridge Is, So the Page Implements the <strong>Save-Bridge Rollout Policy</strong> Real Hex Engines Use and Races Both on a Four-Bridge Ladder the Blind One Holds About Three Times in Four and the Bridge-Aware One About 999 Times in 1,000 &mdash; Plus <strong>Strategy Stealing</strong>, Which Proves the First Player Wins Without Ever Naming a Move, and the <strong>Pie Rule</strong> That Patches It, Implemented as What It Really Is: a Transpose of the Rhombus Plus a Colour Flip &mdash; Pure Vanilla JavaScript, Real Inline SVG Hexagons, One File, Offline</h1>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look"       class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build"      class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-4">
+        <h2 class="text-2xl font-bold mb-1">Red joins top to bottom. Blue joins left to right. That is the entire rulebook.</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto text-sm"><strong>Tap any empty hexagon.</strong> Stones never move and never get captured, so the only question the program ever has to answer is <em>what is connected to what</em> &mdash; and that is a disjoint-set forest, not a search. Every number below is computed while you play: the component counts come from the union-find roots, the bridges are detected on the live board, and the AI&#39;s heat overlay is real Monte-Carlo win rates from random fills, not a scoring function. <span class="keycap">A</span> AI move, <span class="keycap">U</span> undo, <span class="keycap">N</span> new game, <span class="keycap">H</span> heat overlay, <span class="keycap">B</span> bridges.</p>
+      </div>
+
+      <!-- HUD -->
+      <div class="flex items-center justify-center gap-2 md:gap-3 mb-4 flex-wrap">
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">&#9679; To move</div>
+          <div class="text-2xl font-black stat" id="s-turn">RED</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">&#9635; Stones</div>
+          <div class="text-2xl font-black stat" id="s-moves">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">&#9873; Red groups</div>
+          <div class="text-2xl font-black stat" id="s-redc">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">&#9873; Blue groups</div>
+          <div class="text-2xl font-black stat" id="s-bluec">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">&#8721; Bridges</div>
+          <div class="text-2xl font-black stat" id="s-bridges">0</div>
+        </div>
+        <div class="hud-pill rounded-xl px-4 py-2 text-center">
+          <div class="text-[10px] uppercase tracking-wider text-violet-300 font-bold">&#8734; Rollouts</div>
+          <div class="text-2xl font-black stat" id="s-rolls">0</div>
+        </div>
+      </div>
+
+      <!-- game console -->
+      <div class="console p-3 md:p-5">
+        <div class="mb-3 console-label" id="hx-status">Red to play &mdash; connect the top edge to the bottom edge</div>
+        <div id="hx-board"></div>
+
+        <div class="mt-4 grid grid-cols-2 md:grid-cols-5 gap-2">
+          <div class="ctlbox">
+            <div class="k">Mode</div>
+            <select id="hx-mode" class="mt-1 w-full">
+              <option value="hh">Human vs Human</option>
+              <option value="ha" selected>Human (red) vs AI</option>
+              <option value="ah">AI (red) vs Human</option>
+              <option value="aa">AI vs AI</option>
+            </select>
+          </div>
+          <div class="ctlbox">
+            <div class="k">Board size <span id="hx-size-l" class="text-violet-200">11 &times; 11</span></div>
+            <input id="hx-size" type="range" min="5" max="13" step="2" value="11" class="mt-2" />
+          </div>
+          <div class="ctlbox">
+            <div class="k">Rollouts / cell <span id="hx-roll-l" class="text-violet-200">60</span></div>
+            <input id="hx-roll" type="range" min="10" max="300" step="10" value="60" class="mt-2" />
+          </div>
+          <div class="ctlbox">
+            <div class="k">Rollout policy</div>
+            <select id="hx-policy" class="mt-1 w-full">
+              <option value="uniform" selected>uniform random</option>
+              <option value="bridge">save-bridge</option>
+            </select>
+          </div>
+          <div class="ctlbox">
+            <div class="k">Pie rule (swap)</div>
+            <label class="flex items-center gap-2 mt-1 text-[11px] text-violet-200 font-semibold">
+              <input id="hx-pie" type="checkbox" checked /> allow move 2 to steal move 1
+            </label>
+          </div>
+        </div>
+
+        <div id="hx-over" class="hidden mt-4 bg-violet-950/60 border-2 border-violet-600 rounded-xl p-4 text-center">
+          <h3 class="text-2xl font-black text-violet-200" id="hx-over-title">RED CONNECTS</h3>
+          <div class="text-sm text-violet-300 mt-1" id="hx-over-sub"></div>
+          <button id="hx-again" class="btn bg-violet-600 hover:bg-violet-700 text-white px-6 py-2.5 rounded-lg font-bold mt-3">&#8635; Play again</button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="mt-5 flex items-center justify-center gap-2 flex-wrap">
+        <button id="hx-ai"      class="btn bg-violet-500 hover:bg-violet-600 text-white px-5 py-2.5 rounded-lg font-bold">&#129504; AI move</button>
+        <button id="hx-swap"    class="btn bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg font-bold" disabled>&#8646; Swap (pie rule)</button>
+        <button id="hx-heat"    class="btn bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg font-bold">&#128293; Heat overlay</button>
+        <button id="hx-bridges" class="btn bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg font-bold">&#9711; Show bridges</button>
+        <button id="hx-undo"    class="btn bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-lg font-bold">&#8630; Undo</button>
+        <button id="hx-reset"   class="btn bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold">&#8635; New game</button>
+      </div>
+
+      <!-- union-find live view -->
+      <div class="mt-8 bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 class="font-bold text-lg mb-1">The disjoint-set forest, as it stands right now</h3>
+        <p class="text-xs text-slate-500 mb-4">This is not a picture of the board &mdash; it is <code>find(cell)</code> for every occupied cell, printed as a grid. Two cells share a root exactly when the forest considers them joined, and that is the <em>only</em> connectivity fact the program ever computes. Empty cells show <code>&middot;</code>. Watch for something that looks like a bug and is not: two red groups that are nowhere near each other will share a root the moment they both touch the top edge, because they have both been unioned with <code>RED_TOP</code>. That is the entire point of the virtual nodes, and it is why the win test is free &mdash; but it does mean this grid answers &ldquo;joined to the same border?&rdquo; rather than &ldquo;physically touching?&rdquo;. The <strong>Red groups</strong> and <strong>Blue groups</strong> counters above therefore come from a separate stones-only pass with no virtual nodes, which is the honest answer to the second question. The four numbers underneath are the roots of the border nodes, and the game is over the instant two of them coincide.</p>
+        <div class="scrollx"><div class="ufgrid" id="uf-grid"></div></div>
+        <div class="mt-3 text-[11px] font-mono text-slate-600" id="uf-virtual">&mdash;</div>
+      </div>
+
+      <!-- the theorem -->
+      <div class="mt-4 bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 class="font-bold text-lg mb-1">No draws: proved by exhaustion, in your browser, right now</h3>
+        <p class="text-xs text-slate-500 mb-4">Every other classic board game can end in a draw. Hex cannot: if you fill a Hex board completely, with <em>any</em> colouring at all &mdash; not just legal alternating play, but any of the <code>2<sup>n&sup2;</sup></code> assignments &mdash; then exactly one of the two connections exists. Never zero, never both. Rather than cite the theorem, this page checks it: <strong>512</strong> colourings on 3&times;3 run on page load, and all <strong>65,536</strong> on 4&times;4 run when you press the button. Each one is a fresh union-find, and each one is asserted to have red-wins <em>xor</em> blue-wins.</p>
+        <div class="factrow" id="th-facts"></div>
+        <div class="text-center mt-4 flex gap-2 justify-center flex-wrap">
+          <button id="th-run3" class="btn bg-violet-600 hover:bg-violet-700 text-white px-5 py-2 rounded-lg font-bold text-sm">&#128300; Re-run 3&times;3 (512)</button>
+          <button id="th-run4" class="btn bg-violet-800 hover:bg-violet-900 text-white px-5 py-2 rounded-lg font-bold text-sm">&#128300; Run 4&times;4 (65,536)</button>
+        </div>
+        <div class="mt-3 text-center text-sm font-mono text-slate-600" id="th-out">3&times;3 pending&hellip;</div>
+      </div>
+
+      <!-- bridge lab -->
+      <div class="mt-4 bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 class="font-bold text-lg mb-1">The bridge &mdash; and the measurement that changed this page</h3>
+        <p class="text-xs text-slate-500 mb-3">Two same-coloured stones a hop apart with exactly two empty cells between them are <em>already</em> connected in every way that matters: whichever carrier the opponent takes, you take the other. The obvious thing to claim next is that invading a bridge should barely move a Monte-Carlo evaluation, since nothing was actually cut. <strong>That claim was measured here and it turned out to be false</strong> &mdash; for the plain uniform-random rollout the AI above uses by default. A uniform random finish does not know what a bridge is: it scatters stones, so red keeps the link only when it happens to land on one of the two carriers first, and explicitly resolving the bridge therefore looks like a real gain.</p>
+        <p class="text-xs text-slate-500 mb-4">The fix is the one real Hex programs use, and it is a single pattern: <strong>during the rollout, if the opponent plays a carrier of one of your bridges, answer on the other carrier before doing anything else</strong>. Below, the left board is a fixed 7&times;7 position whose only red gap is one bridge, and the right board is a ladder of four bridges running top to bottom &mdash; a connection red should essentially never lose if it answers every invasion. Press the button and both boards are evaluated under both policies with the same budget. Watch the last column: the blind policy holds the ladder about three times in four, the bridge-aware one very nearly always. <em>Very nearly</em>, not always &mdash; and that gap is honest too, because a single stone can land on the carriers of two different bridges at once and only one of them can be answered. Every number is computed when you click; nothing is stored in the page.</p>
+        <div class="grid md:grid-cols-2 gap-4 items-start">
+          <div><div class="text-[10px] uppercase font-bold text-slate-400 text-center mb-1">one bridge, mid-chain (7&times;7)</div><div class="scrollx"><div id="bl-board" style="min-width:240px;max-width:320px;margin:0 auto"></div></div></div>
+          <div><div class="text-[10px] uppercase font-bold text-slate-400 text-center mb-1">a ladder of four bridges (9&times;9)</div><div class="scrollx"><div id="bl-board2" style="min-width:240px;max-width:320px;margin:0 auto"></div></div></div>
+        </div>
+        <div class="text-center mt-4"><button id="bl-run" class="btn bg-violet-600 hover:bg-violet-700 text-white px-5 py-2 rounded-lg font-bold text-sm">&#127922; Measure both boards under both policies</button></div>
+        <div class="mt-3 scrollx"><div class="text-[11px] font-mono text-slate-600 text-center" id="bl-out">not measured yet</div></div>
+      </div>
+
+      <!-- strategy stealing -->
+      <div class="mt-4 bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 class="font-bold text-lg mb-1">Why the first player wins &mdash; and why nobody can tell you the move</h3>
+        <p class="text-sm text-slate-600 mb-3">Suppose the second player had a winning strategy. The first player could then play any move at all, pretend to be the second player, and follow that strategy &mdash; and if the strategy ever asks for a cell already occupied by that extra stone, play anywhere else and carry on. An extra stone in Hex is <em>never</em> a liability, because stones do nothing but connect. So the first player would win too, and both players cannot win the same game &mdash; because there are no draws. Contradiction, so the second player has no winning strategy, and since somebody must have one, it is the first player.</p>
+        <p class="text-sm text-slate-600 mb-3">Read that again and notice what it does <strong>not</strong> do: it never names a move. It is a proof by contradiction that produces no construction, which is why 11&times;11 Hex has been played for eighty years without anyone knowing the winning opening. The largest board on which the first move has been solved is far smaller than the board you are playing on above. The fix is social rather than mathematical: the <strong>pie rule</strong>. One player places a stone, and the other may either reply normally or take that stone as their own &mdash; so the opener is punished for playing anything too strong.</p>
+        <p class="text-sm text-slate-600">In code the swap is prettier than it sounds. The rhombus is symmetric under transposing <code>(r,c) &rarr; (c,r)</code>: that map sends row&nbsp;0 to column&nbsp;0 and row&nbsp;n&minus;1 to column&nbsp;n&minus;1, and &mdash; the part worth checking &mdash; it maps the six neighbour offsets onto themselves. So transposing the board and flipping the colours gives a position that is <em>the same game</em> with the roles exchanged. That is exactly one line, and the page asserts the automorphism property over every cell of every board size from 3 to 11.</p>
+        <div class="mt-3 text-[11px] font-mono text-slate-600" id="ss-out">&mdash;</div>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-6 text-center max-w-2xl mx-auto">
+        There is no path-finding on this page. A stone is placed, it is unioned with the same-coloured cells touching it and with a virtual border node if it sits on one of your two edges, and the win test is two integer comparisons. That is the whole engine, and it runs in near-constant time per move regardless of board size. Everything else &mdash; the no-draw theorem, the heuristic-free Monte-Carlo player, the bridge, the strategy-stealing argument, the pie rule &mdash; are consequences of the same two facts: Hex stones only ever connect, and a filled Hex board always has exactly one winner. Every hexagon is a real inline SVG <code>&lt;polygon&gt;</code> with six computed points; the four coloured borders are polylines built from the boundary cells&#39; own edges, so they line up exactly. No images, no canvas, no libraries.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="max-w-7xl mx-auto p-6 grid lg:grid-cols-5 gap-6">
+    <aside class="lg:col-span-2 min-w-0">
+      <h3 class="font-bold text-lg mb-3">How six offsets, four virtual nodes and one union-find become Hex</h3>
+      <p class="text-sm text-slate-500 mb-4">Click any step.</p>
+      <div id="steps" class="space-y-2"></div>
+      <div class="mt-4 flex gap-2">
+        <button id="prev" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold text-sm">← Prev</button>
+        <button id="next-step" class="bg-violet-600 text-white px-4 py-2 rounded-lg font-semibold text-sm">Next →</button>
+        <button id="auto" class="bg-violet-500 text-white px-4 py-2 rounded-lg font-semibold text-sm">▶ Auto-play</button>
+      </div>
+    </aside>
+    <div class="lg:col-span-3 space-y-4 min-w-0">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 min-w-0"><div class="text-xs uppercase font-bold text-violet-600 tracking-wider mb-2">CONCEPT</div><div id="concept" class="min-h-[200px] flex items-center justify-center overflow-x-auto"><div class="text-slate-400 text-sm">Click a step →</div></div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-violet-600 tracking-wider mb-2">WHY</div><div id="why" class="text-slate-700">—</div></div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-6"><div class="text-xs uppercase font-bold text-violet-600 tracking-wider mb-2">CODE FOR THIS STEP</div><pre id="code"></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="max-w-5xl mx-auto p-6 md:p-8">
+    <h2 class="text-3xl font-bold mb-2">🔨 Build it yourself</h2>
+    <p class="text-slate-500 mb-8">Hex is the game where picking the right data structure deletes the entire game engine. Refuse to write a path-finder and write a disjoint-set forest instead, bolt four fake cells onto the edges of the board, and the win test becomes an integer comparison that costs nothing. Ten blocks, in order, from an empty file &mdash; the grid, the union-find, the virtual borders, the move, the win test, the theorem, the rollout, the Monte-Carlo player, the bridge, and the hexagons.</p>
+    <ol class="space-y-6">
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">1</div><h3 class="font-bold text-lg">A hex grid is a square array with six neighbour offsets</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Do not model hexagons. Model an <code>n&times;n</code> array and change what &ldquo;adjacent&rdquo; means. A Hex board is a rhombus of hexagons, and if you index it by row and column then each cell touches six others: the two horizontal ones, and two each in the rows above and below &mdash; but skewed, because each row is shifted half a hexagon to the right. That skew is the entire difference between a hex grid and a chessboard, and it is four lines of table. Store the whole board as a flat <code>Uint8Array</code> of <code>0</code>, <code>1</code> and <code>2</code>; a cell is an integer <code>r * n + c</code> and nothing else.</p>
+        <div class="relative"><pre>const EMPTY = 0, RED = 1, BLUE = 2;
+
+// row is shifted half a hex right of the row above it, so the six
+// neighbours of (r,c) are NOT the eight of a square grid minus two
+const NB = [ [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0] ];
+
+function neighbours(n, idx){
+  const r = (idx / n) | 0, c = idx % n, out = [];
+  for (let k = 0; k &lt; 6; k++){
+    const rr = r + NB[k][0], cc = c + NB[k][1];
+    if (rr &gt;= 0 &amp;&amp; rr &lt; n &amp;&amp; cc &gt;= 0 &amp;&amp; cc &lt; n) out.push(rr * n + cc);
+  }
+  return out;
+}
+// degrees: 6 inside, 4 along an edge, 3 at the two obtuse corners,
+// 2 at the two acute corners — worth asserting, it catches sign errors</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">2</div><h3 class="font-bold text-lg">Union-find: the whole game engine, in twelve lines</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Hex stones never move and never get captured. That single fact is why you should never write a path-finder for it: the connectivity of the board only ever <em>grows</em>, and the data structure for a relation that only grows is a disjoint-set forest. Each cell points at a parent; the root of the chain names the group. Two refinements make it effectively constant time: union by rank, which keeps trees shallow by hanging the shorter tree off the taller one, and path compression, which flattens every chain you walk. Together they give the inverse-Ackermann bound, which for any board you can render is indistinguishable from a single array read.</p>
+        <div class="relative"><pre>function find(st, x){
+  let r = x;
+  while (st.parent[r] !== r) r = st.parent[r];
+  while (st.parent[x] !== r){ const nx = st.parent[x]; st.parent[x] = r; x = nx; }
+  return r;                                   // path compression on the way out
+}
+
+function union(st, a, b){
+  let ra = find(st, a), rb = find(st, b);
+  if (ra === rb) return false;                // already the same group
+  if (st.rank[ra] &lt; st.rank[rb]){ const t = ra; ra = rb; rb = t; }
+  st.parent[rb] = ra;                         // union by rank
+  if (st.rank[ra] === st.rank[rb]) st.rank[ra]++;
+  return true;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">3</div><h3 class="font-bold text-lg">Four cells that do not exist</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Here is the trick that removes the last of the code. Allocate four extra slots past the end of the board and call them <code>RED_TOP</code>, <code>RED_BOTTOM</code>, <code>BLUE_LEFT</code> and <code>BLUE_RIGHT</code>. They are not squares, they are not drawn, and nobody can play on them &mdash; they exist only to be unioned. A red stone on row&nbsp;0 joins <code>RED_TOP</code>; a blue stone in column&nbsp;<code>n&minus;1</code> joins <code>BLUE_RIGHT</code>. Now the question &ldquo;does red have a chain touching both the top and the bottom?&rdquo; &mdash; which sounds like a graph traversal &mdash; is the question &ldquo;are these two integers equal?&rdquo;. One forest holds both colours safely, because you only ever union same-coloured cells, so the red and blue trees can never touch.</p>
+        <div class="relative"><pre>// four virtual nodes live just past the n*n real cells
+const vTop   = n =&gt; n * n;
+const vBot   = n =&gt; n * n + 1;
+const vLeft  = n =&gt; n * n + 2;
+const vRight = n =&gt; n * n + 3;
+
+function newBoard(n){
+  const N = n * n + 4;
+  const st = { n, cells: new Uint8Array(n * n),
+               parent: new Int32Array(N), rank: new Uint8Array(N),
+               history: [], toMove: RED, swapped: false };
+  for (let i = 0; i &lt; N; i++) st.parent[i] = i;
+  return st;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">4</div><h3 class="font-bold text-lg">A move is at most seven unions</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Write the stone into the array, then union it with anything of the same colour it now touches: up to six neighbours, plus up to two border nodes if it sits on one of your own edges (a cell can be on both, on a 1&times;1 board or in a corner of your own two edges). Note what is <em>absent</em> &mdash; no captures, no liberties, no re-scan of the board, no incremental path repair. Placing a stone in Hex is genuinely the cheapest move in board games, and it never gets more expensive as the game fills up.</p>
+        <div class="relative"><pre>function addStone(st, idx, colour){
+  const n = st.n;
+  if (idx &lt; 0 || idx &gt;= n * n || st.cells[idx] !== EMPTY) return false;
+  st.cells[idx] = colour;
+  const r = (idx / n) | 0, c = idx % n;
+
+  if (colour === RED){                       // red owns top and bottom
+    if (r === 0)     union(st, idx, vTop(n));
+    if (r === n - 1) union(st, idx, vBot(n));
+  } else {                                   // blue owns left and right
+    if (c === 0)     union(st, idx, vLeft(n));
+    if (c === n - 1) union(st, idx, vRight(n));
+  }
+  const nb = neighbours(n, idx);
+  for (let k = 0; k &lt; nb.length; k++)
+    if (st.cells[nb[k]] === colour) union(st, idx, nb[k]);
+  return true;
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">5</div><h3 class="font-bold text-lg">The win test, which is two comparisons</h3></div>
+        <p class="text-sm text-slate-600 mb-3">This is the payoff for the previous three blocks. There is no queue, no visited set, no recursion and no board scan &mdash; just two <code>find</code> calls per colour and an equality. It is worth returning the two flags separately rather than a single winner, because that lets you assert the property that makes Hex Hex: on a full board exactly one flag is true, and on <em>any</em> board, full or not, the two flags are never both true, since a red chain and a blue chain would have to cross and hexagons do not permit that.</p>
+        <div class="relative"><pre>function winnerFlags(st){
+  const n = st.n;
+  return {
+    red:  find(st, vTop(n))  === find(st, vBot(n)),
+    blue: find(st, vLeft(n)) === find(st, vRight(n))
+  };
+}
+
+function winnerUF(st){
+  const f = winnerFlags(st);
+  return f.red ? RED : f.blue ? BLUE : EMPTY;
+}
+// invariant, on every position ever reachable: !(f.red &amp;&amp; f.blue)</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">6</div><h3 class="font-bold text-lg">Prove the no-draw theorem instead of quoting it</h3></div>
+        <p class="text-sm text-slate-600 mb-3">The Hex theorem says a completely filled board contains exactly one winning connection. It is equivalent to the Brouwer fixed-point theorem, which is a lovely sentence to write and a useless one to trust. On a 3&times;3 board there are only <code>2&#8313; = 512</code> complete colourings and on 4&times;4 only <code>2&sup1;&#8310; = 65,536</code>, so enumerate them with a bitmask, build a fresh union-find for each, and assert <code>red !== blue</code> every single time. Two lines of loop buy you a theorem you have personally verified, and the same routine doubles as a regression test for <code>addStone</code> &mdash; a sign error in the neighbour table shows up instantly as a draw.</p>
+        <div class="relative"><pre>function fullBoardFlags(n, mask){
+  const st = newBoard(n);
+  for (let k = 0; k &lt; n * n; k++)
+    addStone(st, k, ((mask &gt;&gt; k) &amp; 1) ? BLUE : RED);
+  return winnerFlags(st);
+}
+
+function proveNoDraws(n){
+  const total = 1 &lt;&lt; (n * n);
+  let red = 0, blue = 0, draws = 0, both = 0;
+  for (let m = 0; m &lt; total; m++){
+    const f = fullBoardFlags(n, m);
+    if (f.red &amp;&amp; f.blue) both++;
+    else if (f.red) red++; else if (f.blue) blue++; else draws++;
+  }
+  return { total, red, blue, draws, both };   // draws and both must be 0
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">7</div><h3 class="font-bold text-lg">A random rollout, and the branch you never write</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Now spend the theorem. Take the position, shuffle the empty cells, and deal them out alternately to the two players &mdash; a completely random finish with no judgement of any kind. Because the board ends up full, the theorem guarantees somebody won, so the function returns <code>RED</code> or <code>BLUE</code> and there is no third case to handle. That missing branch is the whole reason Monte-Carlo works so unreasonably well on Hex and so badly on games where a random finish usually ends in a mess that needs evaluating. Alternating the fill matters: it keeps the stone counts legal, which keeps the estimate honest.</p>
+        <div class="relative"><pre>function rolloutWinner(st, colourToMove, rnd){
+  const w0 = winnerUF(st);
+  if (w0) return w0;                          // already decided
+  const b = cloneBoard(st), e = emptyCells(b);
+  for (let i = e.length - 1; i &gt; 0; i--){      // Fisher–Yates
+    const j = (rnd() * (i + 1)) | 0;
+    const t = e[i]; e[i] = e[j]; e[j] = t;
+  }
+  let col = colourToMove;
+  for (let i = 0; i &lt; e.length; i++){ addStone(b, e[i], col); col = 3 - col; }
+  return winnerUF(b);                         // never EMPTY — that is the theorem
+}</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">8</div><h3 class="font-bold text-lg">A player with no heuristic at all</h3></div>
+        <p class="text-sm text-slate-600 mb-3">For every empty cell: play there, run <code>N</code> random finishes, count how many you won. Pick the cell with the best ratio. There is no opening book, no pattern table, no notion of &ldquo;centre is good&rdquo; or &ldquo;connect towards your edge&rdquo; anywhere in this function &mdash; and yet it plays a recognisable game, because a cell that lies on many of your possible connections simply wins more random finishes. Keep the counters as running totals rather than one big batch, so the UI can add a few rollouts per frame and let you watch the estimates settle. Accumulating also means you can stop whenever you like.</p>
+        <div class="relative"><pre>function mcInit(st, colour){
+  const cands = emptyCells(st);
+  return { colour, cands, wins: new Int32Array(cands.length),
+           plays: new Int32Array(cands.length), total: 0 };
+}
+
+function mcRun(st, mc, per, rnd){             // add `per` rollouts to every candidate
+  const other = 3 - mc.colour;
+  for (let i = 0; i &lt; mc.cands.length; i++){
+    const b = cloneBoard(st);
+    addStone(b, mc.cands[i], mc.colour);
+    for (let t = 0; t &lt; per; t++){
+      if (rolloutWinner(b, other, rnd) === mc.colour) mc.wins[i]++;
+      mc.plays[i]++; mc.total++;
+    }
+  }
+  return mc;
+}
+// a move that wins outright scores exactly 1.0 for free: rolloutWinner
+// short-circuits on an already-decided board, and no random fill can undo a
+// completed connection</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">9</div><h3 class="font-bold text-lg">Bridges: six offsets, two carriers, one uncuttable link</h3></div>
+        <p class="text-sm text-slate-600 mb-3">Two stones of the same colour sitting a hop apart in one of six specific directions share <em>exactly two</em> empty neighbours. Those two cells are the carriers, and the pair is connected whether the opponent likes it or not: if they take one carrier you take the other, and the link survives. This is why strong Hex play looks so loose &mdash; players build with gaps because the gaps are already connections. Detection is a table lookup, not a search. Then measure what a bridge is worth to the evaluator from block&nbsp;7, and you get the surprise this page is built around: <strong>nothing</strong>, because a uniform random finish does not know what a bridge is. Fix that with a single pattern in the rollout &mdash; when the opponent takes a carrier, answer on the other one &mdash; and a chain of four bridges goes from &ldquo;red holds it about three times in four&rdquo; to &ldquo;red holds it in about 999 rollouts in 1,000&rdquo;.</p>
+        <div class="relative"><pre>// [dr, dc, carrierA, carrierB] — the six bridge directions
+const BRIDGES = [
+  [-2,  1, [-1, 0], [-1, 1]], [-1,  2, [-1, 1], [ 0, 1]],
+  [ 1,  1, [ 0, 1], [ 1, 0]], [ 2, -1, [ 1, 0], [ 1,-1]],
+  [ 1, -2, [ 1,-1], [ 0,-1]], [-1, -1, [ 0,-1], [-1, 0]]
+];
+
+function findBridges(st, colour){
+  const n = st.n, out = [];
+  for (let idx = 0; idx &lt; n * n; idx++){
+    if (st.cells[idx] !== colour) continue;
+    const r = (idx / n) | 0, c = idx % n;
+    for (const [dr, dc, p, q] of BRIDGES){
+      const rr = r + dr, cc = c + dc;
+      if (rr &lt; 0 || rr &gt;= n || cc &lt; 0 || cc &gt;= n) continue;
+      const other = rr * n + cc;
+      if (other &lt; idx || st.cells[other] !== colour) continue;   // count once
+      const k1 = (r + p[0]) * n + (c + p[1]);
+      const k2 = (r + q[0]) * n + (c + q[1]);
+      if (st.cells[k1] === EMPTY &amp;&amp; st.cells[k2] === EMPTY)
+        out.push({ a: idx, b: other, carriers: [k1, k2] });
+    }
+  }
+  return out;
+}
+// the reply: if the opponent plays one carrier, answer on the other
+const bridgeReply = (br, invaded) =&gt;
+  br.carriers[0] === invaded ? br.carriers[1]
+: br.carriers[1] === invaded ? br.carriers[0] : -1;
+
+// ...and the same idea INSIDE the rollout, which is what actually matters.
+// Walk the ring of six neighbours around the cell just played, in cyclic
+// order: if ring[i] and ring[i+2] are both the opponent and ring[i+1] is
+// still empty, you just stepped on a carrier — ring[i+1] saves the bridge.
+const RING = [[0,1],[1,0],[1,-1],[0,-1],[-1,0],[-1,1]];
+
+function saveBridgeReplies(st, idx, colour){
+  const ring = ringCells(st.n, idx), other = 3 - colour, out = [];
+  for (let i = 0; i &lt; 6; i++){
+    const a = ring[i], mid = ring[(i + 1) % 6], b = ring[(i + 2) % 6];
+    if (a &lt; 0 || b &lt; 0 || mid &lt; 0) continue;
+    if (st.cells[a] === other &amp;&amp; st.cells[b] === other
+        &amp;&amp; st.cells[mid] === EMPTY) out.push(mid);
+  }
+  return out;
+}
+// In the rollout: pop a pending reply if there is one and it is still
+// empty, otherwise take the next cell off the shuffle. Use a STACK, not a
+// queue — an invasion has to be answered now, so the newest one outranks
+// anything left over. Everything else stays uniformly random: this is one
+// pattern, not an evaluation function.</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+      <li class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-3"><div class="w-8 h-8 bg-violet-600 text-white rounded-full flex items-center justify-center font-bold">10</div><h3 class="font-bold text-lg">Drawing it: six points, two spacings, four borders</h3></div>
+        <p class="text-sm text-slate-600 mb-3">A pointy-top hexagon of circumradius <code>R</code> is six points at 60&deg; steps starting from straight up. Its width is <code>&radic;3&nbsp;R</code> and consecutive rows sit <code>1.5&nbsp;R</code> apart vertically and half a width to the right &mdash; and that half-width shift is precisely the row skew from block&nbsp;1, which is how you know the picture and the array agree. Do not draw the four coloured borders as straight lines guessed by eye: build them out of the boundary cells&#39; own edge points, so they meet the hexagons exactly. Vertex 5&rarr;0&rarr;1 of every cell in row&nbsp;0 is a continuous polyline, because vertex&nbsp;1 of one hexagon <em>is</em> vertex&nbsp;5 of the next.</p>
+        <div class="relative"><pre>function hexPoints(cx, cy, R){                 // pointy-top: 0 = top, clockwise
+  const p = [];
+  for (let k = 0; k &lt; 6; k++){
+    const a = (-90 + 60 * k) * Math.PI / 180;
+    p.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]);
+  }
+  return p;
+}
+
+const W = Math.sqrt(3) * R;                    // hexagon width
+const cx = pad + W / 2 + c * W + r * W / 2;    // the half-width row skew
+const cy = pad + R + r * 1.5 * R;
+
+// red top border = vertices 5,0,1 of every cell in row 0, in order —
+// they join up on their own because p1 of one hex equals p5 of the next</pre><button class="copy-btn absolute top-2 right-2 bg-slate-700 text-white text-xs px-2 py-1 rounded" onclick="copy(this)">Copy all</button></div>
+      </li>
+
+    </ol>
+    <div class="mt-10 bg-violet-50 border border-violet-200 rounded-2xl p-6 text-center"><h3 class="font-bold text-lg text-violet-900">🎉 Day 62 of GameFromZero done — a real Hex, with the theorem checked rather than cited.</h3><p class="text-sm text-violet-800 mt-2">You built a complete board game whose engine is a disjoint-set forest and whose win condition is an integer comparison, then used the one property that makes Hex unique — a filled board is never a draw — twice: once as a theorem you proved by enumerating every colouring of a small board, and once as the licence for an AI that needs no heuristic and no draw handling, only a shuffle. And when the obvious claim about bridges failed its own measurement, you kept the measurement and fixed the evaluator instead. Next: replace flat Monte-Carlo with UCT so the rollouts concentrate on the moves that matter, add the edge templates that connect a stone to your border the way a bridge connects two stones, teach the rollout the same save-response for those, compress connected groups into a graph and run an electric-resistance evaluator over it, or solve 4&times;4 and 5&times;5 outright by alpha-beta with the dead-cell reductions. <strong>👉 Tomorrow — Day 63: another game, built from zero.</strong></p></div>
+  </div>
+</section>
+
+<script>
+// ===== tab wiring =====
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.onclick = () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+});
+
+// ===== ENGINE:BEGIN =====
+// Pure, DOM-free Hex core. Nothing below touches document or window; the node
+// test harness slices this exact block out of the file and runs it standalone.
+const EMPTY = 0, RED = 1, BLUE = 2;
+
+// the six neighbours of (r,c) on a Hex rhombus — each row is shifted half a
+// hexagon right of the row above, which is what makes this a hex grid
+const NB = [[-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0]];
+
+// four virtual border nodes, parked just past the n*n real cells
+const vTop   = n => n * n;
+const vBot   = n => n * n + 1;
+const vLeft  = n => n * n + 2;
+const vRight = n => n * n + 3;
+
+function neighbours(n, idx){
+  const r = (idx / n) | 0, c = idx % n, out = [];
+  for (let k = 0; k < 6; k++){
+    const rr = r + NB[k][0], cc = c + NB[k][1];
+    if (rr >= 0 && rr < n && cc >= 0 && cc < n) out.push(rr * n + cc);
+  }
+  return out;
+}
+
+function newBoard(n){
+  const N = n * n + 4;
+  const st = { n, cells: new Uint8Array(n * n), parent: new Int32Array(N),
+               rank: new Uint8Array(N), history: [], toMove: RED, swapped: false };
+  for (let i = 0; i < N; i++) st.parent[i] = i;
+  return st;
+}
+
+function cloneBoard(st){
+  return { n: st.n, cells: st.cells.slice(), parent: st.parent.slice(),
+           rank: st.rank.slice(), history: st.history.slice(),
+           toMove: st.toMove, swapped: st.swapped };
+}
+
+// find with path compression — flattens the chain it walks
+function find(st, x){
+  let r = x;
+  while (st.parent[r] !== r) r = st.parent[r];
+  while (st.parent[x] !== r){ const nx = st.parent[x]; st.parent[x] = r; x = nx; }
+  return r;
+}
+
+// union by rank — hang the shorter tree off the taller one
+function union(st, a, b){
+  let ra = find(st, a), rb = find(st, b);
+  if (ra === rb) return false;
+  if (st.rank[ra] < st.rank[rb]){ const t = ra; ra = rb; rb = t; }
+  st.parent[rb] = ra;
+  if (st.rank[ra] === st.rank[rb]) st.rank[ra]++;
+  return true;
+}
+
+// the whole of "making a move": write the stone, union with same-coloured
+// neighbours, union with a border node if it sits on one of your own edges
+function addStone(st, idx, colour){
+  const n = st.n;
+  if (idx < 0 || idx >= n * n || st.cells[idx] !== EMPTY) return false;
+  st.cells[idx] = colour;
+  const r = (idx / n) | 0, c = idx % n;
+  if (colour === RED){
+    if (r === 0)     union(st, idx, vTop(n));
+    if (r === n - 1) union(st, idx, vBot(n));
+  } else {
+    if (c === 0)     union(st, idx, vLeft(n));
+    if (c === n - 1) union(st, idx, vRight(n));
+  }
+  const nb = neighbours(n, idx);
+  for (let k = 0; k < nb.length; k++)
+    if (st.cells[nb[k]] === colour) union(st, idx, nb[k]);
+  return true;
+}
+
+// addStone plus the game bookkeeping a UI needs
+function place(st, idx, colour){
+  if (!addStone(st, idx, colour)) return false;
+  st.history.push({ idx, colour });
+  st.toMove = colour === RED ? BLUE : RED;
+  return true;
+}
+
+function winnerFlags(st){
+  const n = st.n;
+  return { red:  find(st, vTop(n))  === find(st, vBot(n)),
+           blue: find(st, vLeft(n)) === find(st, vRight(n)) };
+}
+
+function winnerUF(st){
+  const f = winnerFlags(st);
+  return f.red ? RED : f.blue ? BLUE : EMPTY;
+}
+
+function emptyCells(st){
+  const out = [], m = st.n * st.n;
+  for (let i = 0; i < m; i++) if (st.cells[i] === EMPTY) out.push(i);
+  return out;
+}
+
+function boardFromCells(n, arr){
+  const st = newBoard(n);
+  for (let i = 0; i < n * n; i++) if (arr[i] !== EMPTY) addStone(st, i, arr[i]);
+  return st;
+}
+
+function boardFromMoves(n, moves){
+  const st = newBoard(n);
+  for (let i = 0; i < moves.length; i++) place(st, moves[i].idx, moves[i].colour);
+  if (moves.length) st.toMove = 3 - moves[moves.length - 1].colour;
+  return st;
+}
+
+// every complete colouring of an n*n board is one bitmask: bit set = BLUE
+function fullBoardFlags(n, mask){
+  const st = newBoard(n);
+  const m = n * n;
+  for (let k = 0; k < m; k++) addStone(st, k, ((mask >> k) & 1) ? BLUE : RED);
+  return winnerFlags(st);
+}
+
+// the rhombus is symmetric under (r,c) -> (c,r): that map sends row 0 to
+// column 0 and n-1 to n-1, and permutes the six neighbour offsets among
+// themselves, so transpose + colour flip is the same game with sides swapped
+function transposeIndex(n, idx){ return (idx % n) * n + ((idx / n) | 0); }
+
+function transposeBoard(st){
+  const n = st.n, arr = new Uint8Array(n * n);
+  for (let i = 0; i < n * n; i++)
+    if (st.cells[i] !== EMPTY) arr[transposeIndex(n, i)] = 3 - st.cells[i];
+  return boardFromCells(n, arr);
+}
+
+// the pie rule, honestly implemented: the second player takes over the first
+// move by transposing it and flipping its colour
+function applySwap(moves, n){
+  if (moves.length !== 1) return null;
+  return [{ idx: transposeIndex(n, moves[0].idx), colour: 3 - moves[0].colour }];
+}
+
+// xorshift32 so tests are reproducible; the page passes Math.random
+function makeRng(seed){
+  let s = (seed >>> 0) || 1;
+  return function(){
+    s ^= s << 13; s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5;  s >>>= 0;
+    return s / 4294967296;
+  };
+}
+
+// fill every empty cell at random, alternating colours. The board ends up
+// full, and a full Hex board always has a winner — so there is no draw case
+function rolloutWinner(st, colourToMove, rnd){
+  const w0 = winnerUF(st);
+  if (w0) return w0;
+  const b = cloneBoard(st), e = emptyCells(b);
+  for (let i = e.length - 1; i > 0; i--){
+    const j = (rnd() * (i + 1)) | 0;
+    const t = e[i]; e[i] = e[j]; e[j] = t;
+  }
+  let col = colourToMove;
+  for (let i = 0; i < e.length; i++){ addStone(b, e[i], col); col = 3 - col; }
+  return winnerUF(b);
+}
+
+// The six neighbour offsets again, this time in cyclic (angular) order:
+// E, SE, SW, W, NW, NE. Walking a cell's neighbour ring is what makes the
+// save-bridge response a local lookup instead of a search.
+const RING = [[0, 1], [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1]];
+
+function ringCells(n, idx){
+  const r = (idx / n) | 0, c = idx % n, out = [];
+  for (let k = 0; k < 6; k++){
+    const rr = r + RING[k][0], cc = c + RING[k][1];
+    out.push((rr >= 0 && rr < n && cc >= 0 && cc < n) ? rr * n + cc : -1);
+  }
+  return out;
+}
+
+// Two cells two steps apart around a common neighbour x share exactly two
+// neighbours: x, and the ring cell between them. So if `colour` has just played
+// x and the ring holds opponent stones at positions i and i+2 with position i+1
+// still empty, then x was a bridge carrier and i+1 is the reply that saves it.
+function saveBridgeReplies(st, idx, colour){
+  const n = st.n, ring = ringCells(n, idx), other = 3 - colour, out = [];
+  for (let i = 0; i < 6; i++){
+    const a = ring[i], mid = ring[(i + 1) % 6], b = ring[(i + 2) % 6];
+    if (a < 0 || b < 0 || mid < 0) continue;
+    if (st.cells[a] === other && st.cells[b] === other && st.cells[mid] === EMPTY) out.push(mid);
+  }
+  return out;
+}
+
+// The same random finish, with one single pattern added: if the opponent takes
+// a carrier of one of your bridges, answer on the other carrier before doing
+// anything else. This is the whole difference between a rollout policy that
+// understands a bridge and one that does not.
+function rolloutWinnerSaveBridge(st, colourToMove, rnd){
+  const w0 = winnerUF(st);
+  if (w0) return w0;
+  const b = cloneBoard(st), e = emptyCells(b);
+  for (let i = e.length - 1; i > 0; i--){
+    const j = (rnd() * (i + 1)) | 0;
+    const t = e[i]; e[i] = e[j]; e[j] = t;
+  }
+  // a STACK, not a queue: an invasion has to be answered now, so the most
+  // recent one outranks anything still pending from earlier in the rollout
+  const queue = [null, [], []];
+  let col = colourToMove, p = 0, remaining = e.length;
+  while (remaining > 0){
+    let idx = -1;
+    const q = queue[col];
+    while (q.length){ const cand = q.pop(); if (b.cells[cand] === EMPTY){ idx = cand; break; } }
+    if (idx < 0){
+      while (p < e.length && b.cells[e[p]] !== EMPTY) p++;
+      if (p >= e.length) break;
+      idx = e[p++];
+    }
+    addStone(b, idx, col);
+    remaining--;
+    const rep = saveBridgeReplies(b, idx, col);
+    for (let k = 0; k < rep.length; k++) queue[3 - col].push(rep[k]);
+    col = 3 - col;
+  }
+  return winnerUF(b);
+}
+
+function positionValue(st, colourToMove, forColour, rolls, rnd, policy){
+  const roll = policy || rolloutWinner;
+  let w = 0;
+  for (let i = 0; i < rolls; i++)
+    if (roll(st, colourToMove, rnd) === forColour) w++;
+  return rolls ? w / rolls : 0;
+}
+
+function mcInit(st, colour){
+  const cands = emptyCells(st);
+  return { colour, cands, wins: new Int32Array(cands.length),
+           plays: new Int32Array(cands.length), total: 0 };
+}
+
+function mcRun(st, mc, per, rnd, policy){
+  const roll = policy || rolloutWinner;
+  const other = 3 - mc.colour;
+  for (let i = 0; i < mc.cands.length; i++){
+    const b = cloneBoard(st);
+    if (!addStone(b, mc.cands[i], mc.colour)) continue;
+    for (let t = 0; t < per; t++){
+      if (roll(b, other, rnd) === mc.colour) mc.wins[i]++;
+      mc.plays[i]++; mc.total++;
+    }
+  }
+  return mc;
+}
+
+function mcRates(mc){
+  const out = [];
+  for (let i = 0; i < mc.cands.length; i++)
+    out.push({ idx: mc.cands[i], wins: mc.wins[i], plays: mc.plays[i],
+               rate: mc.plays[i] ? mc.wins[i] / mc.plays[i] : 0 });
+  return out;
+}
+
+function mcEvaluate(st, colour, rollouts, rnd, policy){
+  return mcRates(mcRun(st, mcInit(st, colour), rollouts, rnd || Math.random, policy));
+}
+
+function bestFromRates(rates){
+  let best = null;
+  for (let i = 0; i < rates.length; i++)
+    if (!best || rates[i].rate > best.rate) best = rates[i];
+  return best ? best.idx : -1;
+}
+
+function bestMove(st, colour, rollouts, rnd, policy){
+  return bestFromRates(mcEvaluate(st, colour, rollouts, rnd, policy));
+}
+
+// the six bridge directions: [dr, dc, carrierA, carrierB]
+const BRIDGES = [
+  [-2,  1, [-1,  0], [-1,  1]],
+  [-1,  2, [-1,  1], [ 0,  1]],
+  [ 1,  1, [ 0,  1], [ 1,  0]],
+  [ 2, -1, [ 1,  0], [ 1, -1]],
+  [ 1, -2, [ 1, -1], [ 0, -1]],
+  [-1, -1, [ 0, -1], [-1,  0]]
+];
+
+function findBridges(st, colour){
+  const n = st.n, out = [];
+  for (let idx = 0; idx < n * n; idx++){
+    if (st.cells[idx] !== colour) continue;
+    const r = (idx / n) | 0, c = idx % n;
+    for (let k = 0; k < 6; k++){
+      const B = BRIDGES[k], rr = r + B[0], cc = c + B[1];
+      if (rr < 0 || rr >= n || cc < 0 || cc >= n) continue;
+      const other = rr * n + cc;
+      if (other < idx || st.cells[other] !== colour) continue;
+      const ar = r + B[2][0], ac = c + B[2][1], br = r + B[3][0], bc = c + B[3][1];
+      if (ar < 0 || ar >= n || ac < 0 || ac >= n) continue;
+      if (br < 0 || br >= n || bc < 0 || bc >= n) continue;
+      const k1 = ar * n + ac, k2 = br * n + bc;
+      if (st.cells[k1] === EMPTY && st.cells[k2] === EMPTY)
+        out.push({ a: idx, b: other, carriers: [k1, k2] });
+    }
+  }
+  return out;
+}
+
+function bridgeReply(br, invaded){
+  if (br.carriers[0] === invaded) return br.carriers[1];
+  if (br.carriers[1] === invaded) return br.carriers[0];
+  return -1;
+}
+
+function componentRoots(st){
+  const n = st.n, out = new Int32Array(n * n).fill(-1);
+  for (let i = 0; i < n * n; i++) if (st.cells[i] !== EMPTY) out[i] = find(st, i);
+  return out;
+}
+
+// Careful: in the MAIN forest two red groups that both touch the top edge share
+// RED_TOP's root, so they look like one set. That is exactly what the virtual
+// nodes are for, and it is why the grid on the page shows them sharing a number
+// — but it is not what "how many separate groups of stones are on the board"
+// means. So count that with a second, tiny disjoint-set pass over stones only.
+function stoneComponents(st, colour){
+  const n = st.n, m = n * n, p = new Int32Array(m);
+  for (let i = 0; i < m; i++) p[i] = i;
+  const f = x => { while (p[x] !== x){ p[x] = p[p[x]]; x = p[x]; } return x; };
+  for (let i = 0; i < m; i++){
+    if (st.cells[i] !== colour) continue;
+    const nb = neighbours(n, i);
+    for (let k = 0; k < nb.length; k++){
+      const j = nb[k];
+      if (j < i && st.cells[j] === colour){ const ra = f(i), rb = f(j); if (ra !== rb) p[rb] = ra; }
+    }
+  }
+  const out = new Int32Array(m).fill(-1);
+  for (let i = 0; i < m; i++) if (st.cells[i] === colour) out[i] = f(i);
+  return out;
+}
+
+function componentCount(st, colour){
+  const c = stoneComponents(st, colour), seen = {};
+  let k = 0;
+  for (let i = 0; i < c.length; i++) if (c[i] >= 0 && !seen[c[i]]){ seen[c[i]] = 1; k++; }
+  return k;
+}
+
+// the single chain that actually spans the board, for highlighting
+function winningGroup(st){
+  const f = winnerFlags(st);
+  const colour = f.red ? RED : f.blue ? BLUE : EMPTY;
+  if (!colour) return [];
+  const n = st.n, comp = stoneComponents(st, colour), touch = {};
+  for (let i = 0; i < n * n; i++){
+    if (comp[i] < 0) continue;
+    const r = (i / n) | 0, c = i % n;
+    if (!touch[comp[i]]) touch[comp[i]] = { near: false, far: false };
+    if (colour === RED ? r === 0 : c === 0)     touch[comp[i]].near = true;
+    if (colour === RED ? r === n - 1 : c === n - 1) touch[comp[i]].far = true;
+  }
+  let target = -1;
+  for (const k in touch) if (touch[k].near && touch[k].far) target = +k;
+  const out = [];
+  if (target >= 0) for (let i = 0; i < n * n; i++) if (comp[i] === target) out.push(i);
+  return out;
+}
+
+// the group as the MAIN forest sees it — virtual border nodes included
+function groupOf(st, idx){
+  const n = st.n, root = find(st, idx), out = [];
+  for (let i = 0; i < n * n; i++)
+    if (st.cells[i] !== EMPTY && find(st, i) === root) out.push(i);
+  return out;
+}
+
+const ENGINE_EXPORTS = {
+  EMPTY, RED, BLUE, NB, BRIDGES,
+  vTop, vBot, vLeft, vRight,
+  neighbours, newBoard, cloneBoard, find, union, addStone, place,
+  winnerFlags, winnerUF, emptyCells, boardFromCells, boardFromMoves,
+  fullBoardFlags, transposeIndex, transposeBoard, applySwap, makeRng,
+  RING, ringCells, saveBridgeReplies, rolloutWinnerSaveBridge,
+  rolloutWinner, positionValue, mcInit, mcRun, mcRates, mcEvaluate,
+  bestFromRates, bestMove, findBridges, bridgeReply,
+  componentRoots, stoneComponents, componentCount, winningGroup, groupOf
+};
+// ===== ENGINE:END =====
+
+// ===== everything below is UI =====
+const RED_SHADES  = ["#ef4444","#f87171","#dc2626","#fca5a5","#b91c1c","#fb7185","#991b1b","#fecaca","#f43f5e","#e11d48"];
+const BLUE_SHADES = ["#3b82f6","#60a5fa","#2563eb","#93c5fd","#1d4ed8","#38bdf8","#1e40af","#bfdbfe","#0ea5e9","#0369a1"];
+
+let SIZE = 11;
+let MOVES = [];
+let SWAPPED = false;
+let ST = newBoard(SIZE);
+let MODE = "ha";
+let ROLLS = 60;
+let SHOW_HEAT = false, SHOW_BR = false;
+let MC = null, mcTimer = null, aiTimer = null, ROLL_TOTAL = 0;
+let LASTBR = { red: [], blue: [] };
+let POLICY = rolloutWinner;
+
+const $ = id => document.getElementById(id);
+
+function rebuild(){
+  ST = boardFromMoves(SIZE, MOVES);
+  LASTBR = { red: findBridges(ST, RED), blue: findBridges(ST, BLUE) };
+}
+
+// ---------- geometry ----------
+function hexGeom(n, R){
+  const W = Math.sqrt(3) * R, VS = 1.5 * R, pad = R * 1.5;
+  const centre = (r, c) => [pad + W / 2 + c * W + r * W / 2, pad + R + r * VS];
+  const width  = pad * 2 + W * n + W * (n - 1) / 2;
+  const height = pad * 2 + VS * (n - 1) + 2 * R;
+  return { R, W, VS, pad, centre, width, height };
+}
+function hexPoints(cx, cy, R){
+  const p = [];
+  for (let k = 0; k < 6; k++){
+    const a = (-90 + 60 * k) * Math.PI / 180;
+    p.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]);
+  }
+  return p;
+}
+const fmt = v => v.toFixed(2);
+const ptsStr = p => p.map(q => fmt(q[0]) + "," + fmt(q[1])).join(" ");
+
+function borderPath(g, n, kind){
+  const pt = [];
+  if (kind === "top")    for (let c = 0; c < n; c++){ const P = hexPoints(...g.centre(0, c), g.R);       pt.push(P[5], P[0], P[1]); }
+  if (kind === "bottom") for (let c = 0; c < n; c++){ const P = hexPoints(...g.centre(n - 1, c), g.R);   pt.push(P[4], P[3], P[2]); }
+  if (kind === "left")   for (let r = 0; r < n; r++){ const P = hexPoints(...g.centre(r, 0), g.R);       pt.push(P[5], P[4], P[3]); }
+  if (kind === "right")  for (let r = 0; r < n; r++){ const P = hexPoints(...g.centre(r, n - 1), g.R);   pt.push(P[0], P[1], P[2]); }
+  return ptsStr(pt);
+}
+
+// ---------- board rendering ----------
+function shadeFor(colour, root, order){
+  if (!(root in order)) order[root] = Object.keys(order).length;
+  const i = order[root] % 10;
+  return colour === RED ? RED_SHADES[i] : BLUE_SHADES[i];
+}
+
+function renderHexBoard(el, st, opts){
+  const n = st.n, o = opts || {};
+  const g = hexGeom(n, o.R || (n <= 7 ? 26 : n <= 11 ? 22 : 19));
+  const roots = componentRoots(st);
+  const order = {};
+  const rates = o.rates || null;
+  let maxRate = 0;
+  if (rates) for (const r of rates) if (r.rate > maxRate) maxRate = r.rate;
+  const rateBy = {};
+  if (rates) for (const r of rates) rateBy[r.idx] = r;
+
+  let s = '<svg viewBox="0 0 ' + fmt(g.width) + ' ' + fmt(g.height) + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hex board">';
+  s += '<polyline points="' + borderPath(g, n, "left")   + '" fill="none" stroke="#2563eb" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>';
+  s += '<polyline points="' + borderPath(g, n, "right")  + '" fill="none" stroke="#2563eb" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>';
+  s += '<polyline points="' + borderPath(g, n, "top")    + '" fill="none" stroke="#dc2626" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>';
+  s += '<polyline points="' + borderPath(g, n, "bottom") + '" fill="none" stroke="#dc2626" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>';
+
+  for (let i = 0; i < n * n; i++){
+    const r = (i / n) | 0, c = i % n;
+    const [cx, cy] = g.centre(r, c);
+    const P = hexPoints(cx, cy, g.R * 0.94);
+    const v = st.cells[i];
+    let fill = "#241a3f", stroke = "#0b0618", sw = 1.4;
+    if (v !== EMPTY){ fill = shadeFor(v, roots[i], order); stroke = "#0b0618"; }
+    else if (rates && rateBy[i]){
+      const t = maxRate > 0 ? rateBy[i].rate / maxRate : 0;
+      const base = o.heatColour === BLUE ? [59, 130, 246] : [239, 68, 68];
+      const mix = k => Math.round(36 + (base[k] - 36) * Math.pow(t, 2.2));
+      fill = "rgb(" + mix(0) + "," + mix(1) + "," + mix(2) + ")";
+    }
+    s += '<polygon class="hexcell' + (v !== EMPTY ? ' taken' : '') + '" data-idx="' + i + '" points="' + ptsStr(P) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '"/>';
+  }
+
+  // bridge carriers
+  if (o.bridges){
+    for (const col of [RED, BLUE]){
+      const list = col === RED ? LASTBR.red : LASTBR.blue;
+      for (const br of list){
+        const [ar, ac] = [(br.a / n) | 0, br.a % n], [br_, bc] = [(br.b / n) | 0, br.b % n];
+        const A = g.centre(ar, ac), B = g.centre(br_, bc);
+        s += '<line class="hexlink" x1="' + fmt(A[0]) + '" y1="' + fmt(A[1]) + '" x2="' + fmt(B[0]) + '" y2="' + fmt(B[1]) + '" stroke="' + (col === RED ? "#fca5a5" : "#93c5fd") + '"/>';
+        for (const k of br.carriers){
+          const P = hexPoints(...g.centre((k / n) | 0, k % n), g.R * 0.7);
+          s += '<polygon class="hexcarrier" points="' + ptsStr(P) + '"/>';
+        }
+      }
+    }
+  }
+
+  // last move ring
+  if (o.last != null && o.last >= 0){
+    const P = hexPoints(...g.centre((o.last / n) | 0, o.last % n), g.R * 0.55);
+    s += '<polygon class="hexlast" points="' + ptsStr(P) + '"/>';
+  }
+
+  // winning group
+  if (o.winGroup) for (const k of o.winGroup){
+    const P = hexPoints(...g.centre((k / n) | 0, k % n), g.R * 0.94);
+    s += '<polygon class="hexwin" points="' + ptsStr(P) + '"/>';
+  }
+
+  // heat numbers
+  if (rates && g.R >= 19) for (const r of rates){
+    const [cx, cy] = g.centre((r.idx / n) | 0, r.idx % n);
+    s += '<text class="heatnum" x="' + fmt(cx) + '" y="' + fmt(cy + 3) + '" text-anchor="middle" fill="#f8fafc">' + Math.round(r.rate * 100) + '</text>';
+  }
+
+  s += '</svg>';
+  el.innerHTML = s;
+  return g;
+}
+
+// ---------- main board draw ----------
+function draw(){
+  const f = winnerFlags(ST);
+  const win = f.red ? RED : f.blue ? BLUE : EMPTY;
+  const last = MOVES.length ? MOVES[MOVES.length - 1].idx : -1;
+  const winGroup = win ? winningGroup(ST) : null;
+  const rates = (SHOW_HEAT && MC && !win) ? mcRates(MC) : null;
+  renderHexBoard($("hx-board"), ST, { last, winGroup, bridges: SHOW_BR, rates, heatColour: MC ? MC.colour : RED });
+  $("hx-board").querySelectorAll(".hexcell").forEach(p => {
+    p.addEventListener("click", () => onCell(+p.dataset.idx));
+  });
+  updateHud(win);
+  renderUF();
+}
+
+function updateHud(win){
+  const f = winnerFlags(ST);
+  win = win !== undefined ? win : (f.red ? RED : f.blue ? BLUE : EMPTY);
+  $("s-turn").textContent = win ? (win === RED ? "RED ✓" : "BLUE ✓") : (ST.toMove === RED ? "RED" : "BLUE");
+  $("s-turn").style.color = (win ? win : ST.toMove) === RED ? "#f87171" : "#60a5fa";
+  $("s-moves").textContent = MOVES.length;
+  $("s-redc").textContent = componentCount(ST, RED);
+  $("s-bluec").textContent = componentCount(ST, BLUE);
+  $("s-bridges").textContent = LASTBR.red.length + LASTBR.blue.length;
+  $("s-rolls").textContent = ROLL_TOTAL.toLocaleString();
+  $("hx-swap").disabled = !($("hx-pie").checked && MOVES.length === 1 && !SWAPPED);
+  $("hx-over").classList.toggle("hidden", !win);
+  if (win){
+    $("hx-over-title").textContent = win === RED ? "RED CONNECTS TOP TO BOTTOM" : "BLUE CONNECTS LEFT TO RIGHT";
+    $("hx-over-sub").textContent = "find(" + (win === RED ? "RED_TOP) === find(RED_BOTTOM)" : "BLUE_LEFT) === find(BLUE_RIGHT)")
+      + " after " + MOVES.length + " stones — one integer comparison, no path search";
+    $("hx-status").textContent = (win === RED ? "Red" : "Blue") + " wins. There was never a draw available.";
+  } else {
+    const bl = LASTBR.red.length + LASTBR.blue.length;
+    $("hx-status").textContent = (ST.toMove === RED ? "Red to play — join top to bottom" : "Blue to play — join left to right")
+      + " · " + componentCount(ST, RED) + " red group" + (componentCount(ST, RED) === 1 ? "" : "s")
+      + ", " + componentCount(ST, BLUE) + " blue"
+      + " · " + bl + " live bridge" + (bl === 1 ? "" : "s");
+  }
+}
+
+function renderUF(){
+  const n = ST.n, roots = componentRoots(ST);
+  let h = "";
+  for (let r = 0; r < n; r++){
+    h += '<span style="display:inline-block;width:' + (r * 8) + 'px"></span>';
+    for (let c = 0; c < n; c++){
+      const i = r * n + c, v = ST.cells[i];
+      const cls = v === RED ? "ufR" : v === BLUE ? "ufB" : "ufE";
+      h += '<span class="ufcell ' + cls + '">' + (v === EMPTY ? "·" : roots[i]) + "</span>";
+    }
+    h += "\n";
+  }
+  $("uf-grid").innerHTML = h;
+  const f = winnerFlags(ST);
+  $("uf-virtual").innerHTML =
+    "find(RED_TOP)=" + find(ST, vTop(n)) + "  find(RED_BOTTOM)=" + find(ST, vBot(n)) +
+    "  &rarr; " + (f.red ? "<b style='color:#dc2626'>EQUAL — red has connected</b>" : "different") + "<br>" +
+    "find(BLUE_LEFT)=" + find(ST, vLeft(n)) + "  find(BLUE_RIGHT)=" + find(ST, vRight(n)) +
+    "  &rarr; " + (f.blue ? "<b style='color:#2563eb'>EQUAL — blue has connected</b>" : "different") +
+    "<br>both true at once: " + (f.red && f.blue ? "IMPOSSIBLE-AND-YET-TRUE" : "false") + " (a red chain and a blue chain would have to cross)";
+}
+
+// ---------- interaction ----------
+function humanColour(){
+  if (MODE === "hh") return ST.toMove;
+  if (MODE === "ha") return RED;
+  if (MODE === "ah") return BLUE;
+  return EMPTY;
+}
+
+function onCell(idx){
+  if (winnerUF(ST)) return;
+  if (ST.cells[idx] !== EMPTY) return;
+  if (MODE !== "hh" && ST.toMove !== humanColour()) return;
+  doMove(idx, ST.toMove);
+  if (MODE === "ha" || MODE === "ah") setTimeout(() => { if (!winnerUF(ST) && ST.toMove !== humanColour()) aiMove(); }, 60);
+}
+
+function doMove(idx, colour){
+  stopThinking();
+  MOVES.push({ idx, colour });
+  rebuild();
+  MC = null;
+  draw();
+}
+
+function stopThinking(){ if (mcTimer){ clearTimeout(mcTimer); mcTimer = null; } }
+
+function aiMove(){
+  if (winnerUF(ST)) return;
+  const colour = ST.toMove;
+  stopThinking();
+  MC = mcInit(ST, colour);
+  const per = 5, target = ROLLS;
+  let done = 0;
+  const step = () => {
+    mcRun(ST, MC, per, Math.random, POLICY);
+    ROLL_TOTAL += per * MC.cands.length;
+    done += per;
+    if (SHOW_HEAT) draw(); else updateHud();
+    if (done < target){ mcTimer = setTimeout(step, 0); }
+    else {
+      mcTimer = null;
+      const idx = bestFromRates(mcRates(MC));
+      const rate = mcRates(MC).find(r => r.idx === idx);
+      $("hx-status").textContent = "AI played cell " + ((idx / ST.n) | 0) + "," + (idx % ST.n)
+        + " — " + Math.round(rate.rate * 100) + "% of " + rate.plays + " random finishes won, chosen from "
+        + MC.cands.length + " candidates with no heuristic at all";
+      MOVES.push({ idx, colour });
+      rebuild();
+      MC = null;
+      draw();
+      if (MODE === "aa" && !winnerUF(ST)) aiTimer = setTimeout(aiMove, 120);
+    }
+  };
+  step();
+}
+
+function newGame(){
+  stopThinking();
+  if (aiTimer){ clearTimeout(aiTimer); aiTimer = null; }
+  MOVES = []; SWAPPED = false; MC = null;
+  rebuild(); draw();
+  if (MODE === "ah" || MODE === "aa") setTimeout(aiMove, 150);
+}
+
+$("hx-mode").onchange = e => { MODE = e.target.value; newGame(); };
+$("hx-size").oninput = e => { SIZE = +e.target.value; $("hx-size-l").textContent = SIZE + " × " + SIZE; newGame(); };
+$("hx-roll").oninput = e => { ROLLS = +e.target.value; $("hx-roll-l").textContent = ROLLS; };
+$("hx-ai").onclick = () => { if (!winnerUF(ST)) aiMove(); };
+$("hx-undo").onclick = () => { stopThinking(); if (aiTimer){ clearTimeout(aiTimer); aiTimer = null; } MOVES.pop(); MC = null; rebuild(); draw(); };
+$("hx-reset").onclick = newGame;
+$("hx-again").onclick = newGame;
+$("hx-heat").onclick = () => { SHOW_HEAT = !SHOW_HEAT; $("hx-heat").classList.toggle("toggle-on", SHOW_HEAT);
+  if (SHOW_HEAT && !MC && !winnerUF(ST)){ previewHeat(); } else draw(); };
+$("hx-bridges").onclick = () => { SHOW_BR = !SHOW_BR; $("hx-bridges").classList.toggle("toggle-on", SHOW_BR); draw(); };
+$("hx-pie").onchange = () => updateHud();
+$("hx-policy").onchange = e => { POLICY = e.target.value === "bridge" ? rolloutWinnerSaveBridge : rolloutWinner; stopThinking(); MC = null; draw();
+  $("hx-status").textContent = e.target.value === "bridge"
+    ? "Rollout policy: save-bridge — a random finish that answers every bridge invasion on the other carrier."
+    : "Rollout policy: uniform random — a completely blind finish, with no idea what a bridge is."; };
+$("hx-swap").onclick = () => {
+  const sw = applySwap(MOVES, SIZE);
+  if (!sw) return;
+  MOVES = sw; SWAPPED = true; MC = null;
+  rebuild(); draw();
+  $("hx-status").textContent = "Swap taken — the opening stone was transposed (r,c) → (c,r) and flipped to blue. "
+    + "Same position, sides exchanged: that is why the pie rule is one line here.";
+};
+
+function previewHeat(){
+  const colour = ST.toMove;
+  MC = mcInit(ST, colour);
+  let done = 0;
+  const step = () => {
+    mcRun(ST, MC, 5, Math.random, POLICY);
+    ROLL_TOTAL += 5 * MC.cands.length;
+    done += 5;
+    draw();
+    if (done < Math.min(ROLLS, 40) && SHOW_HEAT) mcTimer = setTimeout(step, 0); else mcTimer = null;
+  };
+  step();
+}
+
+document.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === "a") $("hx-ai").click();
+  else if (k === "u") $("hx-undo").click();
+  else if (k === "n") $("hx-reset").click();
+  else if (k === "h") $("hx-heat").click();
+  else if (k === "b") $("hx-bridges").click();
+});
+
+// ---------- the no-draw theorem, enumerated ----------
+function factCard(n, l){ return '<div class="fact"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>'; }
+
+function proveNoDraws(n, outEl, done){
+  const total = 1 << (n * n);
+  let m = 0, red = 0, blue = 0, draws = 0, both = 0;
+  const t0 = performance.now();
+  const chunkSize = n === 3 ? 512 : 4096;
+  const step = () => {
+    const end = Math.min(total, m + chunkSize);
+    for (; m < end; m++){
+      const f = fullBoardFlags(n, m);
+      if (f.red && f.blue) both++;
+      else if (f.red) red++;
+      else if (f.blue) blue++;
+      else draws++;
+    }
+    outEl.textContent = n + "×" + n + ": checked " + m.toLocaleString() + " / " + total.toLocaleString()
+      + " colourings · red " + red.toLocaleString() + " · blue " + blue.toLocaleString()
+      + " · draws " + draws + " · both " + both;
+    if (m < total) setTimeout(step, 0);
+    else {
+      const ms = (performance.now() - t0).toFixed(1);
+      outEl.textContent = n + "×" + n + ": all " + total.toLocaleString() + " complete colourings checked in " + ms
+        + " ms · red wins " + red.toLocaleString() + " · blue wins " + blue.toLocaleString()
+        + " · draws " + draws + " · boards with two winners " + both
+        + " · red + blue = " + (red + blue).toLocaleString() + " ✓";
+      done && done({ total, red, blue, draws, both, ms });
+    }
+  };
+  step();
+}
+
+let THEOREM = {};
+function renderThFacts(){
+  const f = THEOREM;
+  $("th-facts").innerHTML =
+    factCard(f.t3 ? f.t3.total.toLocaleString() : "—", "3×3 colourings") +
+    factCard(f.t3 ? f.t3.draws : "—", "3×3 draws found") +
+    factCard(f.t3 ? f.t3.both : "—", "3×3 double wins") +
+    factCard(f.t4 ? f.t4.total.toLocaleString() : "—", "4×4 colourings") +
+    factCard(f.t4 ? f.t4.draws : "—", "4×4 draws found") +
+    factCard(f.t4 ? f.t4.both : "—", "4×4 double wins");
+}
+renderThFacts();
+$("th-run3").onclick = () => proveNoDraws(3, $("th-out"), r => { THEOREM.t3 = r; renderThFacts(); });
+$("th-run4").onclick = () => { $("th-run4").disabled = true; proveNoDraws(4, $("th-out"), r => { THEOREM.t4 = r; renderThFacts(); $("th-run4").disabled = false; }); };
+
+// ---------- bridge lab ----------
+// a fixed 7x7 position: red's chain has exactly one gap, and that gap is a
+// bridge. Completing it does NOT win, so the numbers stay informative.
+const LAB_N = 7;
+const LAB_RED  = [3, 10, 23, 30];                // (0,3) (1,3) — bridge — (3,2) (4,2)
+const LAB_BLUE = [21, 22, 25, 26, 27, 12, 19];   // blue trying to cross
+function labBoard(){
+  const arr = new Uint8Array(LAB_N * LAB_N);
+  for (const i of LAB_RED) arr[i] = RED;
+  for (const i of LAB_BLUE) arr[i] = BLUE;
+  return boardFromCells(LAB_N, arr);
+}
+// a chain of four bridges from row 0 to row 8: red cannot lose this connection
+// if it answers every invasion, and that is exactly what save-bridge does
+const LAD_N = 9;
+const LAD_RED = [[0, 4], [2, 3], [4, 2], [6, 1], [8, 0]].map(p => p[0] * LAD_N + p[1]);
+function ladderBoard(){
+  const arr = new Uint8Array(LAD_N * LAD_N);
+  for (const i of LAD_RED) arr[i] = RED;
+  return boardFromCells(LAD_N, arr);
+}
+function drawWithBridges(elId, st, R){
+  const save = LASTBR;
+  LASTBR = { red: findBridges(st, RED), blue: findBridges(st, BLUE) };
+  renderHexBoard($(elId), st, { R, bridges: true });
+  LASTBR = save;
+}
+drawWithBridges("bl-board", labBoard(), 19);
+drawWithBridges("bl-board2", ladderBoard(), 15);
+
+const POLICIES = [["uniform random", rolloutWinner], ["save-bridge   ", rolloutWinnerSaveBridge]];
+const pc = v => (v * 100).toFixed(1) + "%";
+const sgn = d => (d >= 0 ? "+" : "") + d.toFixed(1);
+
+$("bl-run").onclick = () => {
+  const btn = $("bl-run"); btn.disabled = true;
+  $("bl-out").textContent = "measuring…";
+  setTimeout(() => {
+    const N = 4000;
+    const base = labBoard();
+    const br = findBridges(base, RED)[0];
+    const inv = br.carriers[0], rep = bridgeReply(br, inv);
+    const good = cloneBoard(base); addStone(good, inv, BLUE); addStone(good, rep, RED);
+    const elsewhere = emptyCells(base).filter(i => i !== inv && i !== rep).pop();
+    const bad = cloneBoard(base); addStone(bad, inv, BLUE); addStone(bad, elsewhere, RED);
+    const lad = ladderBoard();
+
+    const t0 = performance.now();
+    let rows = "", rolls = 0;
+    for (const [name, pol] of POLICIES){
+      const rnd = makeRng(20260814);
+      const v0 = positionValue(base, BLUE, RED, N, rnd, pol);
+      const v1 = positionValue(good, BLUE, RED, N, rnd, pol);
+      const v2 = positionValue(bad,  BLUE, RED, N, rnd, pol);
+      const vl = positionValue(lad,  BLUE, RED, N, rnd, pol);
+      rolls += N * 4;
+      rows += "<tr><td class='pr-4 text-left font-bold'>" + name.trim() + "</td>"
+            + "<td class='px-3'>" + pc(v0) + "</td>"
+            + "<td class='px-3'>" + pc(v1) + " <span class='text-slate-400'>(" + sgn((v1 - v0) * 100) + ")</span></td>"
+            + "<td class='px-3'>" + pc(v2) + " <span class='text-slate-400'>(" + sgn((v2 - v0) * 100) + ")</span></td>"
+            + "<td class='px-3 font-bold'>" + Math.round(vl * N).toLocaleString() + " / " + N.toLocaleString()
+            + " <span class='text-slate-400 font-normal'>(" + pc(vl) + ")</span></td></tr>";
+    }
+    const ms = (performance.now() - t0).toFixed(0);
+    $("bl-out").innerHTML =
+      "<table class='mx-auto text-[11px] whitespace-nowrap'><thead><tr class='text-slate-400 uppercase text-[9px]'>"
+      + "<th class='pr-4 text-left'>rollout policy</th><th class='px-3'>untouched</th>"
+      + "<th class='px-3'>invaded &rarr; other carrier</th><th class='px-3'>invaded &rarr; elsewhere</th>"
+      + "<th class='px-3'>4-bridge ladder</th></tr></thead><tbody>" + rows + "</tbody></table>"
+      + "<div class='mt-2 text-slate-500'>red&#39;s win rate over " + N.toLocaleString()
+      + " random finishes per cell, " + rolls.toLocaleString() + " rollouts total, " + ms + " ms &middot; "
+      + "bridge = cells " + br.a + " and " + br.b + ", carriers " + inv + " and " + br.carriers[1]
+      + " &middot; &ldquo;elsewhere&rdquo; = cell " + elsewhere + ", the far corner<br>"
+      + "the ladder column is shown as a raw count on purpose: at " + N.toLocaleString()
+      + " finishes save-bridge will often come out clean, but over 15,000 finishes it measures "
+      + "about 99.97%, not 100% &mdash; one stone can carry two bridges, and only one can be answered</div>";
+    btn.disabled = false;
+  }, 20);
+};
+
+// ---------- the transpose automorphism, asserted live ----------
+(function(){
+  let checked = 0, bad = 0;
+  for (let n = 3; n <= 11; n++)
+    for (let i = 0; i < n * n; i++){
+      const a = neighbours(n, i).map(x => transposeIndex(n, x)).sort((x, y) => x - y);
+      const b = neighbours(n, transposeIndex(n, i)).sort((x, y) => x - y);
+      checked++;
+      if (a.length !== b.length || a.some((v, k) => v !== b[k])) bad++;
+    }
+  $("ss-out").textContent = "checked just now: transposing the neighbours of a cell gives the neighbours of the "
+    + "transposed cell, for all " + checked + " cells of every board from 3×3 to 11×11 — mismatches: " + bad;
+})();
+
+// ---------- boot ----------
+rebuild();
+draw();
+proveNoDraws(3, $("th-out"), r => { THEOREM.t3 = r; renderThFacts(); });
+
+// ===== UNDERSTAND step engine =====
+const STEPS = [
+ { title:"1. The board is a rhombus, and adjacency is six offsets",
+   why:"Nothing about Hex requires you to think in hexagons while you are writing the code. Store an n×n array — index r*n+c, values 0, 1, 2 — and change only what 'adjacent' means. Because each row of a Hex board is shifted half a hexagon to the right of the row above it, a cell touches the two cells beside it, the cell above and the one above-right, the cell below and the one below-left. That skew is the whole difference between this and a chessboard, and it is a six-entry table. The degree profile is a free sanity check on that table: six inside, four along an edge, three at the two obtuse corners of the rhombus and two at the two acute ones. If you ever get a sign wrong, that profile is what tells you.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">NB = [-1,0] [-1,+1] [0,-1] [0,+1] [+1,-1] [+1,0]<br><br>&nbsp;&nbsp;&nbsp;&nbsp;&#11041;&nbsp;&nbsp;&#11041;&nbsp;&nbsp;&larr; row r&minus;1 (shifted right)<br>&nbsp;&nbsp;&#11041;&nbsp;&nbsp;<b>&#11041;</b>&nbsp;&nbsp;&#11041;&nbsp;&nbsp;&larr; row r<br>&#11041;&nbsp;&nbsp;&#11041;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&larr; row r+1 (shifted right)<br><br>degrees: 6 interior &middot; 4 edge &middot; 3 / 2 at corners</div>`,
+   code:`const NB = [[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0]];
+
+function neighbours(n, idx){
+  const r = (idx / n) | 0, c = idx % n, out = [];
+  for (let k = 0; k < 6; k++){
+    const rr = r + NB[k][0], cc = c + NB[k][1];
+    if (rr >= 0 && rr < n && cc >= 0 && cc < n) out.push(rr * n + cc);
+  }
+  return out;
+}` },
+
+ { title:"2. Hex is a connectivity problem, not a search problem",
+   why:"Ask what the program actually has to know and the answer is always the same question: is this stone in the same group as that stone. Nothing else. Stones never move, never get captured, never change colour — so the partition of the board into connected groups only ever gets coarser, never finer. A relation that only merges is exactly what a disjoint-set forest is for. If you instead run a breadth-first search after every move you are recomputing from scratch a fact you already knew a move ago, and you are doing it on a board that grows quadratically. Union-find turns each move into a handful of pointer writes that never get more expensive as the board fills.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">what the game asks: &quot;same group?&quot;<br>what never happens: a group SPLITTING<br><br>BFS after every move &nbsp;&rarr;&nbsp; O(n&sup2;) each time, from scratch<br>union-find&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &rarr;&nbsp; ~O(&alpha;) per move, incremental<br><br>&alpha; = inverse Ackermann &lt; 5 for any board you can draw</div>`,
+   code:`function find(st, x){
+  let r = x;
+  while (st.parent[r] !== r) r = st.parent[r];
+  while (st.parent[x] !== r){ const nx = st.parent[x]; st.parent[x] = r; x = nx; }
+  return r;                       // path compression
+}
+function union(st, a, b){
+  let ra = find(st, a), rb = find(st, b);
+  if (ra === rb) return false;
+  if (st.rank[ra] < st.rank[rb]){ const t = ra; ra = rb; rb = t; }
+  st.parent[rb] = ra;             // union by rank
+  if (st.rank[ra] === st.rank[rb]) st.rank[ra]++;
+  return true;
+}` },
+
+ { title:"3. Four cells that do not exist",
+   why:"The elegant part. Allocate four extra slots past the end of the board — RED_TOP, RED_BOTTOM, BLUE_LEFT, BLUE_RIGHT — that nobody can play on and nothing draws. Whenever a red stone lands on row 0 it is unioned with RED_TOP; on row n−1, with RED_BOTTOM. Blue does the same with columns 0 and n−1. Now 'does red have a chain touching both edges' is not a traversal, it is find(RED_TOP) === find(RED_BOTTOM). One forest can safely hold both colours because you only ever union same-coloured cells, so a red tree and a blue tree can never end up sharing a root. This is the move that deletes the game engine.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">cells&nbsp; 0 &hellip; n&sup2;&minus;1&nbsp;&nbsp; real, clickable<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n&sup2;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; RED_TOP<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n&sup2;+1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; RED_BOTTOM<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n&sup2;+2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; BLUE_LEFT<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n&sup2;+3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; BLUE_RIGHT<br><br>win test &nbsp;&rarr;&nbsp; find(n&sup2;) === find(n&sup2;+1)</div>`,
+   code:`const vTop = n => n*n, vBot = n => n*n+1,
+      vLeft = n => n*n+2, vRight = n => n*n+3;
+
+function winnerFlags(st){
+  const n = st.n;
+  return { red:  find(st, vTop(n))  === find(st, vBot(n)),
+           blue: find(st, vLeft(n)) === find(st, vRight(n)) };
+}` },
+
+ { title:"4. A move is at most seven unions",
+   why:"Write the colour into the cell array, union with any same-coloured neighbours among the six, and union with a border node if the cell sits on one of your own two edges. That is the entire move function. There is nothing to undo, nothing to capture, no liberties to recount and no board rescan — and crucially the cost does not grow as the game goes on. Compare that with almost any other board game, where a late-game move is far more expensive to process than an early one. Undo is the one thing union-find will not give you cheaply, because merges cannot be reversed, so keep the move list and rebuild from scratch; on a 13×13 board that is 169 unions and is instant.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">place RED at (0,4)<br>&nbsp;&nbsp;union(cell, RED_TOP)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &larr; it is on row 0<br>&nbsp;&nbsp;union(cell, left neighbour)&nbsp; if red<br>&nbsp;&nbsp;union(cell, below-left)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; if red<br>&nbsp;&nbsp;&hellip; up to 6 neighbours<br><br>worst case = 6 + 2 = <b>8 unions</b>, and it never gets worse</div>`,
+   code:`function addStone(st, idx, colour){
+  const n = st.n;
+  if (st.cells[idx] !== EMPTY) return false;
+  st.cells[idx] = colour;
+  const r = (idx / n) | 0, c = idx % n;
+  if (colour === RED){
+    if (r === 0)     union(st, idx, vTop(n));
+    if (r === n - 1) union(st, idx, vBot(n));
+  } else {
+    if (c === 0)     union(st, idx, vLeft(n));
+    if (c === n - 1) union(st, idx, vRight(n));
+  }
+  for (const nb of neighbours(n, idx))
+    if (st.cells[nb] === colour) union(st, idx, nb);
+  return true;
+}` },
+
+ { title:"5. The Hex theorem: a full board is never a draw",
+   why:"Every other classic board game can end level. Hex cannot, and this is not a rule bolted on — it is a theorem about the hexagonal grid. Colour every cell of a Hex board any way you like, ignoring whose turn it was, and exactly one of the two connections will exist: never zero, never both. The 'never both' half is easy to feel — a red top-to-bottom chain and a blue left-to-right chain would have to cross, and hexagons only meet edge to edge. The 'never zero' half is the deep one; it is equivalent to the Brouwer fixed-point theorem. Do not take either on faith. A 3×3 board has 2⁹ = 512 complete colourings and a 4×4 has 2¹⁶ = 65,536, both small enough to enumerate with a bitmask and check, which is exactly what this page does.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for every mask 0 &hellip; 2<sup>n&sup2;</sup>&minus;1<br>&nbsp;&nbsp;bit k set &rarr; cell k is BLUE, else RED<br>&nbsp;&nbsp;assert redWins !== blueWins<br><br>3&times;3&nbsp;&nbsp;&nbsp; 512 colourings &rarr; 0 draws, 0 double wins<br>4&times;4&nbsp; 65,536 colourings &rarr; 0 draws, 0 double wins<br><br>a theorem you ran, not a theorem you read</div>`,
+   code:`function fullBoardFlags(n, mask){
+  const st = newBoard(n);
+  for (let k = 0; k < n*n; k++)
+    addStone(st, k, ((mask >> k) & 1) ? BLUE : RED);
+  return winnerFlags(st);
+}
+// draws must be 0 and double-wins must be 0, for every single mask` },
+
+ { title:"6. Why 'no draws' is the licence to be stupid",
+   why:"Here is the connection almost nobody points out. Monte-Carlo evaluation means: from this position, finish the game at random many times and count how often you won. In chess or Go that is close to useless, because a random finish produces a position nobody can score without a heuristic, and because draws and repetitions need handling. In Hex the random finish fills the board, the theorem says a full board has exactly one winner, and reading off that winner is the same two integer comparisons you already wrote. So the evaluator needs no domain knowledge, no piece values, no shape library and no draw branch. The theorem is not decoration on the page — it is the reason the AI in this file is thirty lines long.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">random finish in chess &rarr; a position needing evaluation<br>random finish in Go&nbsp;&nbsp;&nbsp; &rarr; scoring rules, seki, dame&hellip;<br>random finish in Hex&nbsp;&nbsp; &rarr; <b>somebody has already won</b><br><br>so: fill(); return winnerUF(board);<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8593;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; this can never return EMPTY</div>`,
+   code:`function rolloutWinner(st, colourToMove, rnd){
+  const w0 = winnerUF(st);
+  if (w0) return w0;                       // already over
+  const b = cloneBoard(st), e = emptyCells(b);
+  for (let i = e.length - 1; i > 0; i--){  // Fisher–Yates
+    const j = (rnd() * (i + 1)) | 0;
+    const t = e[i]; e[i] = e[j]; e[j] = t;
+  }
+  let col = colourToMove;
+  for (const idx of e){ addStone(b, idx, col); col = 3 - col; }
+  return winnerUF(b);                      // never EMPTY
+}` },
+
+ { title:"7. A Monte-Carlo player with no chess in it",
+   why:"For each empty cell: play it, run N random finishes, record the fraction you won. Play the best fraction. Read that again and notice there is no evaluation function anywhere — no 'centre is strong', no 'connect toward your edge', no opening table. And yet it plays a game you recognise, because a cell that participates in many of your possible connections simply survives more random finishes. Keep the wins and plays as running counters instead of one big batch and you get two things free: the UI can add a few rollouts per frame and animate the estimates converging, and you can stop the search whenever you want. Note also that a move which wins outright scores exactly 1.0 with any budget, because the rollout short-circuits on a decided board and no random fill can undo a completed connection.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">for each empty cell c:<br>&nbsp;&nbsp;play c &rarr; run N random finishes &rarr; wins / N<br><br>&nbsp;&nbsp;&#11041; 41&nbsp;&nbsp;&#11041; 55&nbsp;&nbsp;&#11041; 62&nbsp;&nbsp;&#11041; 58&nbsp;&nbsp;&#11041; 44<br>&nbsp;&nbsp;&#11041; 47&nbsp;&nbsp;&#11041; 63&nbsp;&nbsp;<b>&#11041; 71</b>&nbsp;&nbsp;&#11041; 60&nbsp;&nbsp;&#11041; 46<br><br>zero domain knowledge &mdash; the numbers ARE the strategy</div>`,
+   code:`function mcRun(st, mc, per, rnd){
+  const other = 3 - mc.colour;
+  for (let i = 0; i < mc.cands.length; i++){
+    const b = cloneBoard(st);
+    addStone(b, mc.cands[i], mc.colour);
+    for (let t = 0; t < per; t++){
+      if (rolloutWinner(b, other, rnd) === mc.colour) mc.wins[i]++;
+      mc.plays[i]++; mc.total++;
+    }
+  }
+  return mc;
+}` },
+
+ { title:"8. The bridge: a connection nobody can cut",
+   why:"Two same-coloured stones a hop apart in one of six particular directions share exactly two empty neighbours, called the carriers. That pair is already connected in every sense that matters, because if the opponent plays one carrier you immediately play the other and the link survives. This is why strong Hex looks so loose to a beginner — good players build with gaps, because the gaps are connections that cost nothing to maintain and cover twice the ground. Detection is a table of six offsets with their carrier pairs; there is nothing to search. The same idea extends to edge templates, which connect a stone to your own border through a fan of empty cells with a guaranteed reply for every invasion.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">&nbsp;&nbsp;&nbsp;&nbsp;&#11041;<b style="color:#dc2626">&#9679;</b><br>&nbsp;&nbsp;&#11041;<span style="color:#ca8a04">c1</span>&nbsp;&#11041;<span style="color:#ca8a04">c2</span><br>&#11041;<b style="color:#dc2626">&#9679;</b><br><br>blue takes c1&nbsp; &rarr;&nbsp; red takes c2&nbsp; &rarr; still joined<br>blue takes c2&nbsp; &rarr;&nbsp; red takes c1&nbsp; &rarr; still joined<br><br>six directions, two carriers each, zero searching</div>`,
+   code:`const BRIDGES = [
+  [-2, 1, [-1,0], [-1,1]], [-1, 2, [-1,1], [0,1]],
+  [ 1, 1, [ 0,1], [ 1,0]], [ 2,-1, [ 1,0], [1,-1]],
+  [ 1,-2, [ 1,-1],[ 0,-1]], [-1,-1, [ 0,-1],[-1,0]]
+];
+const bridgeReply = (br, invaded) =>
+  br.carriers[0] === invaded ? br.carriers[1]
+: br.carriers[1] === invaded ? br.carriers[0] : -1;` },
+
+ { title:"9. The measurement that proved the obvious claim wrong",
+   why:"The tempting thing to write next is that invading a bridge barely moves the evaluation, since nothing was really cut. So I measured it, on a fixed position whose only red gap is a bridge: evaluate, then let blue invade a carrier and red answer on the other, then evaluate again with the same budget. The win rate did not stay put — it jumped by roughly eighteen points, every run. The claim was wrong, and the reason is worth more than the claim was: a uniform random finish has no idea what a bridge is. It scatters stones, so red only keeps the link when it happens to land on a carrier first, and resolving the bridge explicitly therefore really is a gain in that fantasy world. The evaluator, not the position, was the thing that changed.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">expected:&nbsp; invade + answer &rarr; win rate barely moves<br>measured:&nbsp; <b style="color:#b91c1c">+18 points, every single run</b><br><br>because a uniform rollout treats the two carriers<br>as ordinary cells &mdash; red keeps the bridge only<br>when the shuffle is kind to it<br><br>the bridge is free to a PLAYER,<br>not to a blind random fill</div>`,
+   code:`// what the page actually prints, both policies, same budget:
+const v0 = positionValue(base, BLUE, RED, 4000, rnd, policy);
+
+const good = cloneBoard(base);
+addStone(good, invaded, BLUE);
+addStone(good, bridgeReply(br, invaded), RED);
+const v1 = positionValue(good, BLUE, RED, 4000, rnd, policy);
+
+// uniform random  : v1 - v0 is about +18 points   <- the bridge was NOT free
+// save-bridge     : v1 - v0 collapses to a few points` },
+
+ { title:"10. Save-bridge: one pattern that fixes the rollout",
+   why:"The repair is the one every serious Hex program uses, and it is a single pattern rather than an evaluation function: while filling the board at random, if the opponent takes a carrier of one of your bridges, answer on the other carrier before playing anything else. Everything else stays uniformly random. Finding the reply is a local lookup — walk the ring of six neighbours around the cell just played, and if positions i and i+2 hold opponent stones with position i+1 still empty, then the cell just played was a carrier and i+1 is the reply. Keep pending replies on a stack rather than a queue, because an invasion has to be answered now and the newest one outranks anything left over. With that in place the page's bridge ladder — four bridges chained from the top edge to the bottom — is held by red in roughly 999 rollouts in 1,000, against about 73 in 100 for the blind policy. It is not quite 100%, and the reason is a genuine Hex tactic rather than a bug: one stone can sit on the carriers of two different bridges at once, and only one of them can be answered.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">ring of the cell just played, cyclic order:<br>E &middot; SE &middot; SW &middot; W &middot; NW &middot; NE<br><br>ring[i] and ring[i+2] both opponent<br>ring[i+1] still empty<br>&rArr; you just invaded a bridge; reply at ring[i+1]<br><br>ladder of 4 bridges, red to keep:<br>uniform&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ~73%&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; save-bridge&nbsp; <b>~99.9%</b><br>the missing 0.1% = one stone, two bridges</div>`,
+   code:`const RING = [[0,1],[1,0],[1,-1],[0,-1],[-1,0],[-1,1]];  // cyclic order
+
+function saveBridgeReplies(st, idx, colour){
+  const ring = ringCells(st.n, idx), other = 3 - colour, out = [];
+  for (let i = 0; i < 6; i++){
+    const a = ring[i], mid = ring[(i+1) % 6], b = ring[(i+2) % 6];
+    if (a < 0 || b < 0 || mid < 0) continue;
+    if (st.cells[a] === other && st.cells[b] === other
+        && st.cells[mid] === EMPTY) out.push(mid);
+  }
+  return out;
+}
+// in the rollout: take a queued reply if there is one, else a random cell` },
+
+ { title:"11. Strategy stealing, and the pie rule that patches it",
+   why:"Suppose the second player had a winning strategy. The first player could steal it: play any move at all, then pretend to be the second player and follow that strategy, treating the extra stone as if it were not there — and if the strategy ever calls for a cell that stone already occupies, play anywhere else and treat the new stone as the spare. An extra stone in Hex is never a liability, because stones only connect and nothing can be captured. So the first player would win too, and both cannot win the same game, because the theorem forbids draws and forbids double wins. Contradiction: the second player has no winning strategy, and since Hex is finite and drawless someone must have one, so the first player does. Notice what that argument never does — it never names a move. So the game is patched socially instead: the pie rule, borrowed from 'you cut, I choose'. Player one places a stone; player two may reply normally or take that stone as their own, which makes opening too strongly a mistake. Implementing it is where the geometry pays off, because the rhombus is symmetric under (r,c) → (c,r): that map sends row 0 to column 0 and row n−1 to column n−1, and it permutes the six neighbour offsets among themselves, so it genuinely is a graph automorphism. Swap = transpose the stone, flip its colour. One line.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">assume player 2 has a winning strategy S<br>&rarr; player 1 plays anywhere, then plays S<br>&rarr; the spare stone can never hurt (no captures)<br>&rarr; both players win &rArr; impossible, there are no draws<br>&rArr; <b>player 1 wins</b>, and the proof names <b>no move at all</b><br><br>the patch: transpose (r,c) &rarr; (c,r), flip the colour<br>[-1,0]&harr;[0,-1]&nbsp; [-1,+1]&harr;[+1,-1]&nbsp; [0,+1]&harr;[+1,0]<br>row 0 &harr; column 0&nbsp;&nbsp;&nbsp; row n&minus;1 &harr; column n&minus;1</div>`,
+   code:`// the strategy-stealing proof is non-constructive: it establishes that
+// a winning first move EXISTS without ever identifying one, which is why
+// nobody can tell you the winning opening on 11x11. Hence the pie rule:
+
+function transposeIndex(n, idx){
+  return (idx % n) * n + ((idx / n) | 0);
+}
+function applySwap(moves, n){
+  if (moves.length !== 1) return null;       // only ever move 2
+  return [{ idx: transposeIndex(n, moves[0].idx),
+            colour: 3 - moves[0].colour }];
+}` },
+
+ { title:"12. Drawing it: six points, two spacings, four honest borders",
+   why:"A pointy-top hexagon of circumradius R is six points at 60° steps starting straight up. Its width is √3·R, rows sit 1.5·R apart vertically, and each row is offset half a width to the right — which is the very same skew as the neighbour table, so the picture and the array cannot drift apart. For the four coloured borders, resist the urge to draw straight lines by eye. Walk the boundary cells and emit their own outer vertices: for row 0 that is vertices 5, 0, 1 of every hexagon in order, and it joins up on its own because vertex 1 of one hexagon is numerically identical to vertex 5 of the next. The result meets the board exactly at every size, and it is the same twelve lines for all four edges.",
+   concept:`<div class="bg-slate-100 p-4 rounded text-xs w-full text-center font-mono">pointy-top hexagon, circumradius R<br>width = &radic;3&middot;R&nbsp;&nbsp; row step = 1.5&middot;R down, &radic;3&middot;R/2 right<br><br>vertices&nbsp; 0 top &middot; 1 upper-right &middot; 2 lower-right<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3 bottom &middot; 4 lower-left &middot; 5 upper-left<br><br>top border&nbsp;&nbsp;&nbsp; = 5,0,1 of every cell in row 0<br>right border = 0,1,2 of every cell in column n&minus;1</div>`,
+   code:`function hexPoints(cx, cy, R){
+  const p = [];
+  for (let k = 0; k < 6; k++){
+    const a = (-90 + 60 * k) * Math.PI / 180;
+    p.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]);
+  }
+  return p;
+}
+const W = Math.sqrt(3) * R;
+const cx = pad + W/2 + c * W + r * W/2;   // the half-width row skew
+const cy = pad + R + r * 1.5 * R;` }
+];
+const stepsEl = document.getElementById("steps");
+const prevB = document.getElementById("prev"), nextB = document.getElementById("next-step"), autoB = document.getElementById("auto");
+let curStep = 0;
+STEPS.forEach((s, i) => { const bn = document.createElement("button"); bn.className = "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-violet-400 text-sm"; bn.innerHTML = `<div class="font-semibold">${s.title}</div>`; bn.onclick = () => showStep(i); stepsEl.appendChild(bn); });
+function showStep(i){ curStep = i; const s = STEPS[i];
+  document.getElementById("concept").innerHTML = `<div class="fade-in w-full flex items-center justify-center">${s.concept}</div>`;
+  document.getElementById("why").innerHTML = `<span class="fade-in inline-block">${s.why}</span>`;
+  document.getElementById("code").textContent = s.code;
+  stepsEl.querySelectorAll("button").forEach((bn, idx) => { bn.className = idx === i ? "w-full text-left p-3 rounded-lg border-2 border-violet-500 bg-violet-50 text-sm font-semibold" : "w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-violet-400 text-sm"; });
+}
+prevB.onclick = () => showStep(Math.max(0, curStep - 1));
+nextB.onclick = () => showStep(Math.min(STEPS.length - 1, curStep + 1));
+let tm = null; autoB.onclick = () => { if (tm){ clearInterval(tm); tm = null; autoB.textContent = "▶ Auto-play"; return; } autoB.textContent = "⏸ Pause"; showStep(0); tm = setInterval(() => { if (curStep >= STEPS.length - 1){ clearInterval(tm); tm = null; autoB.textContent = "▶ Replay"; return; } showStep(curStep + 1); }, 3500); };
+showStep(0);
+
+function copy(btn){ const pre = btn.parentElement.querySelector("pre"); navigator.clipboard.writeText(pre.textContent); const o = btn.textContent; btn.textContent = "✓ Copied!"; setTimeout(() => btn.textContent = o, 1500); }
+</script>
+</body>
+</html>
