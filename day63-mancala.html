@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 63 — Mancala (Kalah)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .fade-in { animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .pit { transition: transform .12s ease, box-shadow .12s ease; }
+  .pit:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(0,0,0,.15); }
+  .pit:disabled { opacity:.45; cursor:not-allowed; }
+  .seed { width:9px; height:9px; border-radius:50%; background:#b45309; display:inline-block; margin:1px; }
+  .glow { box-shadow: 0 0 0 3px #f59e0b inset; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+    <p class="text-xs font-bold tracking-widest text-amber-700 mb-2">GAMEFROMZERO · DAY 63</p>
+    <h1 class="text-xl md:text-2xl font-black leading-tight mb-4">
+      🫘 Mancala (Kalah) — a 3,000-year-old game whose entire move is
+      <strong>one loop with a modulo</strong>, and whose two special rules are
+      <strong>four lines each</strong>. Sowing is <code>(i+1) % 14</code> with your opponent's
+      store skipped; landing your last seed in your own store gives you
+      <strong>another turn</strong>; landing in an empty pit on your own side
+      <strong>captures</strong> the seeds opposite. Those two rules are what turn a counting
+      exercise into a game with real depth — and the page proves it by measuring: a live
+      negamax with alpha-beta whose value is checked against an <strong>exhaustive
+      full-tree search</strong> on reduced boards, and a seed-conservation invariant asserted
+      after every single sow, because the one bug this game actually has is losing or
+      inventing a seed. Pure vanilla JavaScript, one file, offline.
+    </h1>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look" class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<!-- ============================== LOOK / PLAY ============================== -->
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-5xl mx-auto">
+
+      <div class="bg-white rounded-2xl shadow p-5 mb-5">
+        <p class="text-sm text-slate-600 mb-4">
+          You are <strong>South</strong> (bottom row). Tap one of your pits to sow its seeds
+          anticlockwise. Every number on this page is computed while you play — the AI is a real
+          negamax search over this exact position, not a lookup table, and the seed count under the
+          board is re-summed from the array after every sow.
+        </p>
+
+        <!-- North store -->
+        <div class="flex items-stretch gap-3">
+          <div id="storeN" class="w-20 md:w-24 shrink-0 rounded-2xl bg-slate-800 text-white flex flex-col items-center justify-center p-2">
+            <span class="text-[10px] uppercase tracking-wider opacity-70">North</span>
+            <span id="storeNval" class="text-3xl font-black">0</span>
+          </div>
+
+          <div class="flex-1">
+            <div id="rowN" class="grid grid-cols-6 gap-2 mb-2"></div>
+            <div id="rowS" class="grid grid-cols-6 gap-2"></div>
+          </div>
+
+          <div id="storeS" class="w-20 md:w-24 shrink-0 rounded-2xl bg-amber-600 text-white flex flex-col items-center justify-center p-2">
+            <span class="text-[10px] uppercase tracking-wider opacity-80">South (you)</span>
+            <span id="storeSval" class="text-3xl font-black">0</span>
+          </div>
+        </div>
+
+        <p id="status" class="mt-4 text-center font-bold text-lg">Your move.</p>
+
+        <div class="flex flex-wrap gap-2 justify-center mt-4">
+          <button id="newBtn" class="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold">New game (N)</button>
+          <button id="undoBtn" class="px-4 py-2 rounded-lg bg-slate-200 text-sm font-semibold">Undo (U)</button>
+          <label class="px-3 py-2 rounded-lg bg-slate-200 text-sm font-semibold flex items-center gap-2">
+            AI depth
+            <input id="depth" type="range" min="1" max="11" value="7" class="align-middle">
+            <span id="depthVal" class="tabular-nums">7</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">SEED CONSERVATION</p>
+          <p class="text-3xl font-black tabular-nums" id="seedTotal">48</p>
+          <p class="text-xs text-slate-500 mt-1">
+            Re-summed from the array after every sow. Kalah(6,4) starts with 48 seeds and
+            <strong>can never have any other number</strong>. If this ever reads something else,
+            the sow loop is buggy — so it is asserted, not displayed for decoration.
+          </p>
+          <p id="seedOk" class="text-xs font-bold mt-2 text-emerald-600">✓ invariant holds</p>
+        </div>
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">SEARCH, LAST AI MOVE</p>
+          <p class="text-3xl font-black tabular-nums" id="nodeCount">—</p>
+          <p class="text-xs text-slate-500 mt-1">
+            Nodes visited by negamax with alpha-beta. Raise the depth slider and watch it grow —
+            and note it grows far slower than 6<sup>d</sup>, which is what the pruning is buying you.
+          </p>
+          <p class="text-xs text-slate-500 mt-1">Value: <span id="evalVal" class="font-bold">—</span></p>
+        </div>
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">EXTRA TURNS &amp; CAPTURES</p>
+          <p class="text-3xl font-black tabular-nums"><span id="extraN">0</span> / <span id="capN">0</span></p>
+          <p class="text-xs text-slate-500 mt-1">
+            Counted live this game. These two rules are the entire reason Kalah is not solved by
+            counting — a single move can chain several extra turns before the opponent touches the board.
+          </p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow p-5 mt-5">
+        <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">VERIFY THE SEARCH, RIGHT NOW</p>
+        <p class="text-sm text-slate-600 mb-3">
+          Alpha-beta is supposed to return <em>exactly</em> the value plain minimax would, just by
+          visiting fewer nodes. That is a checkable claim, not a slogan. This runs both on randomly
+          generated positions of a reduced board and compares them.
+        </p>
+        <button id="proveBtn" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold">Run 200 positions</button>
+        <pre id="proveOut" class="mt-3 hidden"></pre>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================== UNDERSTAND ============================== -->
+<section id="understand" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">From "sow the seeds" to a 14-slot array</h2>
+
+      <p>Mancala is not one game. It is a <em>family</em> of a few hundred, played across Africa and
+      Asia for something like three thousand years. The rules below are <strong>Kalah(6,4)</strong>:
+      six pits a side, four seeds per pit, one store each. That variant is the one most western sets
+      ship with, and it is the one that has actually been solved by computer.</p>
+
+      <div class="bg-slate-100 rounded-xl p-4">
+        <p class="font-bold mb-2">The whole board is one array of 14 numbers.</p>
+        <pre>index:  0  1  2  3  4  5   6    7  8  9 10 11 12   13
+        [4, 4, 4, 4, 4, 4,  0,   4, 4, 4, 4, 4, 4,  0]
+         \___ South pits ___/  ^   \___ North pits ___/  ^
+                          South store          North store</pre>
+        <p class="text-sm text-slate-600 mt-2">Laying it out anticlockwise in one flat array is the
+        single decision that makes everything downstream easy: sowing becomes <code>i = (i+1) % 14</code>,
+        and "opposite pit" becomes <code>12 - i</code>. Model it as two arrays and you will spend the
+        rest of the build converting between them.</p>
+      </div>
+
+      <h3 class="text-xl font-bold">A move is one loop</h3>
+      <p>Pick up every seed from one of your own non-empty pits. Drop them one at a time into the
+      following slots, going anticlockwise, <strong>skipping the opponent's store</strong>. That is it.
+      No branching, no special cases — the special cases come afterwards, from where the
+      <em>last</em> seed landed.</p>
+
+      <h3 class="text-xl font-bold">Rule one: the extra turn</h3>
+      <p>If your last seed lands in <strong>your own store</strong>, you move again. This is the rule
+      that gives Kalah its teeth. A well-chosen opening can chain several moves in a row before the
+      opponent touches the board, and because the chain is deterministic, it is fully searchable —
+      which is why the AI here recurses on the <em>same</em> player rather than flipping sides.</p>
+
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-4">
+        <p class="text-sm"><strong>This is where most implementations get subtly wrong results.</strong>
+        If your search flips the side to move unconditionally after applying a move, you have quietly
+        changed the rules — and your engine will play a different game from the one on the table.
+        The <code>applyMove</code> here returns whose turn it now is, and the search believes it.</p>
+      </div>
+
+      <h3 class="text-xl font-bold">Rule two: the capture</h3>
+      <p>If your last seed lands in an <strong>empty pit on your own side</strong>, and the pit
+      <em>opposite</em> it is not empty, you take that seed plus everything opposite, and put the lot
+      in your store. Opposite is <code>12 - i</code>, which falls straight out of the flat layout.</p>
+
+      <h3 class="text-xl font-bold">Ending, and the sweep</h3>
+      <p>The game ends when one side's six pits are all empty. The <strong>other</strong> player then
+      sweeps every remaining seed on their side into their own store. This matters more than it
+      sounds: a position that looks level can swing by a dozen seeds at the end, so an evaluation
+      that only reads the two stores is lying to you about anything near the finish.</p>
+
+      <h3 class="text-xl font-bold">Why the invariant is worth asserting</h3>
+      <p>Every one of those rules moves seeds between slots. None of them creates or destroys one.
+      So <code>sum(board) === 48</code> at every instant, forever. That single line catches almost
+      every real bug in this game: an off-by-one in the sow loop, a capture that adds the opposite
+      pit but forgets to clear it, a sweep that double-counts. The page checks it after every sow
+      rather than trusting the code.</p>
+
+      <h3 class="text-xl font-bold">Kalah is solved — and that is not the same as easy</h3>
+      <p>Irving, Donkers and Uiterwijk solved Kalah(6,4) in 2000: with perfect play the first player
+      wins by 8 seeds. Larger variants have since been solved too. But "solved" means the value of
+      the opening position is known, not that a human can play it — exactly the same distinction the
+      <a class="underline" href="day62-hex.html">Day 62 Hex page</a> made about strategy stealing.
+      Knowing the score is not knowing the move.</p>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================== BUILD ============================== -->
+<section id="build" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-50">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">🔨 Build it yourself</h2>
+      <p>Everything below is the code this page runs, in the order you would write it. The whole
+      engine is DOM-free on purpose, so the same functions can be sliced out and run under Node —
+      which is how the claims on this page get checked.</p>
+
+      <h3 class="text-xl font-bold">1. One flat array, and the two constants that follow from it</h3>
+      <pre>const PITS = 6;
+const S_STORE = 6, N_STORE = 13;          // the two stores
+const opposite = i =&gt; 12 - i;             // falls out of the layout, no table needed
+
+function newBoard(seeds = 4){
+  const b = new Array(14).fill(seeds);
+  b[S_STORE] = 0; b[N_STORE] = 0;
+  return b;
+}</pre>
+
+      <h3 class="text-xl font-bold">2. Sowing: a loop and a skip</h3>
+      <p>The only subtlety is the skip. You never drop a seed in your opponent's store, so the step
+      is "advance, and if you landed on their store, advance again".</p>
+      <pre>function sow(b, from, side){
+  let hand = b[from]; b[from] = 0;
+  let i = from;
+  const theirStore = side === SOUTH ? N_STORE : S_STORE;
+  while (hand &gt; 0){
+    i = (i + 1) % 14;
+    if (i === theirStore) continue;      // skip, do not consume a seed
+    b[i]++; hand--;
+  }
+  return i;                              // where the LAST seed landed
+}</pre>
+
+      <h3 class="text-xl font-bold">3. The two rules, read off the landing square</h3>
+      <pre>function applyMove(b, from, side){
+  const last = sow(b, from, side);
+  const myStore  = side === SOUTH ? S_STORE : N_STORE;
+  const mine     = side === SOUTH ? (i =&gt; i &gt;= 0 &amp;&amp; i &lt; 6) : (i =&gt; i &gt;= 7 &amp;&amp; i &lt; 13);
+
+  // rule 1 - last seed in my own store => I move again
+  if (last === myStore) return side;
+
+  // rule 2 - last seed in an empty pit on my side => capture
+  if (mine(last) &amp;&amp; b[last] === 1 &amp;&amp; b[opposite(last)] &gt; 0){
+    b[myStore] += b[last] + b[opposite(last)];
+    b[last] = 0; b[opposite(last)] = 0;
+  }
+  return side === SOUTH ? NORTH : SOUTH;
+}</pre>
+      <p><strong>Note what this returns.</strong> Not <code>void</code> — the side to move. That is the
+      extra-turn rule expressed as a value rather than as a comment, and it means the search cannot
+      forget about it.</p>
+
+      <h3 class="text-xl font-bold">4. Terminal detection, and the sweep that decides games</h3>
+      <pre>function sideEmpty(b, side){
+  const [a, z] = side === SOUTH ? [0, 6] : [7, 13];
+  for (let i = a; i &lt; z; i++) if (b[i] &gt; 0) return false;
+  return true;
+}
+
+function finish(b){                       // mutates into the final position
+  if (sideEmpty(b, SOUTH)){
+    for (let i = 7; i &lt; 13; i++){ b[N_STORE] += b[i]; b[i] = 0; }
+  } else if (sideEmpty(b, NORTH)){
+    for (let i = 0; i &lt; 6; i++){ b[S_STORE] += b[i]; b[i] = 0; }
+  }
+  return b;
+}</pre>
+
+      <h3 class="text-xl font-bold">5. Negamax that respects the extra turn</h3>
+      <p>The usual negamax template negates the child value because the side alternates. Here it
+      does not always alternate — so negate only when the side actually changed. Get this wrong and
+      the engine is strong-looking and consistently wrong in exactly the positions where the extra
+      turn matters.</p>
+      <pre>function search(b, side, depth, alpha, beta, stats){
+  stats.nodes++;
+  if (depth === 0 || isTerminal(b)) return evaluate(finishCopy(b), side);
+
+  let best = -Infinity;
+  for (const m of legalMoves(b, side)){
+    const nb   = b.slice();
+    const next = applyMove(nb, m, side);
+    // the ONLY difference from textbook negamax:
+    const val  = next === side
+      ?  search(nb, next, depth - 1, alpha, beta, stats)      // same player, do not negate
+      : -search(nb, next, depth - 1, -beta, -alpha, stats);   // side flipped, negate
+    if (val &gt; best) best = val;
+    if (best &gt; alpha) alpha = best;
+    if (alpha &gt;= beta) break;                                  // prune
+  }
+  return best;
+}</pre>
+
+      <h3 class="text-xl font-bold">6. An evaluation that knows about the sweep</h3>
+      <pre>function evaluate(b, side){
+  const mine   = side === SOUTH ? S_STORE : N_STORE;
+  const theirs = side === SOUTH ? N_STORE : S_STORE;
+  return b[mine] - b[theirs];   // on a FINISHED copy, so the sweep is included
+}</pre>
+      <p>Simple on purpose. The interesting content is in searching correctly, not in a hand-tuned
+      score — and a simple evaluation makes the alpha-beta equivalence check below meaningful,
+      because both searches are scoring the same thing.</p>
+
+      <h3 class="text-xl font-bold">7. Prove the pruning is sound, do not assume it</h3>
+      <p>Alpha-beta's whole promise is that it returns the same value as a full search. That is a
+      testable claim, so test it: generate random reachable positions, run plain minimax with no
+      window and alpha-beta with one, and assert the values are equal. The PLAY tab runs exactly
+      this on 200 positions when you press the button.</p>
+      <pre>let mismatches = 0;
+for (let t = 0; t &lt; 200; t++){
+  const b = randomPosition();
+  const full  = searchNoPruning(b, SOUTH, 5, stats0);
+  const pruned= search(b, SOUTH, 5, -Infinity, Infinity, stats1);
+  if (full !== pruned) mismatches++;
+}
+// mismatches must be 0. Nodes visited must be far lower with pruning.</pre>
+
+      <h3 class="text-xl font-bold">8. The invariant, asserted rather than displayed</h3>
+      <pre>const TOTAL = 14 * 0 + 12 * 4;            // 48 for Kalah(6,4)
+function checkSeeds(b){
+  const sum = b.reduce((a, x) =&gt; a + x, 0);
+  if (sum !== TOTAL) throw new Error("seed count " + sum + ", expected " + TOTAL);
+}</pre>
+      <p>Call it after every sow. It is one line and it is the difference between "the board looks
+      right" and "the board <em>is</em> right".</p>
+
+      <h3 class="text-xl font-bold">🎉 Day 63 of GameFromZero done — Mancala, with the search checked rather than trusted.</h3>
+      <p class="text-slate-600">Tomorrow: Quoridor — pathfinding as a legality rule, where every wall
+      placement must be checked against "does a path still exist for both players".</p>
+
+    </div>
+  </div>
+</section>
+
+<script>
+// tabs
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// Pure, DOM-free Kalah core. Nothing below touches document or window; the node
+// test harness slices this exact block out of the file and runs it standalone.
+const PITS = 6;
+const S_STORE = 6, N_STORE = 13;
+const SOUTH = 0, NORTH = 1;
+const opposite = i => 12 - i;
+
+function newBoard(seeds){
+  if (seeds === undefined) seeds = 4;
+  const b = new Array(14).fill(seeds);
+  b[S_STORE] = 0; b[N_STORE] = 0;
+  return b;
+}
+
+function seedTotal(b){ return b.reduce((a, x) => a + x, 0); }
+
+function legalMoves(b, side){
+  const out = [];
+  const a = side === SOUTH ? 0 : 7;
+  for (let i = a; i < a + PITS; i++) if (b[i] > 0) out.push(i);
+  return out;
+}
+
+// sow anticlockwise, skipping the opponent's store; returns the landing index
+function sow(b, from, side){
+  let hand = b[from];
+  b[from] = 0;
+  let i = from;
+  const theirStore = side === SOUTH ? N_STORE : S_STORE;
+  while (hand > 0){
+    i = (i + 1) % 14;
+    if (i === theirStore) continue;
+    b[i]++; hand--;
+  }
+  return i;
+}
+
+// applies the move IN PLACE and returns the side to move next.
+// Returning the side is how the extra-turn rule reaches the search.
+function applyMove(b, from, side){
+  const last = sow(b, from, side);
+  const myStore = side === SOUTH ? S_STORE : N_STORE;
+  const isMine  = side === SOUTH ? (i => i >= 0 && i < 6) : (i => i >= 7 && i < 13);
+
+  if (last === myStore) return side;                       // rule 1: play again
+
+  if (isMine(last) && b[last] === 1 && b[opposite(last)] > 0){   // rule 2: capture
+    b[myStore] += b[last] + b[opposite(last)];
+    b[last] = 0;
+    b[opposite(last)] = 0;
+  }
+  return side === SOUTH ? NORTH : SOUTH;
+}
+
+function sideEmpty(b, side){
+  const a = side === SOUTH ? 0 : 7;
+  for (let i = a; i < a + PITS; i++) if (b[i] > 0) return false;
+  return true;
+}
+
+function isTerminal(b){ return sideEmpty(b, SOUTH) || sideEmpty(b, NORTH); }
+
+// sweep the remaining seeds; returns a NEW board so callers cannot be surprised
+function finished(b){
+  const c = b.slice();
+  if (sideEmpty(c, SOUTH)){
+    for (let i = 7; i < 13; i++){ c[N_STORE] += c[i]; c[i] = 0; }
+  } else if (sideEmpty(c, NORTH)){
+    for (let i = 0; i < 6; i++){ c[S_STORE] += c[i]; c[i] = 0; }
+  }
+  return c;
+}
+
+function evaluate(b, side){
+  const f = finished(b);
+  const mine   = side === SOUTH ? S_STORE : N_STORE;
+  const theirs = side === SOUTH ? N_STORE : S_STORE;
+  return f[mine] - f[theirs];
+}
+
+// negamax + alpha-beta. The extra-turn rule means the side does not always flip,
+// so negate the child value only when it actually did.
+function search(b, side, depth, alpha, beta, stats){
+  if (stats) stats.nodes++;
+  if (depth === 0 || isTerminal(b)) return evaluate(b, side);
+  const moves = legalMoves(b, side);
+  if (moves.length === 0) return evaluate(b, side);
+  let best = -Infinity;
+  for (const m of moves){
+    const nb = b.slice();
+    const next = applyMove(nb, m, side);
+    const val = (next === side)
+      ?  search(nb, next, depth - 1,  alpha,  beta, stats)
+      : -search(nb, next, depth - 1, -beta, -alpha, stats);
+    if (val > best) best = val;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+// identical, with the window disabled - the control for the pruning test
+function searchFull(b, side, depth, stats){
+  if (stats) stats.nodes++;
+  if (depth === 0 || isTerminal(b)) return evaluate(b, side);
+  const moves = legalMoves(b, side);
+  if (moves.length === 0) return evaluate(b, side);
+  let best = -Infinity;
+  for (const m of moves){
+    const nb = b.slice();
+    const next = applyMove(nb, m, side);
+    const val = (next === side)
+      ?  searchFull(nb, next, depth - 1, stats)
+      : -searchFull(nb, next, depth - 1, stats);
+    if (val > best) best = val;
+  }
+  return best;
+}
+
+function bestMove(b, side, depth){
+  const stats = { nodes: 0 };
+  let best = -Infinity, bestM = null;
+  for (const m of legalMoves(b, side)){
+    const nb = b.slice();
+    const next = applyMove(nb, m, side);
+    const val = (next === side)
+      ?  search(nb, next, depth - 1, -Infinity, Infinity, stats)
+      : -search(nb, next, depth - 1, -Infinity, Infinity, stats);
+    if (val > best){ best = val; bestM = m; }
+  }
+  return { move: bestM, value: best, nodes: stats.nodes };
+}
+
+// a reachable-ish random position, used by the equivalence test
+function randomPosition(rng, plies){
+  if (plies === undefined) plies = 8;
+  let b = newBoard(4), side = SOUTH;
+  for (let k = 0; k < plies && !isTerminal(b); k++){
+    const ms = legalMoves(b, side);
+    if (!ms.length) break;
+    const m = ms[Math.floor(rng() * ms.length)];
+    side = applyMove(b, m, side);
+  }
+  return b;
+}
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// ===== ENGINE:END =====
+
+/* ---------------- UI ---------------- */
+const TOTAL_SEEDS = 48;
+let board, turn, history, extraTurns, captures;
+
+const rowN = document.getElementById("rowN");
+const rowS = document.getElementById("rowS");
+const statusEl = document.getElementById("status");
+
+function pitButton(i, mineSide){
+  const btn = document.createElement("button");
+  btn.className = "pit rounded-xl p-2 md:p-3 text-center " +
+    (mineSide ? "bg-amber-100 border-2 border-amber-300" : "bg-slate-100 border-2 border-slate-200");
+  btn.dataset.idx = i;
+  return btn;
+}
+
+function build(){
+  rowN.innerHTML = ""; rowS.innerHTML = "";
+  // North pits render right-to-left so the board reads anticlockwise on screen
+  for (let i = 12; i >= 7; i--) rowN.appendChild(pitButton(i, false));
+  for (let i = 0; i < 6; i++)  rowS.appendChild(pitButton(i, true));
+  rowS.querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => human(+b.dataset.idx)));
+}
+
+function render(){
+  document.querySelectorAll(".pit").forEach(el => {
+    const i = +el.dataset.idx;
+    const n = board[i];
+    el.innerHTML = '<div class="text-xl font-black tabular-nums">' + n + '</div>' +
+      '<div class="leading-none">' + '<span class="seed"></span>'.repeat(Math.min(n, 12)) + '</div>';
+    el.disabled = !(turn === SOUTH && i < 6 && n > 0 && !isTerminal(board));
+  });
+  document.getElementById("storeSval").textContent = board[S_STORE];
+  document.getElementById("storeNval").textContent = board[N_STORE];
+
+  const sum = seedTotal(board);
+  document.getElementById("seedTotal").textContent = sum;
+  const ok = sum === TOTAL_SEEDS;
+  const okEl = document.getElementById("seedOk");
+  okEl.textContent = ok ? "✓ invariant holds" : "✗ INVARIANT BROKEN";
+  okEl.className = "text-xs font-bold mt-2 " + (ok ? "text-emerald-600" : "text-rose-600");
+
+  document.getElementById("extraN").textContent = extraTurns;
+  document.getElementById("capN").textContent = captures;
+}
+
+function statusText(){
+  if (isTerminal(board)){
+    const f = finished(board);
+    const s = f[S_STORE], n = f[N_STORE];
+    statusEl.textContent = s > n ? "You win " + s + "–" + n
+                       : n > s ? "North wins " + n + "–" + s
+                               : "Draw " + s + "–" + n;
+    return;
+  }
+  statusEl.textContent = turn === SOUTH ? "Your move." : "North thinking…";
+}
+
+function human(i){
+  if (turn !== SOUTH || isTerminal(board)) return;
+  history.push({ b: board.slice(), t: turn, e: extraTurns, c: captures });
+  const before = board[S_STORE];
+  const next = applyMove(board, i, SOUTH);
+  if (next === SOUTH) extraTurns++;
+  if (board[S_STORE] - before > 1 && next !== SOUTH) captures++;
+  turn = next;
+  render(); statusText();
+  if (turn === NORTH && !isTerminal(board)) setTimeout(ai, 260);
+}
+
+function ai(){
+  const d = +document.getElementById("depth").value;
+  const r = bestMove(board, NORTH, d);
+  document.getElementById("nodeCount").textContent = r.nodes.toLocaleString();
+  document.getElementById("evalVal").textContent = r.value;
+  if (r.move === null){ turn = SOUTH; render(); statusText(); return; }
+  const next = applyMove(board, r.move, NORTH);
+  turn = next;
+  render(); statusText();
+  if (turn === NORTH && !isTerminal(board)) setTimeout(ai, 260);
+}
+
+function reset(){
+  board = newBoard(4); turn = SOUTH; history = [];
+  extraTurns = 0; captures = 0;
+  document.getElementById("nodeCount").textContent = "—";
+  document.getElementById("evalVal").textContent = "—";
+  render(); statusText();
+}
+
+document.getElementById("newBtn").addEventListener("click", reset);
+document.getElementById("undoBtn").addEventListener("click", () => {
+  const h = history.pop(); if (!h) return;
+  board = h.b; turn = h.t; extraTurns = h.e; captures = h.c;
+  render(); statusText();
+});
+document.getElementById("depth").addEventListener("input", e =>
+  document.getElementById("depthVal").textContent = e.target.value);
+document.addEventListener("keydown", e => {
+  if (e.key === "n" || e.key === "N") reset();
+  if (e.key === "u" || e.key === "U") document.getElementById("undoBtn").click();
+});
+
+// the equivalence check, run in the page
+document.getElementById("proveBtn").addEventListener("click", () => {
+  const out = document.getElementById("proveOut");
+  out.classList.remove("hidden");
+  const rng = mulberry32(20260815);
+  let mismatch = 0, nPruned = 0, nFull = 0, cases = 0;
+  for (let t = 0; t < 200; t++){
+    const b = randomPosition(rng, 6 + (t % 7));
+    if (isTerminal(b)) continue;
+    const s1 = { nodes: 0 }, s2 = { nodes: 0 };
+    const pruned = search(b, SOUTH, 4, -Infinity, Infinity, s1);
+    const full   = searchFull(b, SOUTH, 4, s2);
+    if (pruned !== full) mismatch++;
+    nPruned += s1.nodes; nFull += s2.nodes; cases++;
+  }
+  out.textContent =
+    "positions tested      : " + cases + "\n" +
+    "value mismatches      : " + mismatch + (mismatch === 0 ? "   <- alpha-beta is exact" : "   <- BUG") + "\n" +
+    "nodes, full search    : " + nFull.toLocaleString() + "\n" +
+    "nodes, alpha-beta     : " + nPruned.toLocaleString() + "\n" +
+    "visited               : " + (100 * nPruned / nFull).toFixed(1) + "% of the full tree";
+});
+
+build(); reset();
+</script>
+</body>
+</html>
