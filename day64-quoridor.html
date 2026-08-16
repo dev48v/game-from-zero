@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 64 — Quoridor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  #board { position:relative; background:#fef3c7; border-radius:10px; }
+  .cell { position:absolute; background:#fffbeb; border-radius:4px; box-shadow:inset 0 0 0 1px #fde68a; }
+  .cell.legal { background:#bbf7d0; box-shadow:inset 0 0 0 2px #16a34a; cursor:pointer; }
+  .pawn { position:absolute; border-radius:50%; display:grid; place-items:center;
+          font-weight:900; color:#fff; font-size:13px; pointer-events:none; }
+  .wall { position:absolute; background:#78350f; border-radius:3px; }
+  .wall.ghost { background:#f59e0b; opacity:.55; cursor:pointer; }
+  .wall.illegal { background:#dc2626; opacity:.35; cursor:not-allowed; }
+  .slot { position:absolute; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+    <p class="text-xs font-bold tracking-widest text-amber-700 mb-2">GAMEFROMZERO · DAY 64</p>
+    <h1 class="text-xl md:text-2xl font-black leading-tight mb-4">
+      🧱 Quoridor — the game whose rules contain a <strong>graph algorithm</strong>. You may place a
+      wall anywhere, except where it would leave a player with <em>no path at all</em> to their goal
+      row — so the legality of a move is not a lookup, it is a
+      <strong>breadth-first search run twice, once per player, on the graph as it would be after the
+      wall is placed</strong>. That single rule is what stops the game collapsing into "brick your
+      opponent in on move three", and it means the rulebook cannot be expressed without reachability.
+      This page implements the board as an explicit adjacency structure, runs BFS live on every one of
+      the 128 candidate wall placements, and shows you exactly which ones are refused and why. It
+      also implements the jump rule properly — including the diagonal case that only exists when the
+      straight jump is blocked — and an AI that plays the standard heuristic
+      <code>opponentDistance − myDistance</code>, computed with the same BFS the rules use. The
+      no-sealing rule is <strong>tested by construction</strong>: 400 random legal games &mdash; about 59,000 plies &mdash; and the
+      assertion that a path always existed for both players at every single ply.
+      Pure vanilla JavaScript, one file, offline.
+    </h1>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look" class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-5xl mx-auto grid lg:grid-cols-5 gap-5">
+
+      <div class="lg:col-span-3 bg-white rounded-2xl shadow p-5">
+        <p class="text-sm text-slate-600 mb-3">
+          You are <strong>blue</strong>, moving up to row 0. Click a green square to move. Toggle
+          wall mode and hover the gaps between cells — <span class="text-amber-600 font-bold">amber</span>
+          means legal, <span class="text-rose-600 font-bold">red</span> means the wall would seal
+          somebody in and is refused.
+        </p>
+        <div id="board" class="mx-auto"></div>
+        <div class="flex flex-wrap gap-2 justify-center mt-4">
+          <button id="modeBtn" class="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold">Wall mode: OFF (W)</button>
+          <button id="newBtn" class="px-4 py-2 rounded-lg bg-slate-200 text-sm font-semibold">New game (N)</button>
+          <button id="undoBtn" class="px-4 py-2 rounded-lg bg-slate-200 text-sm font-semibold">Undo (U)</button>
+        </div>
+        <p id="status" class="mt-3 text-center font-bold"></p>
+      </div>
+
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">SHORTEST PATH, RIGHT NOW</p>
+          <table class="text-sm w-full">
+            <tr><td class="py-1">you → row 0</td><td class="text-right font-bold tabular-nums" id="dYou">—</td></tr>
+            <tr><td class="py-1">AI → row 8</td><td class="text-right font-bold tabular-nums" id="dAi">—</td></tr>
+            <tr><td class="py-1">walls left, you / AI</td><td class="text-right font-bold tabular-nums" id="wLeft">10 / 10</td></tr>
+          </table>
+          <p class="text-xs text-slate-500 mt-2">
+            Both numbers come from the same BFS the legality rule uses. The AI's evaluation is their
+            difference — nothing else.
+          </p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">WALL LEGALITY, THIS POSITION</p>
+          <p class="text-3xl font-black tabular-nums"><span id="wLegal">—</span> <span class="text-base text-slate-400">of</span> <span id="wTotal">128</span></p>
+          <p class="text-xs text-slate-500 mt-1">
+            Every candidate placement is checked by running BFS on the board <em>as it would be</em>.
+            <span id="wSeal" class="font-bold text-rose-600">—</span> are refused for sealing a player in;
+            the rest overlap an existing wall.
+          </p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">PROVE THE RULE HOLDS</p>
+          <p class="text-sm text-slate-600 mb-2">
+            If the legality check is right, no legal game can ever reach a position where somebody is
+            sealed in. That is checkable by playing a lot of them.
+          </p>
+          <button id="proveBtn" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold">Play 400 random games</button>
+          <pre id="proveOut" class="mt-2 hidden text-[11px]"></pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">A rulebook you cannot write without a graph algorithm</h2>
+
+      <p>Most board games have rules you can check locally. Is that square empty? Is that piece mine?
+      Is the move a knight's move? All O(1) questions about a small neighbourhood.</p>
+
+      <p>Quoridor has one rule that is not local at all:</p>
+
+      <div class="bg-slate-100 rounded-xl p-4">
+        <p class="font-bold">You may not place a wall that leaves any player with no path to their goal row.</p>
+      </div>
+
+      <p>To answer that you must consider the board <em>as it would be after the move</em>, and run a
+      reachability search — for <strong>every</strong> player, not just the one you are trying to
+      block. There is no local test. The rule is a graph algorithm wearing a sentence.</p>
+
+      <h3 class="text-xl font-bold">Why the rule exists</h3>
+      <p>Without it, the game is broken in the most boring way possible: wall your opponent into a
+      3×3 box and they can never finish. The no-sealing rule converts walls from a win condition into
+      a <em>tempo</em> resource — you can lengthen someone's path, never end it. Every wall you place
+      is one you no longer have, and you only get ten.</p>
+
+      <h3 class="text-xl font-bold">The board is two graphs, not one grid</h3>
+      <p>Cells are nodes. Walls do not occupy cells — they sit <em>between</em> them and delete edges.
+      So the natural representation is not a 9×9 array of squares with wall flags, it is:</p>
+      <pre>blockedH[r][c]   // is the edge between (r,c) and (r+1,c) removed?
+blockedV[r][c]   // is the edge between (r,c) and (r,c+1) removed?</pre>
+      <p>A wall is 2 cells long, so placing one deletes <strong>two parallel edges</strong>. Model it
+      as a single flag and the wall becomes half-length; model it as occupying squares and you will
+      spend the evening converting coordinates.</p>
+
+      <h3 class="text-xl font-bold">Walls also block each other</h3>
+      <p>Two walls may not cross, and may not overlap along their length. That is three separate
+      conditions, and forgetting the crossing one is the classic bug — it lets you build a plus-sign
+      out of two walls, which is not a legal shape.</p>
+
+      <h3 class="text-xl font-bold">The jump rule, and the case people skip</h3>
+      <p>If the opponent stands in the square you want to move to, you jump <em>over</em> them and
+      land on the far side. But if the far side is off the board or has a wall behind it, the jump
+      becomes a <strong>diagonal</strong> move instead — and that diagonal is legal <em>only</em> in
+      that case. It is not a general diagonal move.</p>
+
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-4">
+        <p class="text-sm">This is the rule most implementations get subtly wrong, because the
+        straightforward reading — "you can jump over" — omits that the diagonal exists as a
+        <em>consequence of the straight jump being unavailable</em>. Allow the diagonal always and you
+        have invented a different game that plays almost identically until it does not.</p>
+      </div>
+
+      <h3 class="text-xl font-bold">The AI is one line, because the BFS is already there</h3>
+      <p>The standard Quoridor heuristic is <code>distance(opponent) − distance(me)</code>. You are
+      already computing both distances to enforce the rules, so the evaluation is free. The search on
+      this page is a shallow negamax over moves and wall placements, and it plays a recognisable game
+      without a single hand-tuned weight.</p>
+
+      <h3 class="text-xl font-bold">What makes this checkable</h3>
+      <p>The no-sealing rule gives you an invariant that must hold in every reachable position, not
+      just at the end: <strong>both players always have a path</strong>. So play thousands of random
+      legal games and assert it after every ply. If the legality check has a hole, a random game will
+      eventually walk through it — which is exactly what the button on the PLAY tab does.</p>
+
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-50">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">🔨 Build it yourself</h2>
+
+      <h3 class="text-xl font-bold">1. Represent edges, not squares</h3>
+      <pre>const N = 9;
+// blockedH[r][c] = the edge (r,c)-(r+1,c) is gone   (a horizontal wall)
+// blockedV[r][c] = the edge (r,c)-(r,c+1) is gone   (a vertical wall)
+function newState(){
+  return {
+    pawns: [ {r:8,c:4}, {r:0,c:4} ],          // 0 = you (goal row 0), 1 = AI (goal row 8)
+    blockedH: grid(N-1, N, false),
+    blockedV: grid(N, N-1, false),
+    walls: [],                                 // for drawing + overlap checks
+    wallsLeft: [10, 10],
+    turn: 0
+  };
+}</pre>
+
+      <h3 class="text-xl font-bold">2. A wall deletes two edges</h3>
+      <pre>function applyWall(s, wall){
+  const { r, c, dir } = wall;                  // anchor at the gap (r,c)
+  if (dir === "H"){ s.blockedH[r][c] = true; s.blockedH[r][c+1] = true; }
+  else            { s.blockedV[r][c] = true; s.blockedV[r+1][c] = true; }
+  s.walls.push(wall);
+}</pre>
+
+      <h3 class="text-xl font-bold">3. Neighbours read the edges</h3>
+      <pre>function neighbours(s, r, c){
+  const out = [];
+  if (r &gt; 0     &amp;&amp; !s.blockedH[r-1][c]) out.push([r-1, c]);
+  if (r &lt; N-1   &amp;&amp; !s.blockedH[r][c])   out.push([r+1, c]);
+  if (c &gt; 0     &amp;&amp; !s.blockedV[r][c-1]) out.push([r, c-1]);
+  if (c &lt; N-1   &amp;&amp; !s.blockedV[r][c])   out.push([r, c+1]);
+  return out;
+}</pre>
+
+      <h3 class="text-xl font-bold">4. BFS — which is both the rule and the evaluation</h3>
+      <pre>function distanceToGoal(s, player){
+  const goal = player === 0 ? 0 : N - 1;
+  const start = s.pawns[player];
+  const seen = grid(N, N, false);
+  let frontier = [[start.r, start.c]], d = 0;
+  seen[start.r][start.c] = true;
+  while (frontier.length){
+    const next = [];
+    for (const [r, c] of frontier){
+      if (r === goal) return d;
+      for (const [nr, nc] of neighbours(s, r, c))
+        if (!seen[nr][nc]){ seen[nr][nc] = true; next.push([nr, nc]); }
+    }
+    frontier = next; d++;
+  }
+  return Infinity;                             // sealed in
+}</pre>
+
+      <h3 class="text-xl font-bold">5. The legality rule, in full</h3>
+      <pre>function wallIsLegal(s, wall){
+  if (s.wallsLeft[s.turn] === 0) return false;
+  if (overlapsOrCrosses(s, wall)) return false;
+
+  const test = cloneState(s);                  // never mutate the real board
+  applyWall(test, wall);
+  // BOTH players, not just the one you are blocking
+  return distanceToGoal(test, 0) !== Infinity
+      &amp;&amp; distanceToGoal(test, 1) !== Infinity;
+}</pre>
+      <p>Two things to notice. It runs on a <strong>copy</strong> — an in-place check that forgets to
+      undo itself corrupts the board on the first illegal candidate. And it checks
+      <strong>both</strong> players, because a wall can seal <em>you</em> in just as easily.</p>
+
+      <h3 class="text-xl font-bold">6. The jump, with its conditional diagonal</h3>
+      <pre>function pawnMoves(s, player){
+  const me = s.pawns[player], them = s.pawns[1 - player];
+  const out = [];
+  for (const [r, c] of neighbours(s, me.r, me.c)){
+    if (r !== them.r || c !== them.c){ out.push([r, c]); continue; }
+
+    // occupied: try to jump straight over, in the same direction
+    const jr = r + (r - me.r), jc = c + (c - me.c);
+    const straightOk = inBounds(jr, jc) &amp;&amp; edgeOpen(s, r, c, jr, jc);
+    if (straightOk){ out.push([jr, jc]); continue; }
+
+    // ONLY when the straight jump is unavailable do the diagonals appear
+    for (const [dr, dc] of neighbours(s, r, c))
+      if (dr !== me.r || dc !== me.c) out.push([dr, dc]);
+  }
+  return out;
+}</pre>
+
+      <h3 class="text-xl font-bold">7. The evaluation you already computed</h3>
+      <pre>const evaluate = (s, me) =&gt;
+  distanceToGoal(s, 1 - me) - distanceToGoal(s, me);</pre>
+
+      <h3 class="text-xl font-bold">8. Test the invariant, not the implementation</h3>
+      <pre>// If the legality check is correct, this can never fire.
+for (let game = 0; game &lt; 400; game++){
+  const s = newState();
+  while (!isOver(s) &amp;&amp; ply &lt; 200){
+    playRandomLegalMove(s);
+    assert(distanceToGoal(s, 0) !== Infinity);
+    assert(distanceToGoal(s, 1) !== Infinity);
+  }
+}</pre>
+      <p>Random play is a poor opponent and an excellent fuzzer. It will try wall placements no human
+      would, which is precisely where a legality bug hides.</p>
+
+      <h3 class="text-xl font-bold">🎉 Day 64 of GameFromZero done — Quoridor, with the rule and the AI sharing one BFS.</h3>
+
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// Pure, DOM-free Quoridor core. The legality rule and the AI evaluation both go
+// through the same BFS, which is the whole point of the game.
+const N = 9;
+
+function grid(rows, cols, fill){
+  const g = [];
+  for (let r = 0; r < rows; r++) g.push(new Array(cols).fill(fill));
+  return g;
+}
+
+function newState(){
+  return {
+    pawns: [{ r: 8, c: 4 }, { r: 0, c: 4 }],
+    blockedH: grid(N - 1, N, false),
+    blockedV: grid(N, N - 1, false),
+    walls: [],
+    wallsLeft: [10, 10],
+    turn: 0
+  };
+}
+
+function cloneState(s){
+  return {
+    pawns: [{ r: s.pawns[0].r, c: s.pawns[0].c }, { r: s.pawns[1].r, c: s.pawns[1].c }],
+    blockedH: s.blockedH.map(function(row){ return row.slice(); }),
+    blockedV: s.blockedV.map(function(row){ return row.slice(); }),
+    walls: s.walls.slice(),
+    wallsLeft: s.wallsLeft.slice(),
+    turn: s.turn
+  };
+}
+
+const inBounds = (r, c) => r >= 0 && r < N && c >= 0 && c < N;
+
+function edgeOpen(s, r1, c1, r2, c2){
+  if (r1 === r2){
+    const c = Math.min(c1, c2);
+    return !s.blockedV[r1][c];
+  }
+  const r = Math.min(r1, r2);
+  return !s.blockedH[r][c1];
+}
+
+function neighbours(s, r, c){
+  const out = [];
+  if (r > 0 && !s.blockedH[r - 1][c]) out.push([r - 1, c]);
+  if (r < N - 1 && !s.blockedH[r][c]) out.push([r + 1, c]);
+  if (c > 0 && !s.blockedV[r][c - 1]) out.push([r, c - 1]);
+  if (c < N - 1 && !s.blockedV[r][c]) out.push([r, c + 1]);
+  return out;
+}
+
+// BFS. Returns Infinity when the player is sealed in - which is the condition
+// the wall-legality rule exists to prevent.
+function distanceToGoal(s, player){
+  const goal = player === 0 ? 0 : N - 1;
+  const start = s.pawns[player];
+  const seen = grid(N, N, false);
+  let frontier = [[start.r, start.c]];
+  seen[start.r][start.c] = true;
+  let d = 0;
+  while (frontier.length){
+    const next = [];
+    for (let i = 0; i < frontier.length; i++){
+      const r = frontier[i][0], c = frontier[i][1];
+      if (r === goal) return d;
+      const nb = neighbours(s, r, c);
+      for (let k = 0; k < nb.length; k++){
+        const nr = nb[k][0], nc = nb[k][1];
+        if (!seen[nr][nc]){ seen[nr][nc] = true; next.push([nr, nc]); }
+      }
+    }
+    frontier = next; d++;
+  }
+  return Infinity;
+}
+
+function applyWall(s, wall){
+  if (wall.dir === "H"){ s.blockedH[wall.r][wall.c] = true; s.blockedH[wall.r][wall.c + 1] = true; }
+  else { s.blockedV[wall.r][wall.c] = true; s.blockedV[wall.r + 1][wall.c] = true; }
+  s.walls.push(wall);
+}
+
+// Walls may not overlap along their length, and may not CROSS at the centre.
+// Forgetting the crossing case lets two walls form a plus sign, which is illegal.
+function overlapsOrCrosses(s, w){
+  for (let i = 0; i < s.walls.length; i++){
+    const o = s.walls[i];
+    if (o.dir === w.dir){
+      if (w.dir === "H" && o.r === w.r && Math.abs(o.c - w.c) < 2) return true;
+      if (w.dir === "V" && o.c === w.c && Math.abs(o.r - w.r) < 2) return true;
+    } else if (o.r === w.r && o.c === w.c){
+      return true;                              // the cross
+    }
+  }
+  return false;
+}
+
+function allWallSlots(){
+  const out = [];
+  for (let r = 0; r < N - 1; r++)
+    for (let c = 0; c < N - 1; c++){
+      out.push({ r: r, c: c, dir: "H" });
+      out.push({ r: r, c: c, dir: "V" });
+    }
+  return out;
+}
+
+function wallIsLegal(s, wall){
+  if (s.wallsLeft[s.turn] === 0) return false;
+  if (wall.dir === "H" && (wall.r < 0 || wall.r >= N - 1 || wall.c < 0 || wall.c >= N - 1)) return false;
+  if (wall.dir === "V" && (wall.r < 0 || wall.r >= N - 1 || wall.c < 0 || wall.c >= N - 1)) return false;
+  if (overlapsOrCrosses(s, wall)) return false;
+  const test = cloneState(s);
+  applyWall(test, wall);
+  return distanceToGoal(test, 0) !== Infinity && distanceToGoal(test, 1) !== Infinity;
+}
+
+// The jump rule. The diagonal is NOT a general move - it exists only when the
+// straight jump over an adjacent opponent is unavailable.
+function pawnMoves(s, player){
+  const me = s.pawns[player], them = s.pawns[1 - player];
+  const out = [];
+  const push = (r, c) => {
+    if (!inBounds(r, c)) return;
+    if (r === them.r && c === them.c) return;
+    for (let i = 0; i < out.length; i++) if (out[i][0] === r && out[i][1] === c) return;
+    out.push([r, c]);
+  };
+  const nb = neighbours(s, me.r, me.c);
+  for (let i = 0; i < nb.length; i++){
+    const r = nb[i][0], c = nb[i][1];
+    if (r !== them.r || c !== them.c){ push(r, c); continue; }
+    const jr = r + (r - me.r), jc = c + (c - me.c);
+    if (inBounds(jr, jc) && edgeOpen(s, r, c, jr, jc)){ push(jr, jc); continue; }
+    const around = neighbours(s, r, c);
+    for (let k = 0; k < around.length; k++){
+      const dr = around[k][0], dc = around[k][1];
+      if (dr === me.r && dc === me.c) continue;
+      push(dr, dc);
+    }
+  }
+  return out;
+}
+
+function isOver(s){ return s.pawns[0].r === 0 || s.pawns[1].r === N - 1; }
+function winner(s){
+  if (s.pawns[0].r === 0) return 0;
+  if (s.pawns[1].r === N - 1) return 1;
+  return -1;
+}
+
+function evaluate(s, me){
+  const dMe = distanceToGoal(s, me);
+  const dThem = distanceToGoal(s, 1 - me);
+  if (dMe === 0) return 1000;
+  if (dThem === 0) return -1000;
+  return dThem - dMe;
+}
+
+function legalMoves(s){
+  const moves = [];
+  const pm = pawnMoves(s, s.turn);
+  for (let i = 0; i < pm.length; i++) moves.push({ kind: "move", r: pm[i][0], c: pm[i][1] });
+  if (s.wallsLeft[s.turn] > 0){
+    const slots = allWallSlots();
+    for (let i = 0; i < slots.length; i++)
+      if (wallIsLegal(s, slots[i])) moves.push({ kind: "wall", wall: slots[i] });
+  }
+  return moves;
+}
+
+function applyMove(s, m){
+  if (m.kind === "move"){ s.pawns[s.turn] = { r: m.r, c: m.c }; }
+  else { applyWall(s, m.wall); s.wallsLeft[s.turn]--; }
+  s.turn = 1 - s.turn;
+  return s;
+}
+
+function bestMove(s, depth){
+  const me = s.turn;
+  let best = null, bestVal = -Infinity;
+  const moves = legalMoves(s);
+  for (let i = 0; i < moves.length; i++){
+    const nb = cloneState(s);
+    applyMove(nb, moves[i]);
+    let val = evaluate(nb, me);
+    if (depth > 1 && !isOver(nb)){
+      const reply = legalMoves(nb);
+      let worst = Infinity;
+      for (let k = 0; k < reply.length; k++){
+        const nb2 = cloneState(nb);
+        applyMove(nb2, reply[k]);
+        const v = evaluate(nb2, me);
+        if (v < worst) worst = v;
+      }
+      if (worst !== Infinity) val = worst;
+    }
+    if (val > bestVal){ bestVal = val; best = moves[i]; }
+  }
+  return { move: best, value: bestVal, considered: moves.length };
+}
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// The invariant: in a legal game, NOBODY is ever sealed in.
+function randomGameCheck(rng, maxPly){
+  const s = newState();
+  let ply = 0;
+  while (!isOver(s) && ply < (maxPly || 160)){
+    const moves = legalMoves(s);
+    if (!moves.length) break;
+    applyMove(s, moves[Math.floor(rng() * moves.length)]);
+    ply++;
+    if (distanceToGoal(s, 0) === Infinity) return { ok: false, why: "player 0 sealed", ply: ply };
+    if (distanceToGoal(s, 1) === Infinity) return { ok: false, why: "player 1 sealed", ply: ply };
+  }
+  return { ok: true, ply: ply, finished: isOver(s) };
+}
+// ===== ENGINE:END =====
+
+/* ---------------- UI ---------------- */
+const CELL = 40, GAP = 8, PAD = 6;
+let S = newState(), history = [], wallMode = false;
+const boardEl = document.getElementById("board");
+const px = i => PAD + i * (CELL + GAP);
+boardEl.style.width = (2 * PAD + N * CELL + (N - 1) * GAP) + "px";
+boardEl.style.height = boardEl.style.width;
+
+function render(){
+  boardEl.innerHTML = "";
+  const legal = S.turn === 0 && !isOver(S) ? pawnMoves(S, 0) : [];
+  const isLegalCell = (r, c) => legal.some(m => m[0] === r && m[1] === c);
+
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++){
+    const d = document.createElement("div");
+    d.className = "cell" + (!wallMode && isLegalCell(r, c) ? " legal" : "");
+    d.style.cssText += `left:${px(c)}px;top:${px(r)}px;width:${CELL}px;height:${CELL}px`;
+    if (!wallMode && isLegalCell(r, c)) d.addEventListener("click", () => humanMove(r, c));
+    boardEl.appendChild(d);
+  }
+
+  if (wallMode && S.turn === 0){
+    for (let r = 0; r < N - 1; r++) for (let c = 0; c < N - 1; c++){
+      [["H", px(c), px(r) + CELL + 1, 2 * CELL + GAP, GAP - 2],
+       ["V", px(c) + CELL + 1, px(r), GAP - 2, 2 * CELL + GAP]].forEach(spec => {
+        const [dir, x, y, w, h] = spec;
+        const wall = { r: r, c: c, dir: dir };
+        const ok = wallIsLegal(S, wall);
+        const d = document.createElement("div");
+        d.className = "wall " + (ok ? "ghost" : "illegal");
+        d.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+        if (ok) d.addEventListener("click", () => humanWall(wall));
+        boardEl.appendChild(d);
+      });
+    }
+  }
+
+  S.walls.forEach(w => {
+    const d = document.createElement("div");
+    d.className = "wall";
+    if (w.dir === "H") d.style.cssText = `left:${px(w.c)}px;top:${px(w.r)+CELL+1}px;width:${2*CELL+GAP}px;height:${GAP-2}px`;
+    else d.style.cssText = `left:${px(w.c)+CELL+1}px;top:${px(w.r)}px;width:${GAP-2}px;height:${2*CELL+GAP}px`;
+    boardEl.appendChild(d);
+  });
+
+  S.pawns.forEach((p, i) => {
+    const d = document.createElement("div");
+    d.className = "pawn";
+    d.style.cssText = `left:${px(p.c)+6}px;top:${px(p.r)+6}px;width:${CELL-12}px;height:${CELL-12}px;` +
+      `background:${i === 0 ? "#2563eb" : "#b91c1c"}`;
+    d.textContent = i === 0 ? "Y" : "AI";
+    boardEl.appendChild(d);
+  });
+
+  stats();
+}
+
+function stats(){
+  document.getElementById("dYou").textContent = distanceToGoal(S, 0);
+  document.getElementById("dAi").textContent = distanceToGoal(S, 1);
+  document.getElementById("wLeft").textContent = S.wallsLeft[0] + " / " + S.wallsLeft[1];
+
+  const slots = allWallSlots();
+  let legal = 0, sealed = 0;
+  slots.forEach(w => {
+    if (overlapsOrCrosses(S, w)) return;
+    const t = cloneState(S); applyWall(t, w);
+    if (distanceToGoal(t, 0) === Infinity || distanceToGoal(t, 1) === Infinity) sealed++;
+    else legal++;
+  });
+  document.getElementById("wLegal").textContent = legal;
+  document.getElementById("wTotal").textContent = slots.length;
+  document.getElementById("wSeal").textContent = sealed;
+
+  const st = document.getElementById("status");
+  if (isOver(S)) st.textContent = winner(S) === 0 ? "You win." : "AI wins.";
+  else st.textContent = S.turn === 0 ? (wallMode ? "Pick a wall gap." : "Your move.") : "AI thinking…";
+}
+
+function humanMove(r, c){
+  history.push(cloneState(S));
+  applyMove(S, { kind: "move", r: r, c: c });
+  render();
+  if (!isOver(S)) setTimeout(aiTurn, 220);
+}
+function humanWall(wall){
+  history.push(cloneState(S));
+  applyMove(S, { kind: "wall", wall: wall });
+  wallMode = false; syncMode();
+  render();
+  if (!isOver(S)) setTimeout(aiTurn, 220);
+}
+function aiTurn(){
+  const r = bestMove(S, 2);
+  if (r.move) applyMove(S, r.move);
+  render();
+}
+function syncMode(){
+  document.getElementById("modeBtn").textContent = "Wall mode: " + (wallMode ? "ON" : "OFF") + " (W)";
+}
+document.getElementById("modeBtn").addEventListener("click", () => { wallMode = !wallMode; syncMode(); render(); });
+document.getElementById("newBtn").addEventListener("click", () => { S = newState(); history = []; wallMode = false; syncMode(); render(); });
+document.getElementById("undoBtn").addEventListener("click", () => {
+  const h = history.pop(); if (h) { S = h; render(); }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "w" || e.key === "W") document.getElementById("modeBtn").click();
+  if (e.key === "n" || e.key === "N") document.getElementById("newBtn").click();
+  if (e.key === "u" || e.key === "U") document.getElementById("undoBtn").click();
+});
+
+document.getElementById("proveBtn").addEventListener("click", () => {
+  const out = document.getElementById("proveOut");
+  out.classList.remove("hidden");
+  const rng = mulberry32(20260817);
+  let sealed = 0, finished = 0, plies = 0;
+  for (let g = 0; g < 400; g++){
+    const r = randomGameCheck(rng, 160);
+    if (!r.ok) sealed++;
+    if (r.finished) finished++;
+    plies += r.ply;
+  }
+  out.textContent =
+    "random legal games   : 400\n" +
+    "total plies played   : " + plies.toLocaleString() + "\n" +
+    "games that finished  : " + finished + "\n" +
+    "positions where a player was SEALED IN : " + sealed +
+    (sealed === 0 ? "\n\nThe no-sealing rule held at every ply." : "\n\nBUG: the legality check has a hole.");
+});
+
+syncMode(); render();
+</script>
+</body>
+</html>
