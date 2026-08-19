@@ -66,6 +66,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 62 — Hex](https://dev48v.infy.uk/game/day62-hex.html) — `day62-hex.html`
 - [GameFromZero · Day 63 — Mancala (Kalah)](https://dev48v.infy.uk/game/day63-mancala.html) — `day63-mancala.html`
 - [GameFromZero · Day 64 — Quoridor](https://dev48v.infy.uk/game/day64-quoridor.html) — `day64-quoridor.html`
+- [GameFromZero · Day 65 — Backgammon](https://dev48.infy.uk/game/day65-backgammon.html) — `day65-backgammon.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

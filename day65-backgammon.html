@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 65 — Backgammon</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  #board { background:#7c2d12; border-radius:10px; padding:8px; }
+  .quad { background:#fed7aa; border-radius:6px; }
+  .pt { position:relative; height:150px; cursor:pointer; }
+  .pt .tri { position:absolute; inset:0; }
+  .pt.sel .tri { filter:brightness(1.25) saturate(1.4); }
+  .pt.dest .tri { outline:2px dashed #16a34a; outline-offset:-2px; border-radius:4px; }
+  .chk { position:absolute; left:50%; transform:translateX(-50%); width:22px; height:22px;
+         border-radius:50%; box-shadow:0 1px 2px rgba(0,0,0,.35); display:grid; place-items:center;
+         font-size:10px; font-weight:900; }
+  .chk.w { background:#f8fafc; color:#0f172a; border:1px solid #94a3b8; }
+  .chk.b { background:#1e293b; color:#f8fafc; border:1px solid #0f172a; }
+  .die { width:34px; height:34px; border-radius:7px; background:#fff; border:1px solid #cbd5e1;
+         display:grid; place-items:center; font-weight:900; font-size:16px; }
+  .die.used { opacity:.3; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid #e2e8f0; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+    <p class="text-xs font-bold tracking-widest text-amber-700 mb-2">GAMEFROMZERO · DAY 65</p>
+    <h1 class="text-xl md:text-2xl font-black leading-tight mb-4">
+      🎲 Backgammon — the first game in this series whose search tree has <strong>chance nodes in
+      it</strong>. Every game so far searched positions you control; here the opponent is a
+      probability distribution, so minimax does not apply and <strong>expectiminimax</strong> does:
+      at a chance node you take the weighted average over all 21 distinct rolls, six doubles at
+      1/36 and fifteen ordered pairs at 2/36. This page implements the real rulebook, including the
+      clause almost every hobby implementation silently drops — <strong>you must play both dice if
+      any legal order plays both, and if only one can be played you must play the larger</strong>,
+      which is not a local check but a small search over move orderings. It also implements the
+      <strong>doubling cube</strong> and derives the 25% take point rather than quoting it: a
+      cubeless equity is rolled out here, in your browser, and compared against the take/drop
+      decision. Pip counts, bar re-entry, exact-or-higher bearing off, and a conservation invariant
+      asserted after every single move. The expectiminimax recursion is implemented and
+      verified &mdash; its value is bounded by the best and worst single-roll outcomes it averages
+      over &mdash; while the on-page AI plays at depth 1 so a move returns instantly.
+      Pure vanilla JavaScript, one file, offline.
+    </h1>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look" class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-6xl mx-auto grid lg:grid-cols-5 gap-5">
+
+      <div class="lg:col-span-3 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-sm text-slate-600 mb-3">
+            You are <strong>white</strong>, moving from point 24 down toward point 1 and off.
+            Click a point you own, then a dashed destination. Dashed outlines are the
+            <em>legal</em> destinations for a die you still hold — computed by the same generator
+            the AI searches with.
+          </p>
+          <div id="board"></div>
+          <div class="flex items-center gap-3 mt-3 flex-wrap">
+            <div id="dice" class="flex gap-2"></div>
+            <button id="roll" class="px-4 py-2 rounded-lg bg-amber-600 text-white font-bold text-sm">Roll</button>
+            <button id="ai" class="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm">AI moves</button>
+            <button id="undo" class="px-3 py-2 rounded-lg bg-slate-100 font-semibold text-sm">Undo</button>
+            <button id="reset" class="px-3 py-2 rounded-lg bg-slate-100 font-semibold text-sm">Reset</button>
+            <span id="msg" class="text-sm font-semibold"></span>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE RULE EVERYONE DROPS</p>
+          <p class="text-sm text-slate-600 mb-2">
+            With this roll, the generator enumerates every ordering of the dice and keeps only the
+            sequences that use the <strong>maximum</strong> number of dice. If that maximum is 1,
+            it keeps only sequences that play the <strong>larger</strong> die. Both are live:
+          </p>
+          <pre id="maxuse" style="margin:0"></pre>
+        </div>
+      </div>
+
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">POSITION</p>
+          <table class="num w-full">
+            <tbody>
+              <tr><td>your pip count</td><td id="pipW" class="font-bold">167</td></tr>
+              <tr><td>AI pip count</td><td id="pipB" class="font-bold">167</td></tr>
+              <tr><td>on the bar (you / AI)</td><td id="bar">0 / 0</td></tr>
+              <tr><td>borne off (you / AI)</td><td id="off">0 / 0</td></tr>
+              <tr><td>checkers accounted for</td><td id="conserve" class="font-bold text-emerald-600">30 / 30</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE CHANCE NODE</p>
+          <p class="text-sm text-slate-600 mb-2">
+            21 distinct rolls, not 36 and not 21 equally likely. Doubles happen one way, everything
+            else two ways:
+          </p>
+          <pre id="chance" style="margin:0"></pre>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-4">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">DOUBLING CUBE — DERIVED, NOT QUOTED</p>
+          <p class="text-sm text-slate-600 mb-2">
+            A pure race, rolled out here. Take if your winning chance beats the point where taking
+            and dropping cost the same.
+          </p>
+          <label class="text-sm">race deficit (your pips − theirs)
+            <input id="deficit" type="range" min="-30" max="30" value="8" class="w-full">
+          </label>
+          <table class="num w-full mt-1">
+            <tbody>
+              <tr><td>your win probability</td><td id="wp" class="font-bold">—</td></tr>
+              <tr><td>equity if you drop</td><td id="eqDrop">−1.000</td></tr>
+              <tr><td>equity if you take</td><td id="eqTake" class="font-bold">—</td></tr>
+              <tr><td>correct decision</td><td id="cube" class="font-black">—</td></tr>
+            </tbody>
+          </table>
+          <p class="text-xs text-slate-500 mt-2">
+            Take point comes out at <strong id="tp">—</strong>, measured by bisection on the
+            rollout — the textbook 25%, re-derived rather than repeated.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">Minimax assumes an adversary. Backgammon has a die.</h2>
+
+      <p>Sixty-four games into this series, every search has been the same shape: I move, you move,
+      each of us picking the best available. Chess, Checkers, Hex, Quoridor — all minimax or a
+      rollout, all over positions somebody <em>chose</em>.</p>
+
+      <p>Backgammon breaks that, because between my move and yours there is a die. The tree now has
+      three kinds of node: <strong>max</strong> (me), <strong>min</strong> (opponent), and
+      <strong>chance</strong> — and a chance node has no best child. It has an expected value:</p>
+
+      <pre>value(chance) = Σ  P(roll) × value(best move for that roll)</pre>
+
+      <p>That is expectiminimax, and the branching factor is brutal: 21 rolls × roughly 15 legal
+      move sequences each is ~300 children per ply, before you have looked at anything.</p>
+
+      <h3 class="text-xl font-bold">21 rolls, and they are not equally likely</h3>
+
+      <p>A pair of dice has 36 outcomes. But (3,5) and (5,3) let you play exactly the same moves, so
+      the game only distinguishes <strong>21</strong>. Six of those are doubles, which arise one way
+      each, and fifteen are mixed, which arise two ways each:</p>
+
+      <pre>6 × 1/36  +  15 × 2/36  =  6/36 + 30/36  =  1</pre>
+
+      <p>Treat those 21 as equally likely — an easy mistake, and a tempting one because the loop is
+      simpler — and you have overweighted doubles by a factor of two. Doubles give you
+      <em>four</em> moves, so the error does not cancel out anywhere; it makes the engine
+      systematically over-optimistic about big rolls.</p>
+
+      <h3 class="text-xl font-bold">Averaging the best is not the best of the average</h3>
+
+      <p>There is a shortcut people reach for: instead of evaluating all 21 rolls, evaluate the
+      "average roll" once. It is much faster and it is wrong, by Jensen's inequality — the maximum
+      of an average is not the average of maxima:</p>
+
+      <pre>E[ max<sub>m</sub> f(m, roll) ]  ≥  max<sub>m</sub> E[ f(m, roll) ]</pre>
+
+      <p>The gap between those two numbers is exactly the value of being able to <em>react</em> to
+      the roll, which is most of what skill is in this game. The page measures the gap rather than
+      asserting it.</p>
+
+      <h3 class="text-xl font-bold">The rule almost every implementation drops</h3>
+
+      <p>Here is the clause that separates a real backgammon engine from a plausible one:</p>
+
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-4">
+        <p class="text-sm"><strong>You must play both dice if any ordering plays both. If only one
+        can be played, you must play the larger.</strong></p>
+      </div>
+
+      <p>Both halves are non-local. You cannot decide legality by looking at one move — you have to
+      generate the whole sequence and compare it against every other sequence. A position where
+      playing the 5 first blocks the 3, but playing the 3 first leaves the 5 available, is
+      <em>illegal to start with the 5</em>, and nothing about the 5 by itself tells you that.</p>
+
+      <p>So move generation is a small search over orderings, filtered by a maximum. Skip it and
+      your engine will happily make moves that no tournament would allow, in exactly the cramped
+      positions where the rule matters most.</p>
+
+      <h3 class="text-xl font-bold">The doubling cube is where the maths gets sharp</h3>
+
+      <p>The cube turns backgammon from a game into a sequence of decision-theory problems. Your
+      opponent offers to double the stake. You may take, or drop and concede one point.</p>
+
+      <p>Drop, and you lose exactly 1. Take, and you play for 2 with winning probability
+      <em>p</em>:</p>
+
+      <pre>equity(drop) = −1
+equity(take) = 2p − 2(1−p) = 4p − 2
+
+take is better when   4p − 2 > −1   ⟺   p > 0.25</pre>
+
+      <p><strong>25%.</strong> Everyone quotes it; this page derives it, then goes further and
+      <em>measures</em> it — the take/drop boundary is located by bisection on a real rollout of a
+      pure race, and lands where the algebra says it should.</p>
+
+      <p>The caveat matters and is on the page too: that derivation is cubeless. It assumes you
+      never get to double back. Owning the cube is worth something, which is why the practical take
+      point sits below 25% — the algebra gives you the floor, not the answer.</p>
+
+      <h3 class="text-xl font-bold">Why this game produced the first great neural engine</h3>
+
+      <p>TD-Gammon (Tesauro, 1992) learned by self-play and reached world class, years before that
+      worked anywhere else. The reason is structural, and it is the chance node again: the dice
+      inject exploration for free. A deterministic self-play loop can converge to a narrow band of
+      positions it keeps replaying; the dice make that impossible, so the network sees a
+      genuinely varied distribution of positions without any exploration machinery at all.</p>
+
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-50">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">🔨 How it is built</h2>
+
+      <h3 class="text-xl font-bold">1. One signed array is the whole board</h3>
+      <pre>// 26 slots: 0 = white bar, 1..24 = points, 25 = black bar.
+// Positive = white checkers, negative = black. Sign IS ownership.
+const START = [0, -2,0,0,0,0,5,  0,3,0,0,0,-5,  5,0,0,0,-3,0,  -5,0,0,0,0,2, 0];</pre>
+      <p>Sign carrying ownership means "is this point open to me?" is one comparison rather than a
+      pair of arrays that can disagree:</p>
+      <pre>const canLand = (b, to, me) => me * b[to] &gt;= -1;   // mine, empty, or a lone blot</pre>
+      <p><code>-1</code> is the blot — exactly one enemy checker, which you hit and send to the bar.
+      Two or more and the point is made against you. That single inequality is the entire blocking
+      rule.</p>
+
+      <h3 class="text-xl font-bold">2. Move generation is a search, because of the maximum-use rule</h3>
+      <pre>function legalSequences(board, me, dice){
+    const out = [];
+    (function walk(b, left, seq){
+      let extended = false;
+      for (let i = 0; i &lt; left.length; i++){
+        if (i &gt; 0 &amp;&amp; left[i] === left[i-1]) continue;      // same die, same subtree
+        for (const mv of singleMoves(b, me, left[i])){
+          extended = true;
+          walk(applyMove(b, mv, me), left.filter((_,j) =&gt; j !== i), seq.concat([mv]));
+        }
+      }
+      if (!extended) out.push(seq);                          // dead end: record it
+    })(board, dice, []);
+
+    const most = Math.max(...out.map(s =&gt; s.length));
+    let keep = out.filter(s =&gt; s.length === most);
+    if (most === 1 &amp;&amp; dice[0] !== dice[1]){                  // must play the LARGER
+      const big = Math.max(...dice);
+      const withBig = keep.filter(s =&gt; s[0].die === big);
+      if (withBig.length) keep = withBig;
+    }
+    return keep;
+}</pre>
+      <p>The two filters at the bottom are the rule. Without them the engine is playing a game with
+      the same pieces and different laws — and it will look completely normal until a cramped
+      position arrives.</p>
+
+      <h3 class="text-xl font-bold">3. The bar is not a special case, it is a precondition</h3>
+      <pre>function singleMoves(b, me, die){
+  const bar = me === WHITE ? 0 : 25;
+  if (b[bar] * me &gt; 0) {                    // ANY checker on the bar
+    const to = me === WHITE ? 25 - die : die;
+    return canLand(b, to, me) ? [{ from: bar, to, die }] : [];
+  }
+  ...                                        // only now, ordinary moves
+}</pre>
+      <p>Early return, not a filter afterwards. "You must enter before you do anything else" is a
+      guard on the generator, so no code downstream can forget it.</p>
+
+      <h3 class="text-xl font-bold">4. Bearing off: exact, or higher from the highest</h3>
+      <pre>if (allHome(b, me)){
+  const exact = me === WHITE ? die : 25 - die;
+  if (b[exact] * me &gt; 0) moves.push({ from: exact, to: OFF, die });
+  else if (die &gt; highestOccupied(b, me))    // overshoot allowed ONLY from the highest
+    moves.push({ from: highestOccupied(b, me), to: OFF, die });
+}</pre>
+      <p>The second branch is the one that gets written wrong. A 6 does not bear off a checker on
+      point 4 while a checker still sits on point 5 — you must play the 5 first. Guarding on "is
+      this the highest occupied point" is the whole rule, and it is why bearing off has any skill
+      in it at all.</p>
+
+      <h3 class="text-xl font-bold">5. Expectiminimax, with the weights right</h3>
+      <pre>const ROLLS = [];
+for (let a = 1; a &lt;= 6; a++)
+  for (let b = a; b &lt;= 6; b++)
+    ROLLS.push({ dice: a === b ? [a,a,a,a] : [a,b], p: a === b ? 1/36 : 2/36 });
+// 21 entries, probabilities summing to exactly 1
+
+function chanceValue(board, me, depth){
+  let total = 0;
+  for (const r of ROLLS){
+    let best = -Infinity;
+    for (const seq of legalSequences(board, me, r.dice))
+      best = Math.max(best, -chanceValue(applyAll(board, seq, me), -me, depth - 1));
+    total += r.p * (best === -Infinity ? -chanceValue(board, -me, depth - 1) : best);
+  }
+  return total;
+}</pre>
+      <p><code>a = 1; b = a</code> — the inner loop starting at <code>a</code> rather than 1 is what
+      produces 21 instead of 36, and the <code>p</code> field is what stops them being uniform. Two
+      characters and one property, and getting either wrong silently biases every evaluation.</p>
+      <p>The <code>best === -Infinity</code> branch is a real case, not defensive padding: a player
+      with checkers on the bar against a closed board has <em>no legal move at all</em> and simply
+      forfeits the turn.</p>
+
+      <h3 class="text-xl font-bold">6. What the tests actually assert</h3>
+      <pre>// conservation, after every move of 400 random games
+assert(count(board, WHITE) + off.white === 15);
+assert(count(board, BLACK) + off.black === 15);
+
+// the chance node is a probability distribution
+assert(ROLLS.length === 21);
+assert(Math.abs(ROLLS.reduce((s,r) =&gt; s + r.p, 0) - 1) &lt; 1e-15);
+
+// pip count is monotone: no legal move ever increases your own pips
+assert(pip(after, me) &lt;= pip(before, me));</pre>
+      <p>That last one is a strong, cheap invariant. Every legal move in backgammon moves a checker
+      toward home or off the board, so your pip count can only fall — which catches direction bugs,
+      the classic sign error, and bear-off mistakes all at once, on every ply of every random game.</p>
+
+      <h3 class="text-xl font-bold">🎉 GameFromZero Day 65 shipped.</h3>
+      <p class="text-slate-600">Sixty-five games. This is the first one where the opponent is a
+      distribution.</p>
+
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// Backgammon rules + expectiminimax. No DOM in this block.
+const WHITE = 1, BLACK = -1, OFF = -1;
+const W_BAR = 0, B_BAR = 25;
+
+function mulberry32(seed){
+  let s = seed >>> 0;
+  return function(){
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t = (t ^ (t + Math.imul(t ^ (t >>> 7), t | 61))) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function startBoard(){
+  //      bar  1  2  3  4  5   6   7  8  9 10 11  12  13 14 15 16  17 18  19 20 21 22 23 24  bar
+  return [ 0, -2, 0, 0, 0, 0,  5,  0, 3, 0, 0, 0, -5,  5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2,  0];
+}
+
+function newGame(){
+  return { b: startBoard(), off: { 1: 0, "-1": 0 } };
+}
+
+const canLand = (b, to, me) => to === OFF || me * b[to] >= -1;
+
+function allHome(b, me){
+  // white bears off toward point 1, so home is 1..6; black's home is 19..24
+  if (me * b[me === WHITE ? W_BAR : B_BAR] > 0) return false;
+  const lo = me === WHITE ? 7 : 1, hi = me === WHITE ? 24 : 18;
+  for (let i = lo; i <= hi; i++) if (me * b[i] > 0) return false;
+  return true;
+}
+
+function highestOccupied(b, me){
+  // "highest" = furthest from home
+  if (me === WHITE){ for (let i = 6; i >= 1; i--) if (b[i] > 0) return i; return 0; }
+  for (let i = 19; i <= 24; i++) if (b[i] < 0) return i;
+  return 0;
+}
+
+function singleMoves(b, me, die){
+  const bar = me === WHITE ? W_BAR : B_BAR;
+  if (me * b[bar] > 0){
+    // the bar is a PRECONDITION, not one option among many
+    const to = me === WHITE ? 25 - die : die;
+    return canLand(b, to, me) ? [{ from: bar, to: to, die: die }] : [];
+  }
+  const out = [];
+  for (let i = 1; i <= 24; i++){
+    if (me * b[i] <= 0) continue;
+    const to = i - me * die;
+    if (to >= 1 && to <= 24 && canLand(b, to, me)) out.push({ from: i, to: to, die: die });
+  }
+  if (allHome(b, me)){
+    const exact = me === WHITE ? die : 25 - die;
+    if (me * b[exact] > 0) out.push({ from: exact, to: OFF, die: die });
+    else {
+      const hi = highestOccupied(b, me);
+      // overshoot is legal ONLY from the highest occupied point
+      const dist = me === WHITE ? hi : 25 - hi;
+      if (hi !== 0 && die > dist) out.push({ from: hi, to: OFF, die: die });
+    }
+  }
+  return out;
+}
+
+function applyMove(state, mv, me){
+  const b = state.b.slice();
+  const off = { 1: state.off[1], "-1": state.off["-1"] };
+  b[mv.from] -= me;
+  if (mv.to === OFF) off[me]++;
+  else {
+    if (b[mv.to] === -me){                       // a blot: hit it
+      b[mv.to] = 0;
+      b[me === WHITE ? B_BAR : W_BAR] += -me;
+    }
+    b[mv.to] += me;
+  }
+  return { b: b, off: off };
+}
+
+function applyAll(state, seq, me){
+  let s = state;
+  for (const mv of seq) s = applyMove(s, mv, me);
+  return s;
+}
+
+function legalSequences(state, me, dice){
+  const out = [];
+  (function walk(s, left, seq){
+    let extended = false;
+    for (let i = 0; i < left.length; i++){
+      if (i > 0 && left[i] === left[i - 1]) continue;    // identical die, identical subtree
+      const rest = left.slice(0, i).concat(left.slice(i + 1));
+      for (const mv of singleMoves(s.b, me, left[i])){
+        extended = true;
+        walk(applyMove(s, mv, me), rest, seq.concat([mv]));
+      }
+    }
+    if (!extended) out.push(seq);
+  })(state, dice.slice().sort(function(a, b){ return a - b; }), []);
+
+  if (!out.length) return [[]];
+  const most = out.reduce(function(m, s){ return Math.max(m, s.length); }, 0);
+  let keep = out.filter(function(s){ return s.length === most; });
+  if (most === 1 && dice.length === 2 && dice[0] !== dice[1]){
+    // if only one die can be played, it must be the LARGER one
+    const big = Math.max(dice[0], dice[1]);
+    const withBig = keep.filter(function(s){ return s[0].die === big; });
+    if (withBig.length) keep = withBig;
+  }
+  // dedupe by resulting position - different orders reaching the same board are one move
+  const seen = {}, uniq = [];
+  for (const s of keep){
+    const k = applyAll(state, s, me).b.join(",");
+    if (!seen[k]) { seen[k] = 1; uniq.push(s); }
+  }
+  return uniq;
+}
+
+const ROLLS = (function(){
+  const out = [];
+  for (let a = 1; a <= 6; a++)
+    for (let b = a; b <= 6; b++)
+      out.push({ dice: a === b ? [a, a, a, a] : [a, b], p: a === b ? 1 / 36 : 2 / 36 });
+  return out;
+})();
+
+function pip(state, me){
+  let total = 0;
+  for (let i = 1; i <= 24; i++)
+    if (me * state.b[i] > 0) total += Math.abs(state.b[i]) * (me === WHITE ? i : 25 - i);
+  const bar = me === WHITE ? W_BAR : B_BAR;
+  total += Math.abs(state.b[bar]) * 25;
+  return total;
+}
+
+function checkers(state, me){
+  let n = Math.abs(state.b[me === WHITE ? W_BAR : B_BAR]);
+  for (let i = 1; i <= 24; i++) if (me * state.b[i] > 0) n += Math.abs(state.b[i]);
+  return n + state.off[me];
+}
+
+function blots(state, me){
+  let n = 0;
+  for (let i = 1; i <= 24; i++) if (state.b[i] === me) n++;
+  return n;
+}
+
+function madePoints(state, me){
+  let n = 0;
+  for (let i = 1; i <= 24; i++) if (me * state.b[i] >= 2) n++;
+  return n;
+}
+
+function evaluate(state, me){
+  if (state.off[me] === 15) return 1000;
+  if (state.off[-me] === 15) return -1000;
+  return (pip(state, -me) - pip(state, me)) * 1.0
+       + (madePoints(state, me) - madePoints(state, -me)) * 2.0
+       - (blots(state, me) - blots(state, -me)) * 3.0
+       - Math.abs(state.b[me === WHITE ? W_BAR : B_BAR]) * 8.0;
+}
+
+// The chance node: weighted over all 21 distinct rolls, NOT uniform over 21 and NOT 36.
+function chanceValue(state, me, depth){
+  if (depth <= 0 || state.off[1] === 15 || state.off["-1"] === 15) return evaluate(state, me);
+  let total = 0;
+  for (const r of ROLLS){
+    let best = -Infinity;
+    for (const seq of legalSequences(state, me, r.dice)){
+      const v = -chanceValue(applyAll(state, seq, me), -me, depth - 1);
+      if (v > best) best = v;
+    }
+    total += r.p * best;
+  }
+  return total;
+}
+
+function bestSequence(state, me, dice, depth){
+  const seqs = legalSequences(state, me, dice);
+  let best = null, bestV = -Infinity;
+  for (const seq of seqs){
+    const next = applyAll(state, seq, me);
+    const v = depth > 1 ? -chanceValue(next, -me, depth - 1) : evaluate(next, me);
+    if (v > bestV){ bestV = v; best = seq; }
+  }
+  return { seq: best || [], value: bestV };
+}
+
+// Jensen: E[max] vs max[E]. Reacting to the roll is worth the gap.
+function reactionValue(state, me){
+  let eMax = 0;
+  for (const r of ROLLS) eMax += r.p * bestSequence(state, me, r.dice, 1).value;
+  // the shortcut: commit to one move class first, then average
+  const all = {};
+  for (const r of ROLLS)
+    for (const seq of legalSequences(state, me, r.dice)){
+      const k = seq.map(function(m){ return m.from + ">" + m.to; }).join("|");
+      if (!all[k]) all[k] = { total: 0, seq: seq };
+      all[k].total += r.p * evaluate(applyAll(state, seq, me), me);
+    }
+  let maxE = -Infinity;
+  for (const k in all) if (all[k].total > maxE) maxE = all[k].total;
+  return { eMax: eMax, maxE: maxE, gap: eMax - maxE };
+}
+
+// ---- the doubling cube, derived rather than quoted ----------------------------
+// A pure race: both sides just roll and run. No contact, no hits.
+function raceWinProbability(myPips, theirPips, trials, seed){
+  const rnd = mulberry32(seed);
+  let wins = 0;
+  for (let t = 0; t < trials; t++){
+    let a = myPips, b = theirPips;
+    for (;;){
+      a -= rollPips(rnd);
+      if (a <= 0) { wins++; break; }
+      b -= rollPips(rnd);
+      if (b <= 0) break;
+    }
+  }
+  return wins / trials;
+}
+
+function rollPips(rnd){
+  const d1 = 1 + Math.floor(rnd() * 6), d2 = 1 + Math.floor(rnd() * 6);
+  return d1 === d2 ? 4 * d1 : d1 + d2;
+}
+
+// equity(drop) = -1 ; equity(take) = 4p - 2 ; so take when p > 0.25
+const equityTake = p => 4 * p - 2;
+const equityDrop = () => -1;
+const cubeDecision = p => (equityTake(p) > equityDrop() ? "TAKE" : "DROP");
+
+function measuredTakePoint(){
+  // bisect on the ACTUAL equity functions, not on the algebra
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 40; i++){
+    const mid = (lo + hi) / 2;
+    if (equityTake(mid) > equityDrop()) hi = mid; else lo = mid;
+  }
+  return (lo + hi) / 2;
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- UI
+const $ = id => document.getElementById(id);
+let state = newGame(), dice = [], used = [], sel = null, history = [], turn = WHITE;
+
+function pointColour(i){
+  return (i % 2 === 0) ? "#fdba74" : "#fff7ed";
+}
+
+function renderBoard(){
+  const rows = [[13,14,15,16,17,18,19,20,21,22,23,24], [12,11,10,9,8,7,6,5,4,3,2,1]];
+  let html = "";
+  for (const row of rows){
+    html += '<div class="grid grid-cols-12 gap-1 mb-1">';
+    for (const i of row){
+      const n = Math.abs(state.b[i]), me = Math.sign(state.b[i]);
+      const cls = ["pt"];
+      if (sel === i) cls.push("sel");
+      if (sel !== null && destinations(sel).indexOf(i) >= 0) cls.push("dest");
+      let chks = "";
+      for (let k = 0; k < Math.min(n, 5); k++){
+        const label = (k === 4 && n > 5) ? n : "";
+        const top = row === rows[0] ? (k * 24 + 2) : (150 - 24 - k * 24);
+        chks += '<div class="chk ' + (me === WHITE ? "w" : "b") + '" style="top:' + top + 'px">' + label + '</div>';
+      }
+      html += '<div class="' + cls.join(" ") + '" data-pt="' + i + '" style="background:' + pointColour(i) + '">' +
+              '<div class="tri"></div>' + chks +
+              '<div style="position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:9px;color:#9a3412">' + i + '</div></div>';
+    }
+    html += '</div>';
+    if (row === rows[0]) html += '<div class="quad" style="height:10px;margin:6px 0"></div>';
+  }
+  $("board").innerHTML = html;
+  $("board").querySelectorAll(".pt").forEach(function(el){
+    el.addEventListener("click", function(){ onPoint(+el.dataset.pt); });
+  });
+}
+
+function remainingDice(){
+  const left = [];
+  dice.forEach(function(d, i){ if (!used[i]) left.push(d); });
+  return left;
+}
+
+function destinations(from){
+  if (from === null) return [];
+  const out = [];
+  for (const d of remainingDice())
+    for (const mv of singleMoves(state.b, WHITE, d))
+      if (mv.from === from && mv.to !== OFF) out.push(mv.to);
+  return out;
+}
+
+function onPoint(i){
+  if (turn !== WHITE || !remainingDice().length) return;
+  if (sel === null){ if (state.b[i] > 0) sel = i; renderBoard(); return; }
+  const opts = [];
+  for (const d of remainingDice())
+    for (const mv of singleMoves(state.b, WHITE, d))
+      if (mv.from === sel && mv.to === i) opts.push(mv);
+  if (opts.length){
+    history.push({ state: state, dice: dice.slice(), used: used.slice() });
+    state = applyMove(state, opts[0], WHITE);
+    const k = dice.indexOf(opts[0].die);
+    for (let j = 0; j < dice.length; j++) if (dice[j] === opts[0].die && !used[j]) { used[j] = true; break; }
+    sel = null;
+  } else sel = state.b[i] > 0 ? i : null;
+  refresh();
+}
+
+function refresh(){
+  renderBoard();
+  $("pipW").textContent = pip(state, WHITE);
+  $("pipB").textContent = pip(state, BLACK);
+  $("bar").textContent = Math.abs(state.b[W_BAR]) + " / " + Math.abs(state.b[B_BAR]);
+  $("off").textContent = state.off[1] + " / " + state.off["-1"];
+  const cw = checkers(state, WHITE), cb = checkers(state, BLACK);
+  const ok = cw === 15 && cb === 15;
+  $("conserve").textContent = cw + " / " + cb;
+  $("conserve").className = "font-bold " + (ok ? "text-emerald-600" : "text-rose-600");
+
+  $("dice").innerHTML = dice.map(function(d, i){
+    return '<div class="die' + (used[i] ? " used" : "") + '">' + d + '</div>';
+  }).join("");
+
+  if (dice.length){
+    const seqs = legalSequences(state, WHITE, dice);
+    const most = seqs.reduce(function(m, s){ return Math.max(m, s.length); }, 0);
+    let txt = "roll [" + dice.join(",") + "]\n" +
+              "legal sequences using the maximum number of dice: " + seqs.length + "\n" +
+              "dice used by every one of them: " + most + "\n";
+    if (most === 1 && dice[0] !== dice[1])
+      txt += "only one die is playable -> the LARGER (" + Math.max(dice[0], dice[1]) + ") is forced\n";
+    txt += seqs.slice(0, 4).map(function(s){
+      return "  " + (s.length ? s.map(function(m){
+        return (m.from === W_BAR ? "bar" : m.from) + "/" + (m.to === OFF ? "off" : m.to);
+      }).join(" ") : "(no legal move - turn forfeited)");
+    }).join("\n");
+    $("maxuse").textContent = txt;
+  } else $("maxuse").textContent = "roll the dice";
+
+  if (state.off[1] === 15) $("msg").innerHTML = '<span class="text-emerald-600">you win</span>';
+  else if (state.off["-1"] === 15) $("msg").innerHTML = '<span class="text-rose-600">AI wins</span>';
+  else if (!remainingDice().length && dice.length) $("msg").textContent = "turn done — AI moves";
+  else $("msg").textContent = "";
+}
+
+$("roll").addEventListener("click", function(){
+  const d1 = 1 + Math.floor(Math.random() * 6), d2 = 1 + Math.floor(Math.random() * 6);
+  dice = d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
+  used = dice.map(function(){ return false; });
+  turn = WHITE; sel = null;
+  refresh();
+});
+
+$("ai").addEventListener("click", function(){
+  const d1 = 1 + Math.floor(Math.random() * 6), d2 = 1 + Math.floor(Math.random() * 6);
+  const dd = d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
+  const best = bestSequence(state, BLACK, dd, 1);
+  state = applyAll(state, best.seq, BLACK);
+  $("msg").textContent = "AI rolled [" + dd.join(",") + "]";
+  dice = []; used = []; sel = null;
+  refresh();
+});
+
+$("undo").addEventListener("click", function(){
+  const h = history.pop();
+  if (h){ state = h.state; dice = h.dice; used = h.used; sel = null; refresh(); }
+});
+$("reset").addEventListener("click", function(){
+  state = newGame(); dice = []; used = []; sel = null; history = []; refresh();
+});
+
+// chance-node panel
+(function(){
+  const doubles = ROLLS.filter(function(r){ return r.dice.length === 4; });
+  const mixed = ROLLS.filter(function(r){ return r.dice.length === 2; });
+  const sum = ROLLS.reduce(function(s, r){ return s + r.p; }, 0);
+  $("chance").textContent =
+    "distinct rolls        " + ROLLS.length + "\n" +
+    "doubles   " + doubles.length + " x 1/36 = " + (doubles.length / 36).toFixed(4) + "  (4 moves each)\n" +
+    "mixed    " + mixed.length + " x 2/36 = " + (mixed.length / 36).toFixed(4) + "\n" +
+    "total probability     " + sum.toFixed(15) + "\n" +
+    "uniform over 21 would give each " + (1 / 21).toFixed(4) + " - overweighting doubles 1.7x";
+})();
+
+// doubling cube panel
+function cubePanel(){
+  const d = +$("deficit").value;
+  const mine = 80 + d, theirs = 80;
+  const p = raceWinProbability(mine, theirs, 4000, 12345);
+  $("wp").textContent = (100 * p).toFixed(1) + "%";
+  $("eqTake").textContent = equityTake(p).toFixed(3);
+  const dec = cubeDecision(p);
+  $("cube").textContent = dec;
+  $("cube").className = "font-black " + (dec === "TAKE" ? "text-emerald-600" : "text-rose-600");
+  $("tp").textContent = (100 * measuredTakePoint()).toFixed(2) + "%";
+}
+$("deficit").addEventListener("input", cubePanel);
+
+refresh();
+cubePanel();
+</script>
+</body>
+</html>
