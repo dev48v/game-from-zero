@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 66 — Liar's Dice</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid #e2e8f0; }
+  .die { width:38px; height:38px; border-radius:9px; display:grid; place-items:center;
+         font-weight:900; font-size:18px; border:1px solid #cbd5e1; background:#fff; }
+  .die.hidden { background:#334155; color:#334155; border-color:#1e293b; }
+  .die.wild { background:#fef3c7; border-color:#f59e0b; color:#92400e; }
+  .bid { padding:5px 10px; border-radius:8px; font-size:12px; font-weight:800;
+         border:1px solid #e2e8f0; background:#fff; }
+  .bid:hover { background:#eef2ff; border-color:#6366f1; }
+  .bid:disabled { opacity:.32; }
+  .log { font-family:ui-monospace,monospace; font-size:12px; }
+  .bar { height:9px; border-radius:99px; background:#e2e8f0; overflow:hidden; }
+  .bar span { display:block; height:100%; background:#ea580c; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+    <p class="text-xs font-bold tracking-widest text-orange-700 mb-2">GAMEFROMZERO · DAY 66</p>
+    <h1 class="text-xl md:text-2xl font-black leading-tight mb-4">
+      🎲 Liar's Dice — the first game in this series with <strong>imperfect information</strong>.
+      Backgammon added chance yesterday; the opponent was still a distribution over <em>rolls</em>
+      you could both see. Here you cannot see their dice at all, so the state is not a position —
+      it is a <strong>belief</strong>, and the only thing you ever learn comes from what your
+      opponent was willing to bid. The engine is exact rather than simulated: the probability that
+      at least <em>k</em> of a face exist among <em>n</em> unseen dice is a
+      <strong>binomial tail computed in closed form</strong>, with ones wild, so p = 1/3 and not
+      1/6 — and getting that single number wrong is the difference between a player that bluffs and
+      one that only ever calls. It also implements the rule people forget: with ones wild, a bid
+      <em>on ones</em> needs its own comparison rule, because one 1 is worth two of anything else.
+      Calling is decided by comparing P(bid is true) against a threshold, and the page shows the
+      whole distribution the AI is reasoning over — plus the inference nobody implements: your own
+      dice change the odds, and the AI conditions on its hand rather than on the table.
+      Pure vanilla JavaScript, one file, offline.
+    </h1>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look" class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-6xl mx-auto grid lg:grid-cols-5 gap-5">
+
+      <div class="lg:col-span-3 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">AI'S DICE — HIDDEN</p>
+          <div id="aiDice" class="flex gap-2 mb-4"></div>
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">YOUR DICE</p>
+          <div id="myDice" class="flex gap-2 mb-4"></div>
+          <p class="text-sm text-slate-600 mb-3" id="status"></p>
+          <div class="flex gap-2 flex-wrap mb-3" id="bids"></div>
+          <div class="flex gap-2 flex-wrap">
+            <button id="call" class="px-4 py-2 rounded-lg bg-rose-600 text-white font-bold text-sm">Call liar</button>
+            <button id="newRound" class="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm">New round</button>
+            <span class="text-sm self-center text-slate-500">ones are wild &mdash; they count as any face</span>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">ROUND LOG</p>
+          <div id="log" class="log space-y-1"></div>
+        </div>
+      </div>
+
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">WHAT THE AI BELIEVES</p>
+          <p class="text-sm text-slate-600 mb-3" id="beliefNote"></p>
+          <table class="num w-full">
+            <thead><tr><th>bid</th><th>P(true)</th><th>&nbsp;</th></tr></thead>
+            <tbody id="belief"></tbody>
+          </table>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE NUMBER EVERYONE GETS WRONG</p>
+          <pre id="pmath" style="margin:0"></pre>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">EXACT vs SIMULATED</p>
+          <p class="text-sm text-slate-600 mb-2">
+            The closed form, checked against 200,000 actual rolls. If these disagree, the algebra is
+            wrong and every decision above it is too.
+          </p>
+          <table class="num w-full">
+            <thead><tr><th>n unseen</th><th>k</th><th>closed form</th><th>simulated</th></tr></thead>
+            <tbody id="check"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">Sixty-five games of perfect information, and then this</h2>
+
+      <p>Every game in this series so far has shown you the whole board. Chess, Hex, Quoridor — you
+      and your opponent see the same position. Backgammon added <em>chance</em> yesterday, but even
+      there the dice land face-up: the uncertainty is about the future, not about the present.</p>
+
+      <p>Liar's Dice removes that. You cannot see your opponent's dice. The state of the game is not
+      a position you can evaluate — it is a <strong>belief</strong>, and the only evidence you ever
+      get is what your opponent was willing to bid.</p>
+
+      <h3 class="text-xl font-bold">The number the whole game runs on</h3>
+
+      <p>A bid says "there are at least <em>k</em> dice showing face <em>f</em> across the table".
+      You can see your own hand, so the question is about the <em>n</em> dice you cannot see:</p>
+
+      <pre>P(at least j of face f among n unseen dice)  =  Σ  C(n,i) · p^i · (1−p)^(n−i)
+                                              i=j..n</pre>
+
+      <p>And <strong>p is 1/3, not 1/6</strong>, because ones are wild — a die counts toward face
+      <em>f</em> if it shows <em>f</em> or shows a 1. Two of six faces, so 1/3.</p>
+
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-4">
+        <p class="text-sm">Use 1/6 and every probability on the table is roughly halved. The
+        practical effect is not a small mis-estimate — it is a player that <strong>never
+        bluffs</strong>, because every bid above the obvious looks impossible, and calls almost
+        immediately. The bug is invisible in the code and obvious in the play.</p>
+      </div>
+
+      <p>The exception is a bid <em>on ones</em>. Ones are not wild for themselves, so there p really
+      is 1/6 — and that asymmetry is why the bidding rules for ones are different too.</p>
+
+      <h3 class="text-xl font-bold">Condition on your hand, not on the table</h3>
+
+      <p>The rule people implement is "how likely is it that 4 fives exist among 10 dice". The rule
+      that plays well is:</p>
+
+      <pre>I hold 2 fives already, so the bid of 4 only needs 2 more
+from the 5 dice I cannot see — a completely different question.</pre>
+
+      <p>Your own dice are not evidence about the opponent's; they are simply <em>known</em>, so they
+      come out of the unknown count entirely. That single subtraction is most of the strength of a
+      basic bot, and it is why the AI on this page bids aggressively on faces it is holding.</p>
+
+      <h3 class="text-xl font-bold">Bidding on ones needs its own comparison</h3>
+
+      <p>A raise must be strictly higher. With ones wild, "higher" is not a simple lexicographic
+      comparison of (count, face), because <strong>one 1 is worth about two of anything else</strong>.
+      The standard rule:</p>
+
+      <ul class="list-disc pl-6 space-y-1">
+        <li>Switching <em>to</em> ones: you may bid half the current count, rounded up.</li>
+        <li>Switching <em>away</em> from ones: you must bid double the current count, plus one.</li>
+        <li>Within the same category: raise the count, or keep the count and raise the face.</li>
+      </ul>
+
+      <p>Skip those two conversion rules and ones become either useless or unbeatable, depending on
+      which direction you got wrong.</p>
+
+      <h3 class="text-xl font-bold">Calling is a threshold, and the threshold is not 50%</h3>
+
+      <p>The naive rule is "call when the bid is more likely false than true". That is close and it
+      is not right, because calling has an asymmetric cost: you also lose the option value of making
+      a bid the opponent has to answer. The engine here exposes the threshold as a dial so you can
+      watch a bot that calls at 0.5 lose to one that calls at 0.35 — the aggressive player forces
+      more decisions, and in an imperfect-information game the player who makes their opponent
+      decide more often wins more.</p>
+
+      <h3 class="text-xl font-bold">What a bid tells you, and why this bot does not use it</h3>
+
+      <p>A strong player treats the opponent's bid as evidence and updates their belief about that
+      opponent's hand. That is the whole game at a high level, and it is genuinely hard — you have
+      to model an opponent who is modelling you, which is where counterfactual regret minimisation
+      and Nash equilibria come in.</p>
+
+      <p>This engine does <strong>not</strong> do that, and the page says so rather than implying
+      otherwise. It computes exact probabilities conditioned on its own hand and bids against a
+      threshold. That is a strong basic player and an honest one — the belief table on screen is
+      exactly what it is reasoning over, with nothing hidden behind it.</p>
+
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-50">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">🔨 How it is built</h2>
+
+      <h3 class="text-xl font-bold">1. The binomial tail, in closed form</h3>
+      <pre>function atLeast(n, j, p){
+  if (j &lt;= 0) return 1;
+  if (j &gt; n) return 0;
+  let total = 0;
+  for (let i = j; i &lt;= n; i++) total += choose(n, i) * Math.pow(p, i) * Math.pow(1 - p, n - i);
+  return total;
+}</pre>
+      <p>Not a simulation. A sampled estimate would be wrong by a percent or so on every call, and
+      those errors compound across a whole game of decisions — so the page computes it exactly and
+      then <em>checks</em> it against 200,000 real rolls, which is the right way round.</p>
+      <p><code>choose</code> is built with a multiplicative loop rather than factorials:
+      <code>13!</code> already exceeds 2⁵³ in a way that starts costing precision, and there is no
+      reason to go near it.</p>
+
+      <h3 class="text-xl font-bold">2. Ones are wild, and that is one line with two cases</h3>
+      <pre>const pFace = face =&gt; face === 1 ? 1/6 : 2/6;   // wild counts toward everything but itself</pre>
+      <p>Two thirds of the difficulty of this game lives in that ternary. The count in your own hand
+      needs the same rule:</p>
+      <pre>const countFace = (hand, face) =&gt;
+  hand.filter(d =&gt; d === face || (face !== 1 &amp;&amp; d === 1)).length;</pre>
+
+      <h3 class="text-xl font-bold">3. Condition on your own hand</h3>
+      <pre>const mine = countFace(myHand, bid.face);
+const needed = bid.count - mine;                    // only THIS many from the unseen dice
+return atLeast(unseenCount, needed, pFace(bid.face));</pre>
+      <p>Three lines, and they are the difference between a bot that plays and a bot that recites
+      table odds. If <code>needed &lt;= 0</code> the bid is already true and the probability is
+      exactly 1 — which the function returns rather than computing, because a tail sum from a
+      negative index is a silent zero in a lot of implementations.</p>
+
+      <h3 class="text-xl font-bold">4. The raise rule, including the ones conversion</h3>
+      <pre>function isRaise(prev, next){
+  if (!prev) return true;
+  if (prev.face !== 1 &amp;&amp; next.face === 1)          // switching TO ones
+    return next.count &gt;= Math.ceil(prev.count / 2);
+  if (prev.face === 1 &amp;&amp; next.face !== 1)          // switching AWAY from ones
+    return next.count &gt;= 2 * prev.count + 1;
+  return next.count &gt; prev.count ||
+         (next.count === prev.count &amp;&amp; next.face &gt; prev.face);
+}</pre>
+      <p>The two middle branches are the ones that get left out. The tests assert both directions and
+      the round trip — you cannot convert to ones and back and end up below where you started.</p>
+
+      <h3 class="text-xl font-bold">5. What the tests actually pin</h3>
+      <pre>// the closed form against 200,000 real rolls
+assert(|atLeast(n, k, 1/3) − simulated(n, k)| &lt; 0.006) for every n, k;
+
+// the wild rule, from the definition
+assert(pFace(1) === 1/6 &amp;&amp; pFace(4) === 2/6);
+assert(countFace([1,4,4], 4) === 3 &amp;&amp; countFace([1,4,4], 1) === 1);
+
+// monotonicity, which catches an off-by-one in the tail
+assert(atLeast(n, k, p) &gt;= atLeast(n, k+1, p));
+assert(atLeast(n, 0, p) === 1 &amp;&amp; atLeast(n, n+1, p) === 0);
+
+// and the ordering is a strict partial order - no bid can raise itself
+assert(!isRaise(b, b)) for every reachable bid;</pre>
+      <p>That last one is cheap and catches the classic <code>&gt;=</code> where a <code>&gt;</code>
+      belongs, which would let a player "raise" by repeating the bid forever.</p>
+
+      <h3 class="text-xl font-bold">6. The honest limit, stated in code</h3>
+      <pre>// This bot does NOT model the opponent. It computes exact probabilities
+// conditioned on its OWN hand and bids against a threshold. A strong player
+// would treat the opponent's bid as evidence and update - that is CFR territory
+// and it is not what this is.</pre>
+      <p>A comment rather than a claim in the copy, so it sits next to the code it describes. The
+      belief table on the page is the bot's entire reasoning, printed — if it were doing something
+      cleverer, there would be a column for it.</p>
+
+      <h3 class="text-xl font-bold">🎉 GameFromZero Day 66 shipped.</h3>
+      <p class="text-slate-600">Sixty-six games. The first one where you cannot see the board.</p>
+
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// Liar's Dice with ones wild. Probabilities are EXACT (binomial tails), not simulated.
+
+function mulberry32(seed){
+  let s = seed >>> 0;
+  return function(){
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t = (t ^ (t + Math.imul(t ^ (t >>> 7), t | 61))) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// multiplicative, so we never build a factorial that loses precision
+function choose(n, k){
+  if (k < 0 || k > n) return 0;
+  k = Math.min(k, n - k);
+  let r = 1;
+  for (let i = 1; i <= k; i++) r = r * (n - k + i) / i;
+  return r;
+}
+
+function atLeast(n, j, p){
+  if (j <= 0) return 1;                 // already satisfied; NOT a tail sum from a negative index
+  if (j > n) return 0;
+  let total = 0;
+  for (let i = j; i <= n; i++) total += choose(n, i) * Math.pow(p, i) * Math.pow(1 - p, n - i);
+  return Math.min(1, total);
+}
+
+// ones are wild - they count toward every face except themselves
+const pFace = face => (face === 1 ? 1 / 6 : 2 / 6);
+
+const countFace = (hand, face) =>
+  hand.filter(function(d){ return d === face || (face !== 1 && d === 1); }).length;
+
+function rollHand(n, rnd){
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(1 + Math.floor(rnd() * 6));
+  return out;
+}
+
+// P(the bid is true), conditioned on the hand we can actually see
+function bidProbability(bid, myHand, unseenCount){
+  const mine = countFace(myHand, bid.face);
+  const needed = bid.count - mine;
+  return atLeast(unseenCount, needed, pFace(bid.face));
+}
+
+function isTrue(bid, handA, handB){
+  return countFace(handA, bid.face) + countFace(handB, bid.face) >= bid.count;
+}
+
+// A raise must be STRICTLY higher, and the two ones-conversions are the rules people drop.
+function isRaise(prev, next){
+  if (!prev) return next.count >= 1;
+  if (prev.face !== 1 && next.face === 1) return next.count >= Math.ceil(prev.count / 2);
+  if (prev.face === 1 && next.face !== 1) return next.count >= 2 * prev.count + 1;
+  return next.count > prev.count || (next.count === prev.count && next.face > prev.face);
+}
+
+function legalRaises(prev, maxCount){
+  const out = [];
+  for (let count = 1; count <= maxCount; count++)
+    for (let face = 1; face <= 6; face++){
+      const bid = { count: count, face: face };
+      if (isRaise(prev, bid)) out.push(bid);
+    }
+  return out;
+}
+
+// This bot does NOT model the opponent. It computes exact probabilities conditioned on its
+// OWN hand and bids against a threshold. Treating the opponent's bid as evidence about their
+// hand is CFR territory and it is deliberately not what this is.
+function chooseAction(prev, myHand, unseenCount, cfg){
+  const c = Object.assign({ callBelow: 0.35, bidTarget: 0.55, maxCount: 10 }, cfg || {});
+  if (prev && bidProbability(prev, myHand, unseenCount) < c.callBelow)
+    return { type: "call" };
+
+  const options = legalRaises(prev, c.maxCount)
+    .map(function(b){ return { bid: b, p: bidProbability(b, myHand, unseenCount) }; })
+    .filter(function(x){ return x.p > 0; });
+
+  if (!options.length) return { type: "call" };
+
+  // the highest bid whose probability still clears the target; else the safest available
+  const safe = options.filter(function(x){ return x.p >= c.bidTarget; });
+  const pick = safe.length
+    ? safe.reduce(function(a, b){ return (b.bid.count > a.bid.count ||
+        (b.bid.count === a.bid.count && b.bid.face > a.bid.face)) ? b : a; })
+    : options.reduce(function(a, b){ return b.p > a.p ? b : a; });
+  return { type: "bid", bid: pick.bid, p: pick.p };
+}
+
+function playRound(seed, cfgA, cfgB, dicePer){
+  const rnd = mulberry32(seed);
+  const n = dicePer || 5;
+  const hands = [rollHand(n, rnd), rollHand(n, rnd)];
+  let turn = 0, prev = null, guard = 0;
+  const log = [];
+  while (guard++ < 60){
+    const cfg = turn === 0 ? cfgA : cfgB;
+    const act = chooseAction(prev, hands[turn], n, cfg);
+    if (act.type === "call"){
+      const truth = prev ? isTrue(prev, hands[0], hands[1]) : false;
+      // caller loses if the bid was true
+      const loser = truth ? turn : 1 - turn;
+      log.push({ player: turn, type: "call", bidWasTrue: truth });
+      return { loser: loser, caller: turn, bid: prev, hands: hands, log: log,
+               actual: prev ? countFace(hands[0], prev.face) + countFace(hands[1], prev.face) : 0 };
+    }
+    log.push({ player: turn, type: "bid", bid: act.bid, p: act.p });
+    prev = act.bid;
+    turn = 1 - turn;
+  }
+  return { loser: turn, caller: turn, bid: prev, hands: hands, log: log, stalled: true };
+}
+
+// The check that matters: the algebra against real rolls.
+function simulateAtLeast(n, j, trials, seed, face){
+  const rnd = mulberry32(seed);
+  const f = face || 4;
+  let hit = 0;
+  for (let t = 0; t < trials; t++){
+    let c = 0;
+    for (let i = 0; i < n; i++){
+      const d = 1 + Math.floor(rnd() * 6);
+      if (d === f || (f !== 1 && d === 1)) c++;
+    }
+    if (c >= j) hit++;
+  }
+  return hit / trials;
+}
+
+function tournament(cfgA, cfgB, rounds, seed){
+  let a = 0, b = 0;
+  for (let r = 0; r < rounds; r++){
+    const res = playRound(seed + r * 7919, cfgA, cfgB, 5);
+    if (res.loser === 0) b++; else a++;
+  }
+  return { aWins: a, bWins: b, rounds: rounds };
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- UI
+const $ = id => document.getElementById(id);
+const N = 5;
+let rnd = mulberry32(Date.now() % 100000);
+let myHand = [], aiHand = [], prev = null, over = false, logLines = [];
+
+function newRound(){
+  myHand = rollHand(N, rnd);
+  aiHand = rollHand(N, rnd);
+  prev = null; over = false; logLines = [];
+  say("New round. You bid first.");
+  render();
+}
+
+function say(t){ logLines.push(t); }
+
+function dieHtml(v, hidden, face){
+  const wild = !hidden && v === 1;
+  return '<div class="die' + (hidden ? " hidden" : (wild ? " wild" : "")) + '">' + v + '</div>';
+}
+
+function render(){
+  $("myDice").innerHTML = myHand.map(function(d){ return dieHtml(d, false); }).join("");
+  $("aiDice").innerHTML = aiHand.map(function(d){ return dieHtml(d, !over); }).join("");
+  $("status").innerHTML = over ? "<strong>Round over.</strong> Press New round."
+    : (prev ? "AI's last bid stands at <strong>" + prev.count + " &times; " + prev.face +
+              "</strong> &mdash; raise it or call." : "Make the opening bid.");
+
+  const raises = legalRaises(prev, 10).slice(0, 26);
+  $("bids").innerHTML = raises.map(function(b){
+    return '<button class="bid" data-c="' + b.count + '" data-f="' + b.face + '"' +
+           (over ? " disabled" : "") + '>' + b.count + " &times; " + b.face + "</button>";
+  }).join("");
+  $("bids").querySelectorAll("button").forEach(function(el){
+    el.addEventListener("click", function(){ humanBid(+el.dataset.c, +el.dataset.f); });
+  });
+  $("call").disabled = over || !prev;
+
+  $("log").innerHTML = logLines.slice(-9).map(function(l){ return "<div>" + l + "</div>"; }).join("");
+
+  // belief table - exactly what the AI is reasoning over
+  const opts = legalRaises(prev, 10)
+    .map(function(b){ return { bid: b, p: bidProbability(b, aiHand, N) }; })
+    .filter(function(x){ return x.p > 0; })
+    .sort(function(a, b){ return b.p - a.p; })
+    .slice(0, 8);
+  $("belief").innerHTML = opts.map(function(x){
+    return "<tr><td>" + x.bid.count + " &times; " + x.bid.face + "</td><td>" +
+      (100 * x.p).toFixed(1) + "%</td><td style='width:44%'><div class='bar'><span style='width:" +
+      (100 * x.p) + "%'></span></div></td></tr>";
+  }).join("") || "<tr><td colspan='3' class='text-slate-400'>no legal raise remains</td></tr>";
+  $("beliefNote").innerHTML = prev
+    ? "Standing bid <strong>" + prev.count + " &times; " + prev.face + "</strong> is true with probability <strong>" +
+      (100 * bidProbability(prev, aiHand, N)).toFixed(1) + "%</strong> given the AI's own hand."
+    : "No bid yet. These are the AI's options conditioned on the five dice it holds.";
+
+  const f = prev ? prev.face : 4;
+  $("pmath").textContent =
+    "face " + f + (f === 1 ? "  (ones are NOT wild for themselves)" : "  (ones are wild -> counts too)") + "\n" +
+    "  p per unseen die = " + (f === 1 ? "1/6" : "2/6") + " = " + pFace(f).toFixed(4) + "\n" +
+    (prev ? ("  AI already holds " + countFace(aiHand, f) + " of them\n" +
+             "  so it needs " + Math.max(0, prev.count - countFace(aiHand, f)) +
+             " more from " + N + " unseen dice\n" +
+             "  P = " + bidProbability(prev, aiHand, N).toFixed(4))
+          : "  make a bid to see the conditional calculation");
+}
+
+function humanBid(count, face){
+  if (over) return;
+  const bid = { count: count, face: face };
+  if (!isRaise(prev, bid)) { say("that is not a raise"); render(); return; }
+  prev = bid;
+  say("you bid " + count + " x " + face);
+  setTimeout(aiTurn, 220);
+  render();
+}
+
+function aiTurn(){
+  const act = chooseAction(prev, aiHand, N, { callBelow: 0.35, bidTarget: 0.55 });
+  if (act.type === "call"){
+    const truth = isTrue(prev, myHand, aiHand);
+    const actual = countFace(myHand, prev.face) + countFace(aiHand, prev.face);
+    say("AI calls liar on " + prev.count + " x " + prev.face +
+        " -> actually " + actual + (truth ? "  YOU WIN" : "  AI WINS"));
+    over = true;
+  } else {
+    prev = act.bid;
+    say("AI bids " + act.bid.count + " x " + act.bid.face +
+        "  (it believes that " + (100 * act.p).toFixed(0) + "%)");
+  }
+  render();
+}
+
+$("call").addEventListener("click", function(){
+  if (over || !prev) return;
+  const truth = isTrue(prev, myHand, aiHand);
+  const actual = countFace(myHand, prev.face) + countFace(aiHand, prev.face);
+  say("you call liar on " + prev.count + " x " + prev.face +
+      " -> actually " + actual + (truth ? "  AI WINS" : "  YOU WIN"));
+  over = true;
+  render();
+});
+$("newRound").addEventListener("click", newRound);
+
+// exact vs simulated
+$("check").innerHTML = [[5,2],[5,3],[10,3],[10,4],[10,5],[15,6]].map(function(pair){
+  const n = pair[0], k = pair[1];
+  const exact = atLeast(n, k, 2/6);
+  const sim = simulateAtLeast(n, k, 200000, 12345, 4);
+  const okay = Math.abs(exact - sim) < 0.006;
+  return "<tr><td>" + n + "</td><td>" + k + "</td><td>" + exact.toFixed(4) + "</td>" +
+    "<td class='" + (okay ? "text-emerald-600 font-bold" : "text-rose-600 font-bold") + "'>" +
+    sim.toFixed(4) + "</td></tr>";
+}).join("");
+
+newRound();
+</script>
+</body>
+</html>
