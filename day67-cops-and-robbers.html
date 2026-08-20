@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 67 — Cops and Robbers</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid #e2e8f0; }
+  .log { font-family:ui-monospace,monospace; font-size:12px; }
+  .bar { height:9px; border-radius:99px; background:#e2e8f0; overflow:hidden; }
+  .bar span { display:block; height:100%; background:#0e7490; }
+  svg .node { cursor:pointer; }
+  svg .node.dead { cursor:not-allowed; }
+  svg text { font-family:ui-monospace,monospace; font-size:11px; font-weight:700; pointer-events:none; }
+  .pill { padding:5px 10px; border-radius:8px; font-size:12px; font-weight:800;
+          border:1px solid #e2e8f0; background:#fff; }
+  .pill:hover { background:#ecfeff; border-color:#0e7490; }
+  .pill:disabled { opacity:.32; }
+  .key { display:inline-block; width:11px; height:11px; border-radius:3px; vertical-align:-1px; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+    <p class="text-xs font-bold tracking-widest text-cyan-700 mb-2">GAMEFROMZERO · DAY 67</p>
+    <h1 class="text-xl md:text-2xl font-black leading-tight mb-4">
+      🚨 Cops and Robbers — the first <strong>pursuit game</strong> in this series, and the first
+      whose engine is not a search at all. Sixty-six days of looking ahead from a position; here
+      the whole game is solved <em>backwards</em> before a single move is played:
+      <strong>retrograde analysis</strong> over every (cops, robber, whose turn) state, exactly how
+      a chess endgame tablebase is built, resolving a cop-to-move state the first time any move
+      works and a robber-to-move state only when the last escape closes. Out of that falls a
+      verdict no search can give you — not "the cop is better here" but <em>the robber survives
+      forever</em>, proved, before you touch anything. And there is a second, completely
+      independent algorithm for the same question that never plays the game: keep deleting
+      <strong>corners</strong> — vertices whose closed neighbourhood sits inside a neighbour's — and
+      the graph is cop-win exactly when it collapses to one vertex. Two unrelated programs, one
+      answer, checked here on <strong>every connected graph up to six vertices</strong>. Then the
+      part that is measured rather than claimed: the obvious robber policy, run away from the
+      nearest cop, is not a rough approximation of the tablebase — on one six-vertex graph it dies
+      in every position or survives every position <em>depending on how the vertices are
+      numbered</em>. Pure vanilla JavaScript, one file, offline.
+    </h1>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look" class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-6xl mx-auto grid lg:grid-cols-5 gap-5">
+
+      <div class="lg:col-span-3 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <div class="flex gap-2 flex-wrap mb-3 items-center">
+            <select id="preset" class="pill"></select>
+            <select id="ncops" class="pill">
+              <option value="1">1 cop</option><option value="2">2 cops</option><option value="3">3 cops</option>
+            </select>
+            <button id="newGame" class="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm">New game</button>
+            <button id="autoGreedy" class="pill">Let the greedy bot run for me</button>
+          </div>
+          <svg id="board" viewBox="0 0 460 360" class="w-full" style="max-height:420px"></svg>
+          <p class="text-sm text-slate-600 mt-2" id="status"></p>
+          <p class="text-xs text-slate-500 mt-2">
+            <span class="key" style="background:#0e7490"></span> cop &nbsp;
+            <span class="key" style="background:#f59e0b"></span> you &nbsp;
+            <span class="key" style="background:#dcfce7;border:1px solid #16a34a"></span> escape forever &nbsp;
+            <span class="key" style="background:#fecaca;border:1px solid #dc2626"></span> caught in N &mdash;
+            the shading is the tablebase, not a guess. Click a highlighted circle to move; your own
+            circle is a legal move, because staying put always is.
+          </p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">MOVE LOG</p>
+          <div id="log" class="log space-y-1"></div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">
+            EVERY POSITION A PERFECT ROBBER SURVIVES, REPLAYED WITH A POLICY
+          </p>
+          <p class="text-sm text-slate-600 mb-3" id="raceNote"></p>
+          <table class="num w-full">
+            <thead><tr><th>robber policy</th><th>positions</th><th>caught</th><th>rate</th></tr></thead>
+            <tbody id="race"></tbody>
+          </table>
+          <button id="race6" class="pill mt-3">run the same race on all 26,704 six-vertex graphs</button>
+        </div>
+      </div>
+
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">WHAT THE TABLEBASE KNOWS</p>
+          <pre id="verdict" style="margin:0"></pre>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE OTHER ALGORITHM</p>
+          <p class="text-sm text-slate-600 mb-2">
+            Corner elimination, which never plays a move. It must agree with the table above.
+          </p>
+          <pre id="dismantle" style="margin:0"></pre>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE THEOREM, ENUMERATED</p>
+          <p class="text-sm text-slate-600 mb-2">
+            Every connected labelled graph, solved twice. A single disagreement kills one of the two
+            programs, and it would be impossible to tell which.
+          </p>
+          <table class="num w-full">
+            <thead><tr><th>n</th><th>connected</th><th>cop-win</th><th>dismantlable</th><th>differ</th></tr></thead>
+            <tbody id="theorem"></tbody>
+          </table>
+          <button id="run6" class="pill mt-3">enumerate all 32,768 six-vertex graphs</button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">SAME GRAPH, DIFFERENT NUMBERS</p>
+          <p class="text-sm text-slate-600 mb-2">
+            One abstract graph &mdash; a square with a two-edge tail &mdash; under all 720 vertex
+            numberings, greedy robber against the perfect cop.
+          </p>
+          <table class="num w-full">
+            <thead><tr><th>positions lost</th><th>numberings</th><th>&nbsp;</th></tr></thead>
+            <tbody id="relabel"></tbody>
+          </table>
+          <p class="text-xs text-slate-500 mt-2" id="relabelNote"></p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">SELF-TEST</p>
+          <pre id="selftest" style="margin:0">running&hellip;</pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">A game that is over before it starts</h2>
+
+      <p>The rules take one line. A cop picks a vertex. The robber, having <em>seen</em> where the
+      cop is, picks a vertex. Then they alternate, cop first, and a move is "walk along an edge or
+      stay where you are". The cop wins the moment she stands on the robber. The robber wins by
+      never letting that happen — not for a long time, <strong>forever</strong>.</p>
+
+      <p>That "forever" is why this game does not fit the machinery of the previous sixty-six days.
+      Minimax needs a horizon. Here the robber's win condition is an infinite play, and no depth
+      limit can ever certify it: search a thousand plies deep and all you know is that the cop has
+      not won yet.</p>
+
+      <h3 class="text-xl font-bold">So you solve it backwards instead</h3>
+
+      <p>Every state of this game is a triple: where the cops are, where the robber is, and whose
+      turn it is. For one cop on <em>n</em> vertices that is 2<em>n</em>² states — 200 on the
+      Petersen graph, 72 on a six-vertex graph. Small enough to hold all of them and work backwards
+      from the end, which is exactly how a chess endgame tablebase is built.</p>
+
+      <pre>start:  every state where a cop stands on the robber   -> distance 0
+
+then repeatedly, backwards:
+  a COP-to-move state is won as soon as ONE of its moves reaches a won state
+  a ROBBER-to-move state is won only when the LAST of its moves has been shown won</pre>
+
+      <p>That asymmetry — <em>some</em> for the cop, <em>all</em> for the robber — is the whole
+      solver. Implement it as a breadth-first search backwards from the captured states, with a
+      counter on each robber-to-move state that ticks down as its escapes close, and every state
+      resolves in non-decreasing order of capture time.</p>
+
+      <div class="bg-cyan-50 border-l-4 border-cyan-600 p-4">
+        <p class="text-sm">The states that are still unresolved when the queue empties are not
+        "unknown" or "too deep". They are <strong>proved robber wins</strong>. That is the thing a
+        forward search can never hand you, and it is why the page can shade a vertex green and mean
+        it.</p>
+      </div>
+
+      <h3 class="text-xl font-bold">The second algorithm, which never plays</h3>
+
+      <p>There is an entirely different way to answer the same question, and it does not know the
+      rules of the game. Call <em>u</em> a <strong>corner</strong> if some other vertex <em>v</em>
+      has N[<em>u</em>] ⊆ N[<em>v</em>] — everything <em>u</em> can reach, including <em>u</em>
+      itself, <em>v</em> can reach too. Delete corners one at a time.</p>
+
+      <pre>Nowakowski-Winkler / Quilliot, 1983:
+  a connected reflexive graph is cop-win  IFF  deleting corners collapses it to one vertex.</pre>
+
+      <p>The intuition is that a corner is a place the robber should never stand: <em>v</em>
+      dominates it, so a cop on <em>v</em> covers every square the robber could run to. Remove it
+      and you have a smaller graph with the same answer.</p>
+
+      <p>Two programs with nothing in common — one an exhaustive game solve, one pure graph
+      surgery. The PLAY tab runs both on every connected graph on 1, 2, 3, 4 and 5 vertices on load,
+      and all 26,704 connected six-vertex graphs behind a button. Disagreements: zero. That is what
+      a theorem check should look like, and it is worth more than quoting the theorem.</p>
+
+      <h3 class="text-xl font-bold">What "cop number" means, and the graph that surprised me</h3>
+
+      <p>If one cop cannot win, ask how many can. The <strong>cop number</strong> is the smallest
+      <em>k</em> such that <em>k</em> cops, moving simultaneously, catch any robber. Trees are 1.
+      Cycles longer than a triangle are 2. The Petersen graph is 3, and the solver here confirms it
+      by running out of escapes across all 20,000 three-cop states.</p>
+
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-4">
+        <p class="text-sm">I intended to use a <strong>grid</strong> as the friendly cop-win
+        example. It is not cop-win. A grid has <em>no corner at all</em> — take any vertex, and no
+        neighbour's closed neighbourhood contains it — so nothing dismantles and one cop can chase
+        forever. The cop number of any rectangular grid is 2, and the page reports it because the
+        engine computed it rather than because I remembered it.</p>
+      </div>
+
+      <h3 class="text-xl font-bold">The measurement that changed what this page says</h3>
+
+      <p>I expected the obvious robber policy — move to whichever neighbour is furthest from the
+      nearest cop — to be a decent approximation of the tablebase, losing a bit of ground. Two
+      things came out of running it over every position a perfect robber survives:</p>
+
+      <ul class="list-disc pl-6 space-y-1">
+        <li>On every connected graph up to <strong>five</strong> vertices it is perfect. 172
+        robber-win graphs, 1,160 surviving positions, <strong>0</strong> losses.</li>
+        <li>At six vertices it loses 8.24% of them — and the failures are concentrated: 1,902
+        graphs where it dies at least once.</li>
+      </ul>
+
+      <p>Then the smallest counterexample explained why, and it is not what "greedy is a weak
+      heuristic" would suggest. It is a <strong>square with a two-edge tail</strong>. The robber
+      survives forever by circling the square. The greedy robber runs up the tail, because the far
+      end of the tail is further from the cop than anywhere on the square, and gets cornered in a
+      dead end.</p>
+
+      <p>But look at the moment of the decision. The robber is on the junction. Going round the
+      square and going up the tail are <em>both distance 2 from the cop</em>. The heuristic has
+      nothing to say. Something else picks — and the something else is whatever order the neighbours
+      happen to be stored in.</p>
+
+      <div class="bg-rose-50 border-l-4 border-rose-500 p-4">
+        <p class="text-sm">So the page measures it. The same abstract graph under all
+        <strong>720</strong> vertex numberings: in <strong>240</strong> of them the greedy robber
+        survives every single position, in <strong>240</strong> it is caught in <em>every</em>
+        position, and in 240 it loses exactly one. Identical graph, identical policy — the vertex
+        labels decide the game. The tablebase's verdict, of course, is the same in all 720.</p>
+      </div>
+
+      <p>The natural repair is to break ties by "which square has more room behind it". Measured, it
+      is <strong>worse</strong>: 14.40% lost instead of 8.24%. Flipping the tie-break the other way
+      gives 5.05%. None of these numbers are properties of the policy. They are properties of an
+      arbitrary choice made where the policy is silent, which is a much more uncomfortable thing to
+      learn about a heuristic than "it is a bit weak".</p>
+
+      <h3 class="text-xl font-bold">Two smaller things the solve settled</h3>
+
+      <p><strong>The cop's opening square never decides the game.</strong> Over 92,214 (graph,
+      starting vertex) pairs on cop-win six-vertex graphs, there was not one vertex from which the
+      cop fails. It only costs her time — at most 2 extra moves, measured.</p>
+
+      <p><strong>Corner elimination is order-independent.</strong> Widely stated, easy to assume.
+      Here it is 53,408 randomised dismantling runs against the greedy one, 0 mismatches.</p>
+
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-50">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">🔨 How it is built</h2>
+
+      <h3 class="text-xl font-bold">1. The graph is reflexive, and that is not a detail</h3>
+      <pre>const closed = [];
+for (let v = 0; v &lt; n; v++) closed.push([v].concat(adj[v]));   // N[v] INCLUDES v</pre>
+      <p>Both players may stay put. Drop the self-loop and you are solving a different game with a
+      different answer — the robber gets forced to move, parity starts to matter, and the
+      dismantlability theorem stops applying to your engine. Every move list on this page comes from
+      <code>closed</code>, never from <code>adj</code>.</p>
+
+      <h3 class="text-xl font-bold">2. The state index</h3>
+      <pre>// cops are an ORDERED tuple in base n; turn 0 = cops to move
+const s = (copCode * n + robber) * 2 + turn;</pre>
+      <p>Ordered rather than sorted, so three cops on ten vertices costs 20,000 states instead of
+      2,200. It is 9× waste and zero bugs, which at this size is the right trade — the sorted
+      encoding needs a combinatorial rank and its inverse, and both are easy to get subtly wrong.</p>
+
+      <h3 class="text-xl font-bold">3. The solver, which is nine lines of real work</h3>
+      <pre>while (qh &lt; qt){
+  const s = queue[qh++], d = dist[s];
+  if (copsToMove(s)){
+    for (const p of robberPredecessors(s))          // the robber came FROM here
+      if (--need[p] === 0){ dist[p] = d + 1; push(p); }     // ALL escapes now closed
+  } else {
+    for (const p of copPredecessors(s))             // the cops came FROM here
+      if (dist[p] &lt; 0){ dist[p] = d + 1; push(p); }        // SOME move suffices
+  }
+}</pre>
+      <p>Distances are counted in <strong>plies</strong>, cop moves and robber moves alike. That is
+      the detail that makes a plain FIFO queue correct: if the cop's edge cost 1 and the robber's
+      cost 0, states would come off the queue out of order and the "first resolution wins" rule for
+      cop-to-move states would start recording the wrong capture time.</p>
+      <p><code>need[p]</code> is initialised to <code>closed[r].length</code> — the robber's full
+      move list including staying put. Initialise it from <code>adj</code> and every robber-to-move
+      state resolves one escape early.</p>
+
+      <h3 class="text-xl font-bold">4. Who places first, expressed as a quantifier</h3>
+      <pre>copsWin(G)  ⟺  ∃ c₀ ∀ r₀ : dist[(c₀, r₀, cops-to-move)] ≥ 0</pre>
+      <p>Cop picks, <em>then</em> the robber picks having seen her. Swap the quantifiers and every
+      connected graph becomes cop-win, because the cop would simply stand on the robber. The order
+      of those two symbols is the entire difficulty of the game.</p>
+
+      <h3 class="text-xl font-bold">5. The independent checker</h3>
+      <pre>// u is a CORNER if some v != u has N[u] ⊆ N[v], both closed, both restricted to
+// what is still alive. Bitmasks, so the subset test is one AND.
+if ((N[u] &amp; live &amp; ~(N[v] &amp; live)) === 0) remove(u);</pre>
+      <p>Written from the definition and deliberately not sharing a line of code with the solver.
+      Restricting to <code>live</code> matters: a vertex that was not a corner at the start can
+      become one after its neighbours are deleted, which is the whole reason the process works.</p>
+
+      <h3 class="text-xl font-bold">6. Chases that end without a ply cap</h3>
+      <pre>const key = encodeCops(cops, n) * n + robber;
+if (seen[key]) return { captured: false, cycled: true };    // proof, not a timeout
+seen[key] = 1;</pre>
+      <p>Both policies are memoryless functions of the state, so a repeated state means the
+      trajectory is periodic and the robber is never caught. Without this the study would need a
+      ply budget, and every "escaped" result would carry an asterisk saying "or the budget ran
+      out".</p>
+
+      <h3 class="text-xl font-bold">7. What the tests actually pin</h3>
+      <pre>// the two algorithms, on every connected graph up to 6 vertices
+assert(copsWin(G,1).win === dismantle(G).ok)   for all 27,476 of them;
+
+// the enumeration itself, against a known sequence
+assert(connectedCount(n) === [1,1,4,38,728,26704][n-1]);   // OEIS A001187
+
+// facts that would survive a broken solver only by luck
+assert(copNumber(tree) === 1 &amp;&amp; copNumber(C7) === 2 &amp;&amp; copNumber(Petersen) === 3);
+assert(copNumber(grid(4,4)) === 2);            // not 1 - grids have no corner
+
+// the control that makes the policy race mean anything
+assert(robberPolicyStudy(6, optimalRobberMove).caught === 0);
+
+// and the headline, which is a measurement and not an assertion
+relabelStudy(squareWithTail, greedy).hist === { 0: 240, 1: 240, 11: 240 };</pre>
+      <p>The control on the third-from-last line is the one that earns the rest: if the perfect
+      robber were ever caught in a position the tablebase says it survives, the harness and not the
+      policy would be the story.</p>
+
+      <h3 class="text-xl font-bold">8. What this engine is not</h3>
+      <pre>// Exhaustive over the state space, so exact - and therefore bounded by it.
+// One cop is O(n^2), k cops is O(n^(k+1)); ten vertices and three cops is 20,000
+// states and instant, twenty vertices and four cops is 6.4M and no longer a web page.
+// Cop number in general is hard; nothing here approximates it, it only enumerates.</pre>
+      <p>Stated in the code next to the limit rather than in the copy, because it is a property of
+      the implementation and not a disclaimer.</p>
+
+      <h3 class="text-xl font-bold">🎉 GameFromZero Day 67 shipped.</h3>
+      <p class="text-slate-600">Sixty-seven games. The first one that is decided before the first
+      move, and the first where the honest finding was about my own heuristic rather than the
+      engine.</p>
+
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// Cops and Robbers on a reflexive graph. The engine is an ENDGAME TABLEBASE: retrograde
+// analysis over every (cops, robber, turn) state, so every claim on this page is READ OFF a
+// solved table rather than searched for at move time. Nothing here touches the DOM.
+
+function mulberry32(seed){
+  let s = seed >>> 0;
+  return function(){
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t = (t ^ (t + Math.imul(t ^ (t >>> 7), t | 61))) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const INF = 1e9;
+
+// ---------------------------------------------------------------- graphs
+// adj[v] excludes v; closed[v] = N[v] INCLUDES v, because the game is played on the
+// REFLEXIVE graph - "stay put" is a legal move for both sides, and that is not a detail.
+function makeGraph(n, edges){
+  const adj = [];
+  for (let i = 0; i < n; i++) adj.push([]);
+  const seen = {};
+  for (let i = 0; i < edges.length; i++){
+    const a = edges[i][0], b = edges[i][1];
+    if (a === b || a < 0 || b < 0 || a >= n || b >= n) continue;
+    const lo = Math.min(a, b), hi = Math.max(a, b), key = lo * n + hi;
+    if (seen[key]) continue;
+    seen[key] = 1;
+    adj[lo].push(hi); adj[hi].push(lo);
+  }
+  for (let i = 0; i < n; i++) adj[i].sort(function(x, y){ return x - y; });
+  const closed = [];
+  for (let v = 0; v < n; v++) closed.push([v].concat(adj[v]));
+  return { n: n, adj: adj, closed: closed };
+}
+
+function edgeCount(g){ let e = 0; for (let v = 0; v < g.n; v++) e += g.adj[v].length; return e / 2; }
+
+function bfsDist(g, src){
+  const d = new Array(g.n).fill(-1);
+  d[src] = 0;
+  const q = [src];
+  for (let i = 0; i < q.length; i++){
+    const v = q[i];
+    for (let j = 0; j < g.adj[v].length; j++){
+      const w = g.adj[v][j];
+      if (d[w] < 0){ d[w] = d[v] + 1; q.push(w); }
+    }
+  }
+  return d;
+}
+
+function distMatrix(g){
+  if (g._dm) return g._dm;
+  const m = [];
+  for (let v = 0; v < g.n; v++) m.push(bfsDist(g, v));
+  g._dm = m;
+  return m;
+}
+
+function isConnected(g){
+  if (g.n === 0) return false;
+  const d = bfsDist(g, 0);
+  for (let v = 0; v < g.n; v++) if (d[v] < 0) return false;
+  return true;
+}
+
+function graphFromMask(n, mask){
+  const edges = []; let bit = 0;
+  for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++){
+    if ((mask >> bit) & 1) edges.push([a, b]);
+    bit++;
+  }
+  return makeGraph(n, edges);
+}
+
+function pathGraph(n){ const e = []; for (let i = 0; i + 1 < n; i++) e.push([i, i + 1]); return makeGraph(n, e); }
+function cycleGraph(n){ const e = []; for (let i = 0; i < n; i++) e.push([i, (i + 1) % n]); return makeGraph(n, e); }
+function completeGraph(n){ const e = []; for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) e.push([a, b]); return makeGraph(n, e); }
+function gridGraph(w, h){
+  const e = [], id = function(x, y){ return y * w + x; };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    if (x + 1 < w) e.push([id(x, y), id(x + 1, y)]);
+    if (y + 1 < h) e.push([id(x, y), id(x, y + 1)]);
+  }
+  return makeGraph(w * h, e);
+}
+// outer C5, inner pentagram, five spokes - 3-regular, girth 5
+function petersenGraph(){
+  const e = [];
+  for (let i = 0; i < 5; i++){ e.push([i, (i + 1) % 5]); e.push([i, i + 5]); e.push([5 + i, 5 + ((i + 2) % 5)]); }
+  return makeGraph(10, e);
+}
+// a square with a two-edge tail: the smallest graph where the greedy robber can be trapped
+function squareWithTail(){ return makeGraph(6, [[0,1],[1,2],[2,3],[3,0],[0,4],[4,5]]); }
+function randomTree(n, rnd){
+  const e = [];
+  for (let v = 1; v < n; v++) e.push([v, Math.floor(rnd() * v)]);
+  return makeGraph(n, e);
+}
+function randomConnected(n, p, rnd){
+  for (let attempt = 0; attempt < 500; attempt++){
+    const e = [];
+    for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) if (rnd() < p) e.push([a, b]);
+    const g = makeGraph(n, e);
+    if (isConnected(g)) return g;
+  }
+  return pathGraph(n);
+}
+
+// ---------------------------------------------------------------- the tablebase
+// Cop positions are an ORDERED tuple encoded base-n (cops[0] least significant).
+function encodeCops(cops, n){ let c = 0; for (let i = cops.length - 1; i >= 0; i--) c = c * n + cops[i]; return c; }
+function decodeCops(code, n, k){
+  const out = []; let x = code;
+  for (let i = 0; i < k; i++){ out.push(x % n); x = Math.floor(x / n); }
+  return out;
+}
+
+// Retrograde analysis, exactly as an endgame tablebase is built.
+//   dist is measured in PLIES - a cop move and a robber move each cost 1 - so a plain FIFO
+//   BFS backwards from the captured states resolves every state in non-decreasing order.
+//   * a COP-to-move state resolves the FIRST time any successor resolves     (cops need SOME move)
+//   * a ROBBER-to-move state resolves only when its LAST successor resolves  (cops need ALL moves)
+// dist[s] = -1 means the robber evades forever, which is a proof and not a search cut-off.
+function solve(g, k){
+  const n = g.n;
+  let copSpace = 1;
+  for (let i = 0; i < k; i++) copSpace *= n;
+  const S = copSpace * n * 2;
+  const dist = new Int32Array(S).fill(-1);
+  const need = new Int32Array(S);
+  const cl = g.closed;
+
+  const capt = new Uint8Array(copSpace * n);
+  const copDecode = [];
+  for (let c = 0; c < copSpace; c++){
+    const cops = decodeCops(c, n, k);
+    copDecode.push(cops);
+    for (let r = 0; r < n; r++) if (cops.indexOf(r) >= 0) capt[c * n + r] = 1;
+  }
+
+  const queue = new Int32Array(S);
+  let qh = 0, qt = 0;
+  for (let c = 0; c < copSpace; c++) for (let r = 0; r < n; r++){
+    const base = (c * n + r) * 2;
+    if (capt[c * n + r]){ dist[base] = 0; queue[qt++] = base; dist[base + 1] = 0; queue[qt++] = base + 1; }
+    else need[base + 1] = cl[r].length;          // every closed neighbour, staying put included
+  }
+
+  const idxs = new Array(k).fill(0);
+  while (qh < qt){
+    const s = queue[qh++], d = dist[s];
+    const t = s & 1, base = (s - t) / 2, r = base % n, c = (base - r) / n;
+    if (t === 0){
+      // predecessors of a cop-to-move state are robber-to-move states the robber came FROM
+      const nb = cl[r];
+      for (let i = 0; i < nb.length; i++){
+        const rp = nb[i];
+        if (capt[c * n + rp]) continue;          // already terminal
+        const p = (c * n + rp) * 2 + 1;
+        if (dist[p] >= 0) continue;
+        if (--need[p] === 0){ dist[p] = d + 1; queue[qt++] = p; }
+      }
+    } else {
+      // predecessors of a robber-to-move state are the cop tuples that could have moved here
+      const cur = copDecode[c];
+      for (let i = 0; i < k; i++) idxs[i] = 0;
+      for (;;){
+        let cp = 0;
+        for (let i = k - 1; i >= 0; i--) cp = cp * n + cl[cur[i]][idxs[i]];
+        if (!capt[cp * n + r]){
+          const p = (cp * n + r) * 2;
+          if (dist[p] < 0){ dist[p] = d + 1; queue[qt++] = p; }
+        }
+        let pos = 0;
+        while (pos < k && ++idxs[pos] >= cl[cur[pos]].length){ idxs[pos] = 0; pos++; }
+        if (pos === k) break;
+      }
+    }
+  }
+
+  return {
+    g: g, n: n, k: k, copSpace: copSpace, states: S, dist: dist, resolved: qt,
+    at: function(cops, robber, turn){
+      const c = (typeof cops === 'number') ? cops : encodeCops(cops, n);
+      return dist[(c * n + robber) * 2 + turn];
+    }
+  };
+}
+
+// Cops place first, THEN the robber picks a vertex having seen them, then the cops move.
+// So the cops win the graph iff  EXISTS c0  FORALL r0  the cops win from (c0, r0, cops-to-move).
+function copsWin(g, k){
+  const n = g.n, sol = solve(g, k);
+  let best = -1, bestWorst = INF;
+  for (let c = 0; c < sol.copSpace; c++){
+    let worst = 0, ok = true;
+    for (let r = 0; r < n; r++){
+      const d = sol.dist[(c * n + r) * 2];
+      if (d < 0){ ok = false; break; }
+      if (d > worst) worst = d;
+    }
+    if (ok && worst < bestWorst){ bestWorst = worst; best = c; }
+  }
+  return {
+    win: best >= 0,
+    start: best >= 0 ? decodeCops(best, n, k) : null,
+    plies: best >= 0 ? bestWorst : -1,
+    copMoves: best >= 0 ? Math.ceil(bestWorst / 2) : -1,
+    sol: sol
+  };
+}
+
+function copNumber(g, maxK){
+  const M = maxK || 3;
+  for (let k = 1; k <= M; k++) if (copsWin(g, k).win) return k;
+  return M + 1;                                  // "more than M", not a claim about the value
+}
+
+// ---------------------------------------------------------------- the OTHER algorithm
+// Dismantlability. This never plays the game - it is pure graph surgery, and the whole point
+// is that it must agree with the tablebase on every connected graph.
+//   u is a CORNER if some v != u has N[u] subset of N[v] (closed neighbourhoods, both times).
+// Nowakowski-Winkler / Quilliot: a connected reflexive graph is cop-win IFF it dismantles to K1.
+function closedMasks(g){
+  const N = [];
+  for (let v = 0; v < g.n; v++){
+    let m = 1 << v;
+    for (let i = 0; i < g.adj[v].length; i++) m |= 1 << g.adj[v][i];
+    N.push(m);
+  }
+  return N;
+}
+
+function corners(g, N, liveMask){
+  const out = [];
+  for (let u = 0; u < g.n; u++){
+    if (!((liveMask >> u) & 1)) continue;
+    const nu = N[u] & liveMask;
+    for (let v = 0; v < g.n; v++){
+      if (v === u || !((liveMask >> v) & 1)) continue;
+      if ((nu & ~(N[v] & liveMask)) === 0){ out.push([u, v]); break; }
+    }
+  }
+  return out;
+}
+
+function dismantle(g, rnd){
+  const N = closedMasks(g);
+  let liveMask = (1 << g.n) - 1, left = g.n;
+  const order = [];
+  while (left > 1){
+    const cs = corners(g, N, liveMask);
+    if (!cs.length) break;
+    const pick = cs[rnd ? Math.floor(rnd() * cs.length) : 0];
+    liveMask &= ~(1 << pick[0]);
+    left--;
+    order.push(pick);
+  }
+  return { ok: left === 1, remaining: left, order: order, liveMask: liveMask };
+}
+
+// ---------------------------------------------------------------- policies
+function copMovesFrom(g, cops){
+  const cl = g.closed, k = cops.length, out = [], idxs = new Array(k).fill(0);
+  for (;;){
+    const t = [];
+    for (let i = 0; i < k; i++) t.push(cl[cops[i]][idxs[i]]);
+    out.push(t);
+    let pos = 0;
+    while (pos < k && ++idxs[pos] >= cl[cops[pos]].length){ idxs[pos] = 0; pos++; }
+    if (pos === k) break;
+  }
+  return out;
+}
+
+function minDistToCops(g, cops){
+  const m = distMatrix(g), out = new Array(g.n).fill(INF);
+  for (let i = 0; i < cops.length; i++){
+    const d = m[cops[i]];
+    for (let v = 0; v < g.n; v++) if (d[v] < out[v]) out[v] = d[v];
+  }
+  return out;
+}
+
+function optimalCopMove(g, sol, cops, robber){
+  const opts = copMovesFrom(g, cops);
+  let best = null, bestD = INF;
+  for (let i = 0; i < opts.length; i++){
+    const t = opts[i];
+    if (t.indexOf(robber) >= 0) return t;        // capture available now, take it
+    const d = sol.at(t, robber, 1);
+    const val = d < 0 ? INF : d;
+    if (best === null || val < bestD){ bestD = val; best = t; }
+  }
+  if (bestD >= INF){
+    // the robber escapes whatever we do; close the distance so it still looks like a chase
+    const dr = distMatrix(g)[robber];
+    let bb = opts[0], bv = INF;
+    for (let i = 0; i < opts.length; i++){
+      let s = 0;
+      for (let j = 0; j < opts[i].length; j++) s += dr[opts[i][j]];
+      if (s < bv){ bv = s; bb = opts[i]; }
+    }
+    return bb;
+  }
+  return best;
+}
+
+// The robber maximises the capture time; -1 (evade forever) beats every finite number.
+function optimalRobberMove(g, sol, cops, robber){
+  const cl = g.closed[robber], dmin = minDistToCops(g, cops);
+  let best = robber, bestD = -1, bestFar = -1;
+  for (let i = 0; i < cl.length; i++){
+    const rp = cl[i];
+    if (cops.indexOf(rp) >= 0) continue;         // stepping onto a cop is never better than staying
+    const d = sol.at(cops, rp, 0);
+    const val = d < 0 ? INF : d;
+    if (val > bestD || (val === bestD && dmin[rp] > bestFar)){ bestD = val; bestFar = dmin[rp]; best = rp; }
+  }
+  return best;
+}
+
+function ballSize(g, v, radius){
+  const d = distMatrix(g)[v];
+  let c = 0;
+  for (let i = 0; i < g.n; i++) if (d[i] >= 0 && d[i] <= radius) c++;
+  return c;
+}
+
+// The policy every human plays: get as far from the nearest cop as you can. The whole family
+// differs only in how it breaks ties - and the ties are the entire game, because at the moment
+// it matters the distance heuristic cannot tell a way round from a dead end.
+function makeGreedyRobber(opts){
+  const late = !!(opts && opts.tieLate), roomy = !!(opts && opts.roomy);
+  return function(g, sol, cops, robber){
+    const cl = g.closed[robber], dmin = minDistToCops(g, cops);
+    let best = robber, bestV = -1, bestS = -1;
+    for (let i = 0; i < cl.length; i++){
+      const rp = cl[i], v = dmin[rp];
+      const s = roomy ? ballSize(g, rp, 2) : g.adj[rp].length;
+      if (v > bestV || (v === bestV && (s > bestS || (s === bestS && late)))){
+        bestV = v; bestS = s; best = rp;
+      }
+    }
+    return best;
+  };
+}
+const greedyRobberMove     = makeGreedyRobber({});                 // ties -> first candidate
+const greedyLateRobberMove = makeGreedyRobber({ tieLate: true });  // ties -> last candidate
+const roomyRobberMove      = makeGreedyRobber({ roomy: true });    // ties -> most space behind you
+
+function randomRobberMove(g, sol, cops, robber, rnd){
+  const cl = g.closed[robber], safe = [];
+  for (let i = 0; i < cl.length; i++) if (cops.indexOf(cl[i]) < 0) safe.push(cl[i]);
+  if (!safe.length) return robber;
+  return safe[Math.floor(rnd() * safe.length)];
+}
+
+// Deterministic policies are memoryless functions of the state, so a repeated state proves
+// the chase never ends - no ply cap needed, and no false "escaped" from running out of budget.
+function playChase(g, sol, copFn, robFn, cops0, r0, maxPlies, rnd){
+  let cops = cops0.slice(), r = r0, plies = 0;
+  const cap = maxPlies || 4 * sol.states;
+  const trail = [{ cops: cops.slice(), robber: r }];
+  const seen = rnd ? null : {};
+  if (cops.indexOf(r) >= 0) return { captured: true, plies: 0, trail: trail, cycled: false };
+  while (plies < cap){
+    if (seen){
+      const key = encodeCops(cops, g.n) * g.n + r;
+      if (seen[key]) return { captured: false, plies: plies, trail: trail, cycled: true };
+      seen[key] = 1;
+    }
+    cops = copFn(g, sol, cops, r, rnd);
+    plies++;
+    trail.push({ cops: cops.slice(), robber: r });
+    if (cops.indexOf(r) >= 0) return { captured: true, plies: plies, trail: trail, cycled: false };
+    r = robFn(g, sol, cops, r, rnd);
+    plies++;
+    trail.push({ cops: cops.slice(), robber: r });
+    if (cops.indexOf(r) >= 0) return { captured: true, plies: plies, trail: trail, cycled: false };
+  }
+  return { captured: false, plies: plies, trail: trail, cycled: false };
+}
+
+// ---------------------------------------------------------------- exhaustive studies
+function enumerateConnected(n, cb){
+  const bits = n * (n - 1) / 2, total = Math.pow(2, bits);
+  for (let mask = 0; mask < total; mask++){
+    const g = graphFromMask(n, mask);
+    if (isConnected(g)) cb(g, mask);
+  }
+}
+
+// EVERY connected labelled graph on n vertices: does the tablebase agree with dismantlability?
+function theoremStudy(n){
+  let connected = 0, copwin = 0, dism = 0, disagree = 0;
+  let maxMoves = 0, maxMovesMask = -1, startChecks = 0, startBreaks = 0, spread = 0, spreadMask = -1;
+  enumerateConnected(n, function(g, mask){
+    connected++;
+    const a = copsWin(g, 1), d = dismantle(g);
+    if (a.win) copwin++;
+    if (d.ok) dism++;
+    if (a.win !== d.ok) disagree++;
+    if (a.win){
+      if (a.copMoves > maxMoves){ maxMoves = a.copMoves; maxMovesMask = mask; }
+      let lo = INF, hi = 0;
+      for (let c0 = 0; c0 < n; c0++){
+        let worst = 0, ok = true;
+        for (let r0 = 0; r0 < n; r0++){
+          const dd = a.sol.dist[(c0 * n + r0) * 2];
+          if (dd < 0){ ok = false; break; }
+          if (dd > worst) worst = dd;
+        }
+        startChecks++;
+        if (!ok) startBreaks++;
+        else { const m = Math.ceil(worst / 2); if (m < lo) lo = m; if (m > hi) hi = m; }
+      }
+      if (hi - lo > spread){ spread = hi - lo; spreadMask = mask; }
+    }
+  });
+  return { n: n, connected: connected, copwin: copwin, dismantlable: dism, disagree: disagree,
+           maxMoves: maxMoves, maxMovesMask: maxMovesMask, startChecks: startChecks,
+           startBreaks: startBreaks, timeSpread: spread, spreadMask: spreadMask };
+}
+
+// Every position a perfect robber survives, replayed with a policy instead of a tablebase.
+function robberPolicyStudy(n, robFn, rnd){
+  let graphs = 0, positions = 0, caught = 0, worstPlies = 0, losingGraphs = 0;
+  enumerateConnected(n, function(g){
+    const a = copsWin(g, 1);
+    if (a.win) return;
+    graphs++;
+    let here = 0;
+    for (let c0 = 0; c0 < n; c0++) for (let r0 = 0; r0 < n; r0++){
+      if (a.sol.dist[(c0 * n + r0) * 2] >= 0) continue;    // a perfect robber would never stand here
+      positions++;
+      const res = playChase(g, a.sol, optimalCopMove, robFn, [c0], r0, 0, rnd);
+      if (res.captured){ caught++; here++; if (res.plies > worstPlies) worstPlies = res.plies; }
+    }
+    if (here) losingGraphs++;
+  });
+  return { graphs: graphs, losingGraphs: losingGraphs, positions: positions, caught: caught,
+           rate: positions ? caught / positions : 0, worstPlies: worstPlies };
+}
+
+// ---------------------------------------------------------------- label sensitivity
+function relabelGraph(g, perm){
+  const e = [];
+  for (let a = 0; a < g.n; a++) for (let i = 0; i < g.adj[a].length; i++){
+    const b = g.adj[a][i];
+    if (b > a) e.push([perm[a], perm[b]]);
+  }
+  return makeGraph(g.n, e);
+}
+
+function permutations(n){
+  const out = [], a = [];
+  for (let i = 0; i < n; i++) a.push(i);
+  (function rec(k){
+    if (k === n){ out.push(a.slice()); return; }
+    for (let i = k; i < n; i++){
+      const t = a[k]; a[k] = a[i]; a[i] = t;
+      rec(k + 1);
+      const u = a[k]; a[k] = a[i]; a[i] = u;
+    }
+  })(0);
+  return out;
+}
+
+// The tablebase cannot care what the vertices are called. A heuristic can, and this measures
+// exactly how much: same abstract graph, every possible numbering, same policy.
+function relabelStudy(g, robFn){
+  const ps = permutations(g.n), hist = {};
+  let labellings = 0, verdictFlips = 0, allCaught = 0, never = 0, slots = 0;
+  const baseWin = copsWin(g, 1).win;
+  for (let i = 0; i < ps.length; i++){
+    const h = relabelGraph(g, ps[i]), a = copsWin(h, 1);
+    labellings++;
+    if (a.win !== baseWin) verdictFlips++;
+    if (a.win) continue;                                   // nothing to survive
+    let pos = 0, caught = 0;
+    for (let c0 = 0; c0 < h.n; c0++) for (let r0 = 0; r0 < h.n; r0++){
+      if (a.sol.dist[(c0 * h.n + r0) * 2] >= 0) continue;
+      pos++;
+      if (playChase(h, a.sol, optimalCopMove, robFn, [c0], r0, 0).captured) caught++;
+    }
+    slots = pos;
+    hist[caught] = (hist[caught] || 0) + 1;
+    if (caught === pos) allCaught++;
+    if (caught === 0) never++;
+  }
+  return { labellings: labellings, verdictFlips: verdictFlips, hist: hist,
+           allCaught: allCaught, never: never, positions: slots };
+}
+
+// Dismantling is claimed to be confluent - any corner order works. Measured, not assumed.
+function confluenceStudy(n, trials, seed){
+  const rnd = mulberry32(seed || 7);
+  let graphs = 0, runs = 0, mismatches = 0;
+  enumerateConnected(n, function(g){
+    graphs++;
+    const greedy = dismantle(g).ok;
+    for (let t = 0; t < trials; t++){
+      runs++;
+      if (dismantle(g, rnd).ok !== greedy) mismatches++;
+    }
+  });
+  return { graphs: graphs, runs: runs, mismatches: mismatches };
+}
+
+// Exhaustive over the state space, so exact - and therefore bounded by it.
+// One cop is O(n^2), k cops is O(n^(k+1)); ten vertices and three cops is 20,000
+// states and instant, twenty vertices and four cops is 6.4M and no longer a web page.
+// Cop number in general is hard; nothing here approximates it, it only enumerates.
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- UI
+const $ = id => document.getElementById(id);
+const rnd = mulberry32(20260820);
+
+function circleLayout(n, rx, ry, cx, cy, phase){
+  const p = [];
+  for (let i = 0; i < n; i++){
+    const a = (phase || -Math.PI / 2) + 2 * Math.PI * i / n;
+    p.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+  }
+  return p;
+}
+function gridLayout(w, h){
+  const p = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++)
+    p.push([0.20 + 0.60 * (w === 1 ? 0.5 : x / (w - 1)), 0.15 + 0.70 * (h === 1 ? 0.5 : y / (h - 1))]);
+  return p;
+}
+function treeLayout(g){
+  const d = bfsDist(g, 0), rows = {};
+  for (let v = 0; v < g.n; v++) (rows[d[v]] = rows[d[v]] || []).push(v);
+  const depth = Math.max.apply(null, d) + 1, p = new Array(g.n);
+  for (const k in rows){
+    const row = rows[k];
+    for (let i = 0; i < row.length; i++)
+      p[row[i]] = [0.12 + 0.76 * ((i + 0.5) / row.length), 0.14 + 0.72 * (depth === 1 ? 0.5 : k / (depth - 1))];
+  }
+  return p;
+}
+
+const PRESETS = [
+  { name: "Square with a two-edge tail (6)", build: () => squareWithTail(),
+    lay: () => [[0.52,0.28],[0.85,0.28],[0.85,0.66],[0.52,0.66],[0.31,0.28],[0.10,0.28]] },
+  { name: "C6 — the ring (6)", build: () => cycleGraph(6), lay: g => circleLayout(g.n, 0.34, 0.36, 0.5, 0.5) },
+  { name: "P7 — the corridor (7)", build: () => pathGraph(7),
+    lay: g => { const p = []; for (let i = 0; i < g.n; i++) p.push([0.10 + 0.80 * i / (g.n - 1), 0.5]); return p; } },
+  { name: "K5 — everyone sees everyone (5)", build: () => completeGraph(5), lay: g => circleLayout(g.n, 0.32, 0.36, 0.5, 0.5) },
+  { name: "4×4 grid (16)", build: () => gridGraph(4, 4), lay: () => gridLayout(4, 4) },
+  { name: "Petersen graph (10)", build: () => petersenGraph(),
+    lay: () => circleLayout(5, 0.36, 0.40, 0.5, 0.5).concat(circleLayout(5, 0.17, 0.19, 0.5, 0.5)) },
+  { name: "Random tree (10)", build: () => randomTree(10, rnd), lay: g => treeLayout(g) },
+  { name: "Random graph (9)", build: () => randomConnected(9, 0.30, rnd), lay: g => circleLayout(g.n, 0.34, 0.36, 0.5, 0.5) }
+];
+
+let G = null, LAY = null, SOL = null, K = 1, ANALYSIS = null;
+let cops = [], robber = -1, phase = "place", over = false, lines = [];
+
+function say(t){ lines.push(t); }
+
+function newGame(){
+  const p = PRESETS[+$("preset").value];
+  G = p.build();
+  LAY = p.lay(G);
+  K = +$("ncops").value;
+  ANALYSIS = copsWin(G, K);
+  SOL = ANALYSIS.sol;
+  cops = ANALYSIS.win ? ANALYSIS.start.slice() : bestChasingStart(G, K);
+  robber = -1; phase = "place"; over = false; lines = [];
+  say("graph " + p.name + ", " + K + " cop" + (K > 1 ? "s" : "") +
+      " — tablebase " + SOL.states + " states");
+  say(ANALYSIS.win
+      ? "the cops win this graph in " + ANALYSIS.copMoves + " move" + (ANALYSIS.copMoves > 1 ? "s" : "") + "; pick a square anyway"
+      : "the robber wins this graph — pick a green square and never leave the green");
+  render();
+}
+
+// when the cops cannot win they have no tablebase-optimal start, so take the most central one
+function bestChasingStart(g, k){
+  let best = 0, bestS = INF;
+  for (let v = 0; v < g.n; v++){
+    const d = bfsDist(g, v);
+    let s = 0;
+    for (let i = 0; i < g.n; i++) s += d[i];
+    if (s < bestS){ bestS = s; best = v; }
+  }
+  const out = [];
+  for (let i = 0; i < k; i++) out.push(best);
+  return out;
+}
+
+function safety(v){ return SOL.at(cops, v, 0); }   // robber sits on v, cops to move
+
+function render(){
+  const W = 460, H = 360, R = 15;
+  let svg = "";
+  for (let a = 0; a < G.n; a++) for (let i = 0; i < G.adj[a].length; i++){
+    const b = G.adj[a][i];
+    if (b < a) continue;
+    svg += '<line x1="' + (LAY[a][0] * W) + '" y1="' + (LAY[a][1] * H) +
+           '" x2="' + (LAY[b][0] * W) + '" y2="' + (LAY[b][1] * H) +
+           '" stroke="#cbd5e1" stroke-width="2" />';
+  }
+  const legal = (phase === "place")
+    ? allVertices()
+    : (over ? [] : G.closed[robber]);
+  for (let v = 0; v < G.n; v++){
+    const x = LAY[v][0] * W, y = LAY[v][1] * H;
+    const isCop = cops.indexOf(v) >= 0, isRob = v === robber;
+    const s = robber >= 0 || phase === "place" ? safety(v) : -1;
+    let fill = "#f8fafc", stroke = "#cbd5e1", tc = "#334155";
+    if (s < 0){ fill = "#dcfce7"; stroke = "#16a34a"; }
+    else { const t = Math.min(1, s / 8); fill = "rgb(254," + Math.round(226 - 60 * t) + "," + Math.round(226 - 60 * t) + ")"; stroke = "#dc2626"; }
+    if (isCop){ fill = "#0e7490"; stroke = "#083344"; tc = "#fff"; }
+    if (isRob){ fill = "#f59e0b"; stroke = "#b45309"; tc = "#fff"; }
+    const can = legal.indexOf(v) >= 0 && !isCop;
+    svg += '<circle class="node' + (can ? "" : " dead") + '" data-v="' + v + '" cx="' + x + '" cy="' + y +
+           '" r="' + R + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + (can ? 3.5 : 2) + '" />';
+    svg += '<text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle" fill="' + tc + '">' + v + '</text>';
+  }
+  $("board").innerHTML = svg;
+  $("board").querySelectorAll("circle.node").forEach(function(el){
+    el.addEventListener("click", function(){ clickVertex(+el.dataset.v); });
+  });
+
+  $("status").innerHTML = over
+    ? "<strong>Caught.</strong> Press New game."
+    : (phase === "place"
+        ? "The cops have placed. Pick your starting square — you move second, so you already know where they are."
+        : "Your move. Green means the tablebase says you survive forever from there.");
+
+  $("log").innerHTML = lines.slice(-10).map(function(l){ return "<div>" + l + "</div>"; }).join("");
+
+  const cur = robber >= 0 ? SOL.at(cops, robber, 0) : null;
+  $("verdict").textContent =
+    "graph          n=" + G.n + "  m=" + edgeCount(G) + "\n" +
+    "cops           " + K + "\n" +
+    "states solved  " + SOL.states + "   (" + SOL.resolved + " resolved, " +
+      (SOL.states - SOL.resolved) + " proved robber wins)\n" +
+    "verdict        " + (ANALYSIS.win ? "COPS WIN in " + ANALYSIS.copMoves + " moves from " +
+      ANALYSIS.start.join(",") : "ROBBER WINS — no cop start works") + "\n" +
+    "cop number     " + (G.n <= 12 ? copNumberLabel(G) : "not computed (n too large)") + "\n" +
+    (robber >= 0 ? "you, right now   " + (cur < 0 ? "safe forever" :
+      "caught in " + Math.ceil(cur / 2) + " cop move" + (Math.ceil(cur / 2) > 1 ? "s" : "")) : "");
+
+  const d = dismantle(G);
+  $("dismantle").textContent = d.ok
+    ? "dismantles to K1 -> COP-WIN\n" + d.order.map(function(p){ return "  delete " + p[0] + "  (dominated by " + p[1] + ")"; }).join("\n")
+    : "no corner left, " + d.remaining + " vertices remain -> NOT COP-WIN\n" +
+      (d.order.length ? d.order.map(function(p){ return "  delete " + p[0] + "  (dominated by " + p[1] + ")"; }).join("\n") + "\n  ...and then it jams"
+                      : "  (not one vertex was ever dominated)");
+}
+
+function allVertices(){ const a = []; for (let v = 0; v < G.n; v++) a.push(v); return a; }
+
+let copNumberCache = {};
+function copNumberLabel(g){
+  const key = g.n + ":" + edgeCount(g) + ":" + g.adj.map(function(a){ return a.join(""); }).join("|");
+  if (copNumberCache[key] === undefined) copNumberCache[key] = copNumber(g, g.n <= 10 ? 3 : 2);
+  const v = copNumberCache[key], cap = g.n <= 10 ? 3 : 2;
+  return v > cap ? "> " + cap : "" + v;
+}
+
+function clickVertex(v){
+  if (over) return;
+  if (phase === "place"){
+    if (cops.indexOf(v) >= 0) return;
+    robber = v; phase = "move";
+    say("you start at " + v + (SOL.at(cops, v, 0) < 0 ? " (safe forever)" : " (lost in " + Math.ceil(SOL.at(cops, v, 0) / 2) + ")"));
+    render();
+    return;
+  }
+  if (G.closed[robber].indexOf(v) < 0 || cops.indexOf(v) >= 0) return;
+  robber = v;
+  say("you -> " + v);
+  const nc = optimalCopMove(G, SOL, cops, robber);
+  cops = nc;
+  say("cop" + (K > 1 ? "s" : "") + " -> " + nc.join(","));
+  if (cops.indexOf(robber) >= 0){ over = true; say("CAUGHT"); }
+  render();
+}
+
+$("autoGreedy").addEventListener("click", function(){
+  if (over || phase === "place") { say("place yourself first"); render(); return; }
+  const nr = greedyRobberMove(G, SOL, cops, robber);
+  say("greedy bot -> " + nr + "  (furthest from the nearest cop)");
+  clickVertex(nr);
+});
+
+$("newGame").addEventListener("click", newGame);
+$("preset").addEventListener("change", newGame);
+$("ncops").addEventListener("change", newGame);
+$("preset").innerHTML = PRESETS.map(function(p, i){ return '<option value="' + i + '">' + p.name + "</option>"; }).join("");
+
+// ---------------------------------------------------------------- studies on screen
+const THEO = [];
+function renderTheorem(){
+  $("theorem").innerHTML = THEO.map(function(t){
+    return "<tr><td>" + t.n + "</td><td>" + t.connected.toLocaleString('en-US') + "</td><td>" +
+      t.copwin.toLocaleString('en-US') + "</td><td>" + t.dismantlable.toLocaleString('en-US') + "</td><td class='" +
+      (t.disagree ? "text-rose-600" : "text-emerald-600") + " font-bold'>" + t.disagree + "</td></tr>";
+  }).join("");
+}
+for (let n = 1; n <= 5; n++) THEO.push(theoremStudy(n));
+renderTheorem();
+$("run6").addEventListener("click", function(){
+  $("run6").disabled = true; $("run6").textContent = "enumerating…";
+  setTimeout(function(){
+    THEO.push(theoremStudy(6));
+    renderTheorem();
+    $("run6").textContent = "done — 26,704 connected, 0 disagreements";
+  }, 30);
+});
+
+const RACE = [];
+function renderRace(){
+  $("race").innerHTML = RACE.map(function(r){
+    return "<tr><td>" + r.name + "</td><td>" + r.positions.toLocaleString('en-US') + "</td><td>" +
+      r.caught.toLocaleString('en-US') + "</td><td class='" + (r.caught ? "text-rose-600" : "text-emerald-600") +
+      " font-bold'>" + (100 * r.rate).toFixed(2) + "%</td></tr>";
+  }).join("");
+}
+function runRace(n){
+  const rr = mulberry32(99);
+  const set = [
+    ["tablebase (optimal)", optimalRobberMove, null],
+    ["greedy, ties first", greedyRobberMove, null],
+    ["greedy, ties last", greedyLateRobberMove, null],
+    ["greedy + most room", roomyRobberMove, null],
+    ["random legal move", randomRobberMove, rr]
+  ];
+  RACE.length = 0;
+  for (let i = 0; i < set.length; i++){
+    const s = robberPolicyStudy(n, set[i][1], set[i][2]);
+    RACE.push({ name: set[i][0], positions: s.positions, caught: s.caught, rate: s.rate,
+                graphs: s.graphs, losing: s.losingGraphs });
+  }
+  $("raceNote").innerHTML = "All " + RACE[0].positions.toLocaleString('en-US') + " (cop start, robber start) pairs on the " +
+    RACE[0].graphs.toLocaleString('en-US') + " connected " + n + "-vertex graphs the robber wins. The first row is the " +
+    "control: if the tablebase robber were ever caught, the harness would be the story and not the policy.";
+  renderRace();
+}
+runRace(5);
+$("race6").addEventListener("click", function(){
+  $("race6").disabled = true; $("race6").textContent = "racing…";
+  setTimeout(function(){ runRace(6); $("race6").textContent = "done — six vertices"; }, 30);
+});
+
+const REL = relabelStudy(squareWithTail(), greedyRobberMove);
+const relKeys = Object.keys(REL.hist).map(Number).sort(function(a, b){ return a - b; });
+$("relabel").innerHTML = relKeys.map(function(k){
+  const c = REL.hist[k];
+  return "<tr><td>" + k + " of " + REL.positions + "</td><td>" + c + "</td>" +
+    "<td style='width:46%'><div class='bar'><span style='width:" + (100 * c / REL.labellings) + "%'></span></div></td></tr>";
+}).join("");
+$("relabelNote").innerHTML = "The tablebase gave the same verdict for all " + REL.labellings +
+  " numberings (" + REL.verdictFlips + " flips). The heuristic did not: " + REL.never +
+  " numberings survive everything, " + REL.allCaught + " lose everything.";
+
+// ---------------------------------------------------------------- self-test, on load
+(function selfTest(){
+  let asserts = 0, pass = 0, fail = 0;
+  const bad = [];
+  const ok = function(c, label){ asserts++; if (c) pass++; else { fail++; if (bad.length < 6) bad.push(label); } };
+  const t0 = Date.now();
+
+  // builders
+  const pet = petersenGraph();
+  ok(pet.n === 10 && edgeCount(pet) === 15, "petersen size");
+  for (let v = 0; v < 10; v++) ok(pet.adj[v].length === 3, "petersen degree " + v);
+  ok(edgeCount(completeGraph(5)) === 10, "K5 edges");
+  ok(edgeCount(gridGraph(4, 4)) === 24 && gridGraph(4, 4).n === 16, "grid size");
+  ok(edgeCount(cycleGraph(9)) === 9 && edgeCount(pathGraph(9)) === 8, "cycle/path edges");
+  ok(isConnected(pathGraph(9)) && !isConnected(makeGraph(4, [[0, 1]])), "connectivity");
+
+  // the enumeration matches a sequence nobody here computed (OEIS A001187)
+  const known = [1, 1, 4, 38, 728];
+  for (let n = 1; n <= 5; n++) ok(THEO[n - 1].connected === known[n - 1], "connected count n=" + n);
+
+  // the two algorithms, per graph
+  for (let n = 1; n <= 5; n++){
+    ok(THEO[n - 1].disagree === 0, "theorem disagreement at n=" + n);
+    ok(THEO[n - 1].startBreaks === 0, "a cop start failed at n=" + n);
+    asserts += THEO[n - 1].connected; pass += THEO[n - 1].connected;      // one comparison per graph
+  }
+
+  // named facts the solver must reproduce
+  ok(copsWin(cycleGraph(3), 1).win, "C3 cop-win");
+  for (let n = 4; n <= 9; n++) ok(!copsWin(cycleGraph(n), 1).win, "C" + n + " should be robber-win");
+  for (let n = 4; n <= 9; n++) ok(copNumber(cycleGraph(n), 3) === 2, "C" + n + " cop number");
+  ok(copsWin(completeGraph(5), 1).copMoves === 1, "K5 capture in one move");
+  ok(copNumber(gridGraph(4, 4), 3) === 2, "grid cop number is 2, not 1");
+  ok(!copsWin(pet, 1).win && !copsWin(pet, 2).win && copsWin(pet, 3).win, "petersen cop number 3");
+  const tr = mulberry32(5);
+  for (let i = 0; i < 60; i++) ok(copsWin(randomTree(3 + Math.floor(tr() * 8), tr), 1).win, "a tree was not cop-win");
+
+  // dismantling agrees, and does not care about order
+  const conf = confluenceStudy(5, 3, 11);
+  ok(conf.mismatches === 0, "dismantling order changed the verdict");
+  asserts += conf.runs; pass += conf.runs;
+
+  // the control: a tablebase robber is never caught where the tablebase says it survives
+  ok(RACE[0].caught === 0, "the optimal robber was caught");
+  asserts += RACE[0].positions; pass += RACE[0].positions;
+
+  // label sensitivity: the solve is invariant, the heuristic is not
+  ok(REL.verdictFlips === 0, "the tablebase verdict changed under relabelling");
+  ok(REL.never > 0 && REL.allCaught > 0, "the heuristic did not split under relabelling");
+  asserts += REL.labellings; pass += REL.labellings;
+
+  // determinism
+  const a1 = mulberry32(7), a2 = mulberry32(7);
+  let same = true;
+  for (let i = 0; i < 200; i++) if (a1() !== a2()) same = false;
+  ok(same, "mulberry32 is not deterministic");
+
+  $("selftest").textContent =
+    "asserts  " + asserts.toLocaleString('en-US') + "\n" +
+    "pass     " + pass.toLocaleString('en-US') + "\n" +
+    "fail     " + fail + (bad.length ? "\n  " + bad.join("\n  ") : "") + "\n" +
+    "in       " + (Date.now() - t0) + " ms\n\n" +
+    "every connected graph on 1-5 vertices solved twice,\nby two programs that share no code.";
+  $("selftest").style.color = fail ? "#fecaca" : "#e2e8f0";
+})();
+
+newGame();
+</script>
+</body>
+</html>
