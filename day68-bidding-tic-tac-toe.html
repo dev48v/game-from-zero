@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 68 — Bidding Tic-Tac-Toe</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid #e2e8f0; }
+  .log { font-family:ui-monospace,monospace; font-size:12px; }
+  .bar { height:9px; border-radius:99px; background:#e2e8f0; overflow:hidden; }
+  .bar span { display:block; height:100%; background:#0e7490; }
+  svg .cell { cursor:default; }
+  svg .cell.live { cursor:pointer; }
+  svg text { font-family:ui-monospace,monospace; font-size:11px; font-weight:700; pointer-events:none; }
+  .pill { padding:5px 10px; border-radius:8px; font-size:12px; font-weight:800;
+          border:1px solid #e2e8f0; background:#fff; }
+  .pill:hover { background:#ecfeff; border-color:#0e7490; }
+  .pill:disabled { opacity:.32; }
+  .key { display:inline-block; width:11px; height:11px; border-radius:3px; vertical-align:-1px; }
+  .zone { position:relative; height:26px; border-radius:8px; overflow:hidden; display:flex;
+          border:1px solid #e2e8f0; font-size:10px; font-weight:800; color:#fff; }
+  .zone div { display:flex; align-items:center; justify-content:center; overflow:hidden; white-space:nowrap; }
+  .mark { position:absolute; top:-4px; width:2px; height:34px; background:#0f172a; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+    <p class="text-xs font-bold tracking-widest text-cyan-700 mb-2">GAMEFROMZERO · DAY 68</p>
+    <h1 class="text-xl md:text-2xl font-black leading-tight mb-4">
+      🪙 Bidding Tic-Tac-Toe — the first game here with <strong>no side to move</strong>. Nobody
+      is "on turn": before every mark both players seal a bid, the higher bid wins the right to
+      place, and the winner <em>pays that bid to the loser</em>, so the money never leaves the
+      table — it only changes sides. Take the turn variable out of the state and minimax has
+      nothing to alternate, so the engine stops being a search and becomes a <strong>price</strong>.
+      The value of a position is the share of the pot you need before you can force your line,
+      and it satisfies one line of arithmetic: it is the <em>average</em> of your best move's
+      price and their best move's price, and half the gap between those two is exactly what you
+      should bid. Solve that on the board's DAG and every number falls out as a whole coin from a
+      512-coin pot, because a game is at most nine auctions and nine halvings is 512. And the
+      same integers answer a completely different question: flip a fair coin to decide who marks
+      next, and the price of a position is the <em>probability you lose it</em>. Then the part
+      that is measured rather than claimed — a second solver that plays the auction for real with
+      512 whole chips and enumerates every integer bid, sharing no arithmetic with the tablebase,
+      reproduces all 18,753 prices exactly. And ordinary tic-tac-toe's famous draw survives here
+      in a band <strong>20 coins wide out of 512</strong>: outside it, the game is decided by the
+      bankroll before a mark is placed. Pure vanilla JavaScript, one file, offline.
+    </h1>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look" class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">🎮 PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-6xl mx-auto grid lg:grid-cols-5 gap-5">
+
+      <div class="lg:col-span-3 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <div class="flex gap-2 flex-wrap mb-3 items-center">
+            <select id="opp" class="pill"></select>
+            <button id="newGame" class="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm">New game</button>
+            <button id="autoStep" class="pill">bid for me, perfectly</button>
+            <button id="autoAll" class="pill">play the whole game for me</button>
+          </div>
+
+          <div class="mb-3">
+            <div class="flex justify-between text-xs font-bold text-slate-500 mb-1">
+              <span>YOUR STARTING COINS</span><span id="startLbl"></span>
+            </div>
+            <input id="start" type="range" min="0" max="512" step="1" value="256" class="w-full" />
+            <div class="flex gap-2 mt-2 flex-wrap">
+              <button class="pill preset" data-v="256">even, 256 / 256</button>
+              <button class="pill preset" data-v="267">267 — one coin over your price</button>
+              <button class="pill preset" data-v="246">246 — one coin under the bot's</button>
+            </div>
+          </div>
+
+          <svg id="board" viewBox="0 0 460 360" class="w-full" style="max-height:400px"></svg>
+
+          <div class="mt-3">
+            <div class="zone" id="zone"></div>
+            <p class="text-xs text-slate-500 mt-1" id="zoneNote"></p>
+          </div>
+
+          <div class="flex gap-2 flex-wrap items-center mt-3">
+            <input id="bid" type="number" min="0" value="82" class="pill" style="width:96px" />
+            <input id="bidRange" type="range" min="0" max="512" value="82" class="flex-1" />
+            <button id="seal" class="px-4 py-2 rounded-lg bg-cyan-700 text-white font-bold text-sm">Seal the bid</button>
+            <button id="hint" class="pill">what does the table bid?</button>
+          </div>
+          <p class="text-sm text-slate-600 mt-2" id="status"></p>
+          <p class="text-xs text-slate-500 mt-2">
+            <span class="key" style="background:#0e7490"></span> you, X &nbsp;
+            <span class="key" style="background:#f59e0b"></span> the bot, O &nbsp;
+            the two small numbers in an empty square are the price of an X line
+            <em>after</em> that square is taken, by you and by the bot — the table, not a guess.
+            Ties in the auction go to the bot, which is why its side of every boundary is the
+            generous one.
+          </p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">AUCTION LOG</p>
+          <div id="log" class="log space-y-1"></div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">
+            WHICH HALF OF THE STRATEGY IS DOING THE WORK
+          </p>
+          <p class="text-sm text-slate-600 mb-3" id="ladderNote"></p>
+          <table class="num w-full">
+            <thead><tr><th>challenger</th><th>won</th><th>drew</th><th>lost</th><th>rate</th></tr></thead>
+            <tbody id="ladder"></tbody>
+          </table>
+          <button id="ladder3k" class="pill mt-3">run all six over 3,000 games each</button>
+        </div>
+      </div>
+
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">WHAT THE PRICE TABLE KNOWS</p>
+          <pre id="verdict" style="margin:0"></pre>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE SAME NUMBER AS A COIN FLIP</p>
+          <p class="text-sm text-slate-600 mb-2">
+            Throw the money away. A fair coin decides who marks next, both play perfectly. The
+            probability you fail to make a line is the price you would have had to pay.
+          </p>
+          <pre id="coin" style="margin:0"></pre>
+          <button id="coin200k" class="pill mt-3">flip 200,000 more</button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE AUCTION, PLAYED WITH WHOLE CHIPS</p>
+          <p class="text-sm text-slate-600 mb-2">
+            A second solver that never averages anything: every position, every chip split, every
+            integer bid. It must land on the same prices.
+          </p>
+          <table class="num w-full">
+            <thead><tr><th>board</th><th>goal</th><th>ties</th><th>boards</th><th>off by</th><th>mixing</th></tr></thead>
+            <tbody id="oracle"></tbody>
+          </table>
+          <button id="oracle512" class="pill mt-3">run all four tie-rules over 18,753 boards</button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">EVERY BANKROLL, PLAYED OUT</p>
+          <p class="text-sm text-slate-600 mb-2">
+            513 stakes, 513 real games between two perfect players, against what the table said
+            before a coin moved.
+          </p>
+          <table class="num w-full">
+            <thead><tr><th>outcome</th><th>predicted</th><th>played</th></tr></thead>
+            <tbody id="sweep"></tbody>
+          </table>
+          <p class="text-xs text-slate-500 mt-2" id="sweepNote"></p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">SELF-TEST</p>
+          <pre id="selftest" style="margin:0">running&hellip;</pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">Delete the turn, and a game becomes a market</h2>
+
+      <p>Sixty-seven days of engines have all had the same first line of state: <em>whose turn is
+      it</em>. Minimax alternates on it, alpha-beta prunes against it, the tablebase indexes by
+      it. Bidding tic-tac-toe deletes it. There is a pot of coins split between the two players,
+      and before every single mark both of them write down a bid. The higher bid wins the right
+      to place — and <strong>pays that bid to the other player</strong>. Nothing is ever spent.
+      The pot is constant; only the split moves.</p>
+
+      <p>So a position is just a board. Not a board plus a mover. And the question you can ask
+      about it is not "who is winning" but <em>how much money would I need to be holding, right
+      now, to guarantee my line</em>. That number is a price.</p>
+
+      <h3 class="text-xl font-bold">The whole engine is one identity</h3>
+
+      <pre>R(b) = ( min over MY placements R  +  max over THEIR placements R ) / 2
+bid   = ( max over THEIR placements R  -  min over MY placements R ) / 2</pre>
+
+      <p>Read it as a market rather than as a search. The two children that matter are the best
+      thing that could happen next and the worst thing that could happen next. The price of the
+      position sits exactly halfway between them, because the auction is a fair coin you are
+      allowed to pay to bias. And what you should bid is exactly what winning is worth: half the
+      distance between those two futures.</p>
+
+      <p>The proof that this is not just a plausible formula is one line of bookkeeping. Suppose
+      you hold more than R(b) and you bid <em>b</em>&nbsp;=&nbsp;(max&minus;min)/2.</p>
+
+      <ul class="list-disc pl-6 space-y-1">
+        <li>You win the auction: you pay <em>b</em>, and you move to the child whose price is
+        R&nbsp;&minus;&nbsp;<em>b</em>. Your surplus is unchanged.</li>
+        <li>They win the auction with something bigger than <em>b</em>: they hand you more than
+        <em>b</em>, and the worst board they can hand you costs R&nbsp;+&nbsp;<em>b</em>. Your
+        surplus is unchanged, or better.</li>
+      </ul>
+
+      <p>Either branch preserves "I am above the price", and the board fills in nine marks, so it
+      ends. That is the entire strategy, and note what it does <em>not</em> contain: any reference
+      to what the opponent bid. You do not react to the auction. You quote a price.</p>
+
+      <h3 class="text-xl font-bold">Why the pot is 512 and not 100</h3>
+
+      <p>Every value here is a dyadic rational. A board with <em>k</em> marks has at most
+      9&nbsp;&minus;&nbsp;<em>k</em> halvings left in it, so its price is a whole multiple of
+      2<sup><em>k</em></sup> out of 2⁹. Make the pot 512 coins and every price and every optimal
+      bid is a <strong>whole number of coins</strong> — no floats, no epsilon comparisons, no
+      rounding anywhere in the tablebase. Make the pot 100 and you are immediately doing
+      floating-point arithmetic on a game that has an exact integer answer. The page asserts the
+      multiple-of-2<sup><em>k</em></sup> property on all 18,753 reachable boards; it is not a
+      decoration, it is why <code>/2</code> in the recurrence never rounds.</p>
+
+      <h3 class="text-xl font-bold">The state space is much bigger than tic-tac-toe's</h3>
+
+      <p>Ordinary tic-tac-toe has 5,478 reachable positions, and the reason it is that small is
+      that the counts of X and O never differ by more than one. That rule does not exist here.
+      Whoever pays can move, and a rich player can win eight auctions in a row, so
+      <strong>eight&nbsp;&ndash;&nbsp;nil is a legal board</strong>. Reachable positions:
+      <strong>18,753</strong>. Prune with the alternation assumption and two-thirds of the game
+      quietly stops existing, and every price you compute for the third that remains is wrong,
+      because its children were.</p>
+
+      <h3 class="text-xl font-bold">Two tablebases, and the draw band between them</h3>
+
+      <p>A price is defined against a single objective, so a draw has to count as a loss for
+      whoever is being priced. That means one tablebase cannot describe this game. You need two:
+      the price of an <em>X</em> line, and the price of an <em>O</em> line, solved separately.
+      From the empty board both come out at <strong>266</strong> of 512 — 133/256, about 51.95%.</p>
+
+      <div class="bg-cyan-50 border-l-4 border-cyan-600 p-4">
+        <p class="text-sm">Two prices summing to more than the pot is exactly a
+        <strong>draw band</strong>: bankrolls where neither player can buy their line.
+        266 + 266 &minus; 512 = <strong>20 coins</strong>. Hold 247 to 266 and tic-tac-toe is
+        still the drawn game everybody knows. Hold 267 and you can force a line; hold 246 and the
+        bot can. The classic result "tic-tac-toe is a draw" turns out to be true on 20 of the 513
+        possible bankrolls — <strong>3.9%</strong> — and false on the other 96.1%.</p>
+      </div>
+
+      <p>The page does not assert that; it plays it. All 513 stakes, two perfect players,
+      513 real games, against the two tablebases' prediction: 513 agreements, 0 disagreements.
+      When one side is far enough above its price the game ends in <strong>three marks</strong>,
+      which happens on 247 of the 513 stakes.</p>
+
+      <h3 class="text-xl font-bold">The same integers, as a coin flip</h3>
+
+      <p>Take all the money away. Instead, before each mark, flip a fair coin to decide who
+      places, and let both sides play optimally. The value of a position under that rule obeys</p>
+
+      <pre>W(b) = ½·(best I can do)  +  ½·(worst they can do to me)</pre>
+
+      <p>which is the same recurrence with the same boundary values, so it produces the same
+      512-based integers. That is the Peres&ndash;Schramm&ndash;Sheffield&ndash;Wilson
+      random-turn identity, and it says something worth stopping on: <strong>the price of a
+      position is the probability you lose it when turn order is decided by coin flips.</strong>
+      266/512 is not only "the bankroll you need"; it is "you lose 51.95% of coin-flip games from
+      the empty board".</p>
+
+      <p>The page is deliberate about what that check is worth. Written as two programs it is
+      still one recurrence, so agreement between them is an identity and not evidence. What
+      <em>is</em> evidence is flipping the coins: 200,000 random-turn games with both sides
+      playing the random-turn table, and the measured failure rate walking to 0.5195.</p>
+
+      <h3 class="text-xl font-bold">The check that is not a restatement</h3>
+
+      <p>So the real verification is a solver that plays the auction literally. Put
+      <strong>512 whole chips</strong> on the table. A state is (board, my chips). Enumerate every
+      integer bid I could make and every integer bid they could make, resolve the auction, pay,
+      recurse. There is no averaging in it, no division by two, and no notion of a "price" — just
+      quantifiers over bids.</p>
+
+      <pre>I commit my bid first, they answer   :   ∃ b  ∀ g   (pessimistic)
+they commit first, I answer          :   ∀ g  ∃ b   (optimistic)</pre>
+
+      <p>Two versions, because sealed simultaneous bids would otherwise need a mixed strategy
+      before the value is even defined, and the true sealed-bid value is trapped between them.
+      Measured over 9.6 million (board, chip-split) states: the two are <strong>identical</strong>.
+      This auction never needs to randomise.</p>
+
+      <div class="bg-cyan-50 border-l-4 border-cyan-600 p-4">
+        <p class="text-sm">And the chip solver's threshold is the tablebase price, exactly, on
+        every one of the 18,753 boards, in all four combinations of "who is being priced" and
+        "who wins ties". Where ties go against you the threshold is price&nbsp;+&nbsp;1 — you must
+        <em>beat</em> the price. Where ties go to you it is the price itself — you only have to
+        <em>match</em> it. Two solvers with no arithmetic in common, 75,012 board comparisons,
+        0 disagreements.</p>
+      </div>
+
+      <h3 class="text-xl font-bold">The bug that only the exhaustive sweep could find</h3>
+
+      <div class="bg-rose-50 border-l-4 border-rose-500 p-4">
+        <p class="text-sm">I wrote the perfect player's decision as "if my purse beats my price,
+        buy the line; otherwise defend against theirs" — the same strict comparison for both
+        sides. It wins 512 of the 513 stakes. The one it loses is the exact boundary, where the
+        bot holds precisely its own price, and the reason is the tie-break: the bot wins tied
+        auctions, so it only needs to <em>match</em> its price, while I have to beat mine. With
+        both tests strict the bot spends that game defending a position it could have been
+        buying, and hands back a forced win as a draw. One coin, one game in 513, and no
+        amount of self-play would have surfaced it — only playing <em>every</em> stake.</p>
+      </div>
+
+      <h3 class="text-xl font-bold">What the table looks like from the outside</h3>
+
+      <ul class="list-disc pl-6 space-y-1">
+        <li>Only <strong>49 distinct prices</strong> exist across all 18,753 boards.</li>
+        <li>The opening bid is <strong>82 coins</strong>, 16% of the pot — and it is exactly half
+        of something concrete: taking the centre yourself drops the price of an X line from 266 to
+        184, letting the bot take it raises it to 348, and (348&nbsp;&minus;&nbsp;184)/2 = 82.</li>
+        <li>Centre 184, corner 200, edge 204. The old tic-tac-toe folklore ordering survives, but
+        now it has a currency: the centre is worth 16 coins more than a corner.</li>
+        <li>On <strong>3,602</strong> of the 11,093 live boards the optimal bid is 256 — half the
+        entire pot. Those are the positions where both players have a line one mark away, so the
+        auction <em>is</em> the game and its whole value is at stake.</li>
+        <li>On 736 live boards the optimal bid is <strong>zero</strong>: both children have the
+        same price, so it makes no difference who moves, and paying anything for the privilege is
+        a straight loss.</li>
+        <li><strong>6,878</strong> of the 11,093 live boards have no draw band at all. Money alone
+        decides them; there is no split that draws.</li>
+      </ul>
+
+      <h3 class="text-xl font-bold">The measurement: which half of the strategy matters</h3>
+
+      <p>A Richman strategy is two things — the bid, and the square. Nothing in the theory says
+      which is carrying the game, so the page runs it as an A/B against one fixed opponent (a bot
+      that shoves its whole purse whenever a line is one mark away and plays the usual
+      block-then-centre heuristic), 600 games each from random bankrolls, sides swapped.</p>
+
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-4">
+        <p class="text-sm">Keep the correct bid and pick a <strong>uniformly random square</strong>:
+        <strong>80.2%</strong>. Keep the correct square and make a <strong>uniformly random
+        bid</strong>: <strong>56.0%</strong>. In this game the auction is worth far more than the
+        board. Win enough consecutive auctions and where you put the marks stops mattering much;
+        lose the auctions and knowing the perfect square is close to worthless.</p>
+      </div>
+
+      <p>Two smaller results from the same ladder. Bidding a flat sixteen coins every time —
+      exactly the sort of "sensible constant" that looks harmless — wins <strong>2%</strong>, far
+      worse than bidding at random, because a constant bidder is trivially outbid at the only
+      moments that matter. And bidding half your purse, which sounds reckless, wins 66.7%: it is a
+      crude approximation of the real rule, which is that the bid should scale with what is at
+      stake, and a purse-proportional bid is at least <em>correlated</em> with that.</p>
+
+      <h3 class="text-xl font-bold">The control that makes those numbers mean anything</h3>
+
+      <p>A perfect player starting above its own price must never fail to make its line, whatever
+      it is played by. 900 games against all fifteen combinations of the five bidders and three
+      movers on this page: 0 failures. If that control ever broke, the story would be the harness
+      and not the policy.</p>
+
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-50">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">🔨 How it is built</h2>
+
+      <h3 class="text-xl font-bold">1. A board is a base-3 integer, and that is the whole index</h3>
+      <pre>const code = sum over cells of value * 3^i;      // 0 empty, 1 X, 2 O
+place(code, cell, who) === code + who * POW[cell];</pre>
+      <p>Nine cells, 19,683 codes, and a move is one addition. Every table on this page is a flat
+      typed array indexed by that integer — no maps, no string keys, no board copying. The 930
+      codes that are not reachable cost 930 bytes and buy an index with no arithmetic in it.</p>
+
+      <h3 class="text-xl font-bold">2. The topological order is a bucket sort on mark count</h3>
+      <pre>for (let c = 0; c &lt; n; c++) bucket[marks[c]].push(c);
+for (let k = cells; k &gt;= 0; k--) ...                 // 9 marks first, empty board last</pre>
+      <p>Every move adds a mark, so descending mark count <em>is</em> a topological order of the
+      game DAG. One linear pass solves the whole tablebase — no recursion, no memo dictionary, no
+      stack depth to worry about. The same order solves the random-turn table.</p>
+
+      <h3 class="text-xl font-bold">3. Reachability, and the assumption that would have wrecked it</h3>
+      <pre>// either colour may be placed from any live board - there is no alternation here
+for (const cell of empty) for (let who = 1; who &lt;= 2; who++) push(place(code, cell, who));</pre>
+      <p>The obvious tic-tac-toe optimisation is that X's count minus O's count is 0 or 1. In a
+      bidding game that is false, because winning an auction is what earns a move and money can
+      buy several in a row. Reachable boards: 18,753, not 5,478.</p>
+
+      <h3 class="text-xl font-bold">4. The solver, which is six lines of real work</h3>
+      <pre>let mn = Infinity, mx = -Infinity;
+for (const i of emptyCells(c)){
+  mn = Math.min(mn, R[place(c, i, goal)]);      // I place: I want the price LOW
+  mx = Math.max(mx, R[place(c, i, foil)]);      // they place: they want it HIGH
+}
+R[c]   = (mn + mx) / 2;
+bid[c] = (mx - mn) / 2;</pre>
+      <p>Both children are multiples of 2<sup>marks+1</sup>, so both divisions are exact and the
+      whole table stays in <code>Int32Array</code>. The page re-checks that identity on the
+      finished table rather than trusting the loop that produced it: 22,186 checks, 0 violations,
+      including that R<sub>X</sub>&nbsp;+&nbsp;R<sub>O</sub> is never below the pot — two players
+      cannot both be able to buy their own line out of the same board.</p>
+
+      <h3 class="text-xl font-bold">5. Offence, defence, and one comparison that must not be strict</h3>
+      <pre>function offence(s, mine, own){
+  return s.me === 2 ? (mine &gt;= own.R[s.code]) : (mine &gt; own.R[s.code]);
+}</pre>
+      <p>O wins tied auctions, so O only needs to match its price and X has to beat its own. Write
+      both as <code>&gt;</code> and the perfect player draws a game it had won, at exactly one
+      stake in 513. The chip oracle independently confirms which side of each boundary is
+      strict — that is not a style choice, it is a measurable fact about the tie rule.</p>
+
+      <h3 class="text-xl font-bold">6. The oracle: quantifiers, then the same quantifiers fast</h3>
+      <pre>// literal: every bid against every bid, O(chips^2) per state
+for (let b = 0; b &lt;= mine; b++)
+  for (let g = 0; g &lt;= theirs; g++)
+    ... (tieToFoil ? b &gt; g : b &gt;= g) ? AX[t-b] : AO[t+g] ...
+
+// fast: a prefix-OR and a suffix-AND are monotone, so each has ONE crossover index
+pess = tieToFoil ? (t &gt;= s0) || (t &gt;= p0+1 &amp;&amp; 2*t &gt;= s0+p0)
+                 : (t &gt;= p0) &amp;&amp; (2*t+1 &gt;= s0+p0);</pre>
+      <p>The fast form is a rewrite of the quantifiers, not of the game — it still knows nothing
+      about halving. It is checked against the literal double loop on <em>every</em> state of the
+      two toy boards, both objectives, both tie rules, before being used at 512 chips where the
+      literal version would be 1.6 billion inner iterations.</p>
+
+      <h3 class="text-xl font-bold">7. Toy boards that exist only to be oracles</h3>
+      <pre>specRow5 : 5 cells in a line, 3-in-a-row wins, pot 32, 243 codes
+specTiny2: 2x2, any 2 cells are a line, pot 16,  81 codes</pre>
+      <p>Small enough that the literal solver runs the full cross-product of bids in milliseconds,
+      and structurally different enough (one has overlapping lines, the other has nothing but
+      lines) that a bug in line detection or in the DAG order shows up in one of them.</p>
+
+      <h3 class="text-xl font-bold">8. The invariant nobody thinks to check</h3>
+      <pre>if (xWins) x -= bx; else x += bo;      // the LOSER is paid, always</pre>
+      <p>Get the sign wrong here and you have written a game where money is destroyed, the pot
+      shrinks, and every price on the page is quietly meaningless while the engine still looks
+      fine. 400 random games between random policies, 2,158 auctions, 0 bankrolls outside
+      [0, 512].</p>
+
+      <h3 class="text-xl font-bold">9. What the tests actually pin</h3>
+      <pre>// two solvers, no shared arithmetic, all four (goal, tie-rule) combinations
+assert(oracleCheck(3x3, goal, 512, ties).mismatch === 0);       // 18,753 boards each
+
+// the theory's prediction, played rather than asserted
+assert(sweepAllStakes().agree === 513);
+
+// the identity re-read off the finished table
+assert(identityCheck().bad === 0 &amp;&amp; identityCheck().bandNeg === 0);
+
+// the control that makes the race numbers mean something
+assert(guaranteeStudy(900).broken === 0);
+
+// and the headline, which is a measurement and not an assertion
+ladder: price+random square 80.2%  vs  random bid+table square 56.0%</pre>
+
+      <h3 class="text-xl font-bold">10. What this engine is not</h3>
+      <pre>// Exact over the whole state space, so the limits ARE the state space: 3^cells
+// boards, and the chip oracle is boards x chips. 3x3 against a 512-chip pot is
+// 19,683 x 513 bytes twice over and about a second; 4x4 is 43M boards and is not
+// a web page. Nothing here approximates, and nothing here searches - the price of
+// a position is read off a table, never looked for.</pre>
+      <p>Stated in the code next to the limit rather than in the copy, because it is a property of
+      the implementation and not a disclaimer.</p>
+
+      <h3 class="text-xl font-bold">🎉 GameFromZero Day 68 shipped.</h3>
+      <p class="text-slate-600">Sixty-eight games. The first one whose state has no side to move,
+      and the first whose engine is a price rather than a search.</p>
+
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// Bidding (Richman) Tic-Tac-Toe. There is no side to move. Before every mark BOTH players
+// bid; the higher bid wins the auction, PAYS THAT BID TO THE OPPONENT, and places its own
+// mark. So the engine is not a search over turns - it is a PRICE. R(b) is the share of the
+// pot you need before you can force your line, and it satisfies one averaging identity:
+//     R(b) = ( min over MY moves R  +  max over THEIR moves R ) / 2
+// with the optimal bid equal to half the gap between those two children. Every number here
+// is an exact whole coin out of a 512-coin pot; there is no floating point in the tablebase.
+// Nothing in this block touches the DOM.
+
+function mulberry32(seed){
+  let s = seed >>> 0;
+  return function(){
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t = (t ^ (t + Math.imul(t ^ (t >>> 7), t | 61))) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- board specs
+// A spec is "how many cells" plus "which sets of cells count as a line". Everything below is
+// written against a spec, so the 3x3 game and the toy games used as oracles run identical
+// code. POT = 2^cells, because a game is at most `cells` auctions and every value is a dyadic
+// rational with that many halvings - which is why the pot on this page is 512 and not 100.
+function makeSpec(name, cells, lines){
+  const POW = [];
+  for (let i = 0, p = 1; i < cells; i++, p *= 3) POW.push(p);
+  const lineList = [];
+  for (let i = 0; i < lines.length; i++) lineList.push(lines[i].slice());
+  return { name: name, cells: cells, lines: lineList, POW: POW,
+           codes: Math.pow(3, cells), POT: 1 << cells };
+}
+function specTicTacToe(){
+  return makeSpec("3x3", 9, [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]);
+}
+// Five cells in a row, three in a row wins. Small enough to brute-force the real auction over
+// every position, every chip split AND every pair of integer bids, which is what makes it an
+// oracle rather than a second opinion.
+function specRow5(){ return makeSpec("row5-3", 5, [[0,1,2],[1,2,3],[2,3,4]]); }
+// 2x2, two in a row - every pair of cells is a line, so the second mark always ends it.
+function specTiny2(){ return makeSpec("2x2", 4, [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]); }
+
+function cellAt(spec, code, i){ return Math.floor(code / spec.POW[i]) % 3; }
+function decodeBoard(spec, code){
+  const b = [];
+  for (let i = 0; i < spec.cells; i++) b.push(cellAt(spec, code, i));
+  return b;
+}
+function encodeBoard(spec, b){
+  let c = 0;
+  for (let i = 0; i < spec.cells; i++) c += b[i] * spec.POW[i];
+  return c;
+}
+// winner: 0 none, 1 X, 2 O, 3 both (unreachable, kept explicit rather than silently ranked)
+function winnerOf(spec, code){
+  let w = 0;
+  for (let i = 0; i < spec.lines.length; i++){
+    const L = spec.lines[i], v = cellAt(spec, code, L[0]);
+    if (v === 0) continue;
+    let all = true;
+    for (let j = 1; j < L.length; j++) if (cellAt(spec, code, L[j]) !== v){ all = false; break; }
+    if (all) w |= v;
+  }
+  return w;
+}
+function markCount(spec, code){
+  let n = 0;
+  for (let i = 0; i < spec.cells; i++) if (cellAt(spec, code, i) !== 0) n++;
+  return n;
+}
+function emptyCells(spec, code){
+  const out = [];
+  for (let i = 0; i < spec.cells; i++) if (cellAt(spec, code, i) === 0) out.push(i);
+  return out;
+}
+function place(spec, code, cell, who){ return code + who * spec.POW[cell]; }
+function swapColours(spec, code){
+  let c = 0;
+  for (let i = 0; i < spec.cells; i++){
+    const v = cellAt(spec, code, i);
+    c += (v === 0 ? 0 : (v === 1 ? 2 : 1)) * spec.POW[i];
+  }
+  return c;
+}
+
+// Board metadata, computed once per spec and cached on it.
+function tables(spec){
+  if (spec._t) return spec._t;
+  const n = spec.codes, win = new Uint8Array(n), marks = new Uint8Array(n);
+  for (let c = 0; c < n; c++){ win[c] = winnerOf(spec, c); marks[c] = markCount(spec, c); }
+  // codes sorted by mark count DESCENDING. Every move adds a mark, so this is a topological
+  // order of the game DAG and one linear pass solves it - no recursion, no memo, no stack.
+  const order = new Int32Array(n), bucket = [];
+  for (let k = 0; k <= spec.cells; k++) bucket.push([]);
+  for (let c = 0; c < n; c++) bucket[marks[c]].push(c);
+  let p = 0;
+  for (let k = spec.cells; k >= 0; k--) for (let i = 0; i < bucket[k].length; i++) order[p++] = bucket[k][i];
+  spec._t = { win: win, marks: marks, order: order };
+  return spec._t;
+}
+function isTerminal(spec, code){
+  const T = tables(spec);
+  return T.win[code] !== 0 || T.marks[code] === spec.cells;
+}
+
+// Codes reachable from the empty board. In a bidding game either player may win any number of
+// auctions in a row, so the usual "X count minus O count is 0 or 1" pruning is WRONG here.
+// Eight-nil is a legal position, and most of this state space only exists because of that.
+function reachable(spec){
+  if (spec._r) return spec._r;
+  const seen = new Uint8Array(spec.codes), list = [], stack = [0];
+  seen[0] = 1; list.push(0);
+  while (stack.length){
+    const c = stack.pop();
+    if (isTerminal(spec, c)) continue;
+    const es = emptyCells(spec, c);
+    for (let i = 0; i < es.length; i++) for (let who = 1; who <= 2; who++){
+      const d = place(spec, c, es[i], who);
+      if (!seen[d]){ seen[d] = 1; list.push(d); stack.push(d); }
+    }
+  }
+  list.sort(function(a, b){ return a - b; });
+  spec._r = { mask: seen, list: list };
+  return spec._r;
+}
+
+// ---------------------------------------------------------------- the Richman tablebase
+// R(b), in coins out of POT: the stake `goal` must hold before it can force its own line.
+// A draw counts as a FAILURE for goal, so this is a strict two-outcome game and the two
+// tablebases (goal = X, goal = O) are different questions rather than mirrors of one number.
+// That is the entire reason a draw band exists at all.
+function solveRichman(spec, goal){
+  const key = "_rich" + goal;
+  if (spec[key]) return spec[key];
+  const T = tables(spec), POT = spec.POT, n = spec.codes, foil = goal === 1 ? 2 : 1;
+  const R = new Int32Array(n), bid = new Int32Array(n);
+  const goalMove = new Int8Array(n), foilMove = new Int8Array(n);
+  for (let i = 0; i < n; i++){ goalMove[i] = -1; foilMove[i] = -1; }
+  for (let idx = 0; idx < n; idx++){
+    const c = T.order[idx], w = T.win[c];
+    if (w === goal || w === 3){ R[c] = 0; continue; }            // the line is already there
+    if (w === foil){ R[c] = POT; continue; }                     // theirs landed first
+    if (T.marks[c] === spec.cells){ R[c] = POT; continue; }      // full board: a draw is a loss
+    let mn = Infinity, mx = -Infinity, mnC = -1, mxC = -1;
+    for (let i = 0; i < spec.cells; i++){
+      if (cellAt(spec, c, i) !== 0) continue;
+      const a = R[place(spec, c, i, goal)];
+      if (a < mn){ mn = a; mnC = i; }
+      const b = R[place(spec, c, i, foil)];
+      if (b > mx){ mx = b; mxC = i; }
+    }
+    R[c] = (mn + mx) / 2;          // exact: both children are multiples of 2^(marks+1),
+    bid[c] = (mx - mn) / 2;        // and so is the gap, so the bid is a whole coin too
+    goalMove[c] = mnC; foilMove[c] = mxC;
+  }
+  spec[key] = { R: R, bid: bid, goalMove: goalMove, foilMove: foilMove, goal: goal, POT: POT };
+  return spec[key];
+}
+
+// The three-outcome verdict of the real game, which only the two tablebases TOGETHER give.
+// x = X's coins. Ties in the auction go to O, so O's side of the boundary is the non-strict
+// one; that asymmetry is a house rule of this page, not a fact about Richman games.
+function verdict(spec, code, x){
+  const A = solveRichman(spec, 1), B = solveRichman(spec, 2), T = tables(spec), POT = spec.POT;
+  if (T.win[code] === 1) return { out: 1, why: "X already has a line" };
+  if (T.win[code] === 2) return { out: 2, why: "O already has a line" };
+  if (T.marks[code] === spec.cells) return { out: 0, why: "the board is full" };
+  if (x > A.R[code]) return { out: 1, why: "X holds " + x + ", and an X line costs " + A.R[code] };
+  if (POT - x >= B.R[code]) return { out: 2, why: "O holds " + (POT - x) + ", and an O line costs " + B.R[code] };
+  return { out: 0, why: "neither stake clears its price" };
+}
+// Bankrolls at which NEITHER player can force a line: R_X + R_O - POT. It cannot be negative,
+// because two players cannot both be able to force their own line out of the same position.
+function drawBand(spec, code){
+  const A = solveRichman(spec, 1), B = solveRichman(spec, 2);
+  return A.R[code] + B.R[code] - spec.POT;
+}
+// Who is buying a line and who is preventing one. The tie-break decides the boundary: O wins
+// tied auctions, so O only has to MATCH its price while X has to beat its own. Make both
+// strict and the perfect player throws the game away at exactly the boundary stake.
+function offence(s, mine, own){
+  return s.me === 2 ? (mine >= own.R[s.code]) : (mine > own.R[s.code]);
+}
+
+// ---------------------------------------------------------------- the same numbers, twice
+// RANDOM-TURN game (Peres-Schramm-Sheffield-Wilson): no money at all, a fair coin decides who
+// marks next, both sides play optimally. This is deliberately written with an explicit MOVER
+// variable and a chance layer, because the point is that the recurrence it produces is the
+// SAME recurrence: the auction price of a position equals the probability you lose it when
+// turn order is a coin flip. It is not an independent check. It is the theorem.
+function solveRandomTurn(spec, goal){
+  const key = "_rt" + goal;
+  if (spec[key]) return spec[key];
+  const T = tables(spec), POT = spec.POT, n = spec.codes, foil = goal === 1 ? 2 : 1;
+  const W = new Int32Array(n);                       // POT * P(goal FAILS), an exact integer
+  const Vgoal = new Int32Array(n), Vfoil = new Int32Array(n);
+  for (let idx = 0; idx < n; idx++){
+    const c = T.order[idx], w = T.win[c];
+    if (w === goal || w === 3){ W[c] = 0; Vgoal[c] = 0; Vfoil[c] = 0; continue; }
+    if (w === foil || T.marks[c] === spec.cells){ W[c] = POT; Vgoal[c] = POT; Vfoil[c] = POT; continue; }
+    let vg = Infinity, vf = -Infinity;
+    for (let i = 0; i < spec.cells; i++){
+      if (cellAt(spec, c, i) !== 0) continue;
+      const a = W[place(spec, c, i, goal)]; if (a < vg) vg = a;  // goal moves: minimise failure
+      const b = W[place(spec, c, i, foil)]; if (b > vf) vf = b;  // foil moves: maximise it
+    }
+    Vgoal[c] = vg; Vfoil[c] = vf;
+    W[c] = (vg + vf) / 2;                                        // the fair coin
+  }
+  spec[key] = { W: W, Vgoal: Vgoal, Vfoil: Vfoil };
+  return spec[key];
+}
+// Actually flip the coins. The empirical failure rate has to walk to R/POT, and that is the
+// only part of the equivalence that is a measurement rather than an identity. Pass uniform =
+// true and both sides play random squares instead - the control, without which "the sampler
+// landed on the price" would be worth nothing, because a sampler that ignores the table might
+// land there too.
+function randomTurnTrials(spec, goal, trials, rnd, uniform){
+  const rt = solveRandomTurn(spec, goal), T = tables(spec), foil = goal === 1 ? 2 : 1;
+  let fails = 0;
+  for (let t = 0; t < trials; t++){
+    let c = 0;
+    for (;;){
+      const w = T.win[c];
+      if (w === goal) break;
+      if (w === foil || T.marks[c] === spec.cells){ fails++; break; }
+      const mover = rnd() < 0.5 ? goal : foil;
+      const es = emptyCells(spec, c);
+      let best = es[0];
+      if (uniform) best = es[Math.floor(rnd() * es.length)];
+      else {
+        let bestV = mover === goal ? Infinity : -Infinity;
+        for (let i = 0; i < es.length; i++){
+          const v = rt.W[place(spec, c, es[i], mover)];
+          if (mover === goal ? v < bestV : v > bestV){ bestV = v; best = es[i]; }
+        }
+      }
+      c = place(spec, c, best, mover);
+    }
+  }
+  return { trials: trials, fails: fails, rate: fails / trials, exact: rt.W[0] / spec.POT,
+           uniform: !!uniform };
+}
+
+// ---------------------------------------------------------------- the independent oracle
+// Play the auction for real. CHIPS whole chips on the table, every integer bid enumerated, no
+// averaging and no division by two anywhere in it. Two variants, because sealed simultaneous
+// bids would otherwise need a mixed strategy before the value is even well defined:
+//    pess : the goal player ANNOUNCES its bid and the foil answers  (exists b, for all g)
+//    opt  : the foil announces first and the goal player answers    (for all g, exists b)
+// The true sealed-bid value is sandwiched between them, so if the two agree the auction never
+// needs a coin. Whether they agree is measured below, not assumed.
+function discreteLiteral(spec, goal, CHIPS, tieToFoil){
+  const T = tables(spec), n = spec.codes, foil = goal === 1 ? 2 : 1, W = CHIPS + 1;
+  const pess = new Uint8Array(n * W), opt = new Uint8Array(n * W);
+  const AX = new Uint8Array(W), AO = new Uint8Array(W);
+  const fill = function(arr, c, es){
+    for (let u = 0; u < W; u++){
+      let any = 0, all = 1;
+      for (let i = 0; i < es.length; i++){
+        if (arr[place(spec, c, es[i], goal) * W + u]) any = 1;
+        if (!arr[place(spec, c, es[i], foil) * W + u]) all = 0;
+      }
+      AX[u] = any; AO[u] = all;                 // I win the auction and move / they do
+    }
+  };
+  for (let idx = 0; idx < n; idx++){
+    const c = T.order[idx], w = T.win[c], base = c * W;
+    if (w === goal || w === 3){ for (let t = 0; t < W; t++){ pess[base + t] = 1; opt[base + t] = 1; } continue; }
+    if (w === foil || T.marks[c] === spec.cells) continue;                // stays all zeros
+    const es = emptyCells(spec, c);
+    fill(pess, c, es);
+    for (let t = 0; t < W; t++){
+      const theirs = CHIPS - t;
+      let can = 0;
+      for (let b = 0; b <= t && !can; b++){                   // EXISTS a bid of mine
+        let all = 1;
+        for (let g = 0; g <= theirs; g++){                    // FOR ALL bids of theirs
+          const iWin = tieToFoil ? (b > g) : (b >= g);
+          if (iWin ? !AX[t - b] : !AO[t + g]){ all = 0; break; }
+        }
+        if (all) can = 1;
+      }
+      pess[base + t] = can;
+    }
+    fill(opt, c, es);                                         // opt recurses on opt, not pess
+    for (let t = 0; t < W; t++){
+      const theirs = CHIPS - t;
+      let all = 1;
+      for (let g = 0; g <= theirs && all; g++){               // FOR ALL bids of theirs
+        let any = 0;
+        for (let b = 0; b <= t; b++){                         // EXISTS an answer of mine
+          const iWin = tieToFoil ? (b > g) : (b >= g);
+          if (iWin ? AX[t - b] : AO[t + g]){ any = 1; break; }
+        }
+        if (!any) all = 0;
+      }
+      opt[base + t] = all;
+    }
+  }
+  return { pess: pess, opt: opt, W: W, CHIPS: CHIPS, literal: true };
+}
+
+// The same two quantifiers with the inner loops collapsed. A prefix-OR and a suffix-AND are
+// monotone by construction, so each has exactly one crossover index, and the quantifier turns
+// into arithmetic on those two indices. Nothing in here knows the halving rule - it is the
+// literal definition evaluated in O(1) instead of O(chips^2), and it is checked against
+// discreteLiteral on every single state of the toy specs before being trusted at 512 chips.
+function discreteFast(spec, goal, CHIPS, tieToFoil){
+  const T = tables(spec), n = spec.codes, foil = goal === 1 ? 2 : 1, W = CHIPS + 1;
+  const pess = new Uint8Array(n * W), opt = new Uint8Array(n * W);
+  const AX = new Uint8Array(W), AO = new Uint8Array(W);
+  const scan = function(arr, c, es){
+    for (let u = 0; u < W; u++){
+      let any = 0, all = 1;
+      for (let i = 0; i < es.length; i++){
+        if (arr[place(spec, c, es[i], goal) * W + u]) any = 1;
+        if (!arr[place(spec, c, es[i], foil) * W + u]) all = 0;
+      }
+      AX[u] = any; AO[u] = all;
+    }
+    // p0 = cheapest holding at which winning THIS auction and moving is already enough
+    // s0 = cheapest holding at which losing every auction from here on is still survivable
+    let p0 = W; for (let u = 0; u < W; u++) if (AX[u]){ p0 = u; break; }
+    let s0 = W; for (let u = W - 1; u >= 0; u--){ if (!AO[u]) break; s0 = u; }
+    return [p0, s0];
+  };
+  for (let idx = 0; idx < n; idx++){
+    const c = T.order[idx], w = T.win[c], base = c * W;
+    if (w === goal || w === 3){ for (let t = 0; t < W; t++){ pess[base + t] = 1; opt[base + t] = 1; } continue; }
+    if (w === foil || T.marks[c] === spec.cells) continue;
+    const es = emptyCells(spec, c);
+    let k = scan(pess, c, es), p0 = k[0], s0 = k[1];
+    for (let t = 0; t < W; t++){
+      pess[base + t] = (tieToFoil
+        ? ((t >= s0) || (t >= p0 + 1 && 2 * t >= s0 + p0))
+        : ((t >= p0) && (2 * t + 1 >= s0 + p0))) ? 1 : 0;
+    }
+    k = scan(opt, c, es); p0 = k[0]; s0 = k[1];
+    for (let t = 0; t < W; t++){
+      opt[base + t] = (tieToFoil
+        ? (t + Math.max(0, t - p0) >= s0)
+        : (t >= p0 && t + Math.max(1, t - p0 + 1) >= s0)) ? 1 : 0;
+    }
+  }
+  return { pess: pess, opt: opt, W: W, CHIPS: CHIPS, literal: false };
+}
+
+// Cheapest holding at which the discrete auction is already won, per board.
+function thresholds(spec, table, which){
+  const arr = which === "opt" ? table.opt : table.pess, W = table.W;
+  const out = new Int32Array(spec.codes);
+  for (let c = 0; c < spec.codes; c++){
+    let th = W;                                     // W means "not even holding the whole pot"
+    for (let t = 0; t < W; t++) if (arr[c * W + t]){ th = t; break; }
+    out[c] = th;
+  }
+  return out;
+}
+// Does more money ever hurt? It must not, and this is the cheapest thing that would catch a
+// broken bidding loop, so it is checked on every state rather than argued for.
+function monotoneBreaks(spec, table){
+  const W = table.W;
+  let seen = 0, bad = 0;
+  for (let c = 0; c < spec.codes; c++) for (let t = 1; t < W; t++){
+    seen += 2;
+    if (table.pess[c * W + t - 1] && !table.pess[c * W + t]) bad++;
+    if (table.opt[c * W + t - 1] && !table.opt[c * W + t]) bad++;
+  }
+  return { states: seen, breaks: bad };
+}
+// The oracle against the tablebase, board by board, at CHIPS = POT so that every Richman bid
+// is a whole chip and no rounding can hide a disagreement. The predicate is exact:
+//   ties against me -> I must EXCEED the price, so the threshold is price + 1
+//   ties  to    me  -> I only MATCH it, so the threshold is the price itself
+// and a price of POT means "impossible", which the chip solver spells as POT + 1.
+function oracleCheck(spec, goal, CHIPS, tieToFoil){
+  const P = solveRichman(spec, goal).R, list = reachable(spec).list, POT = spec.POT;
+  const tab = discreteFast(spec, goal, CHIPS, tieToFoil);
+  const tp = thresholds(spec, tab, "pess"), to = thresholds(spec, tab, "opt");
+  let boards = 0, mismatch = 0, mixing = 0, firstBad = -1;
+  for (let i = 0; i < list.length; i++){
+    const c = list[i], r = Math.round(P[c] * CHIPS / POT);
+    const want = tieToFoil ? (r === 0 ? 0 : r + 1) : (r === CHIPS ? CHIPS + 1 : r);
+    boards++;
+    if (tp[c] !== want){ mismatch++; if (firstBad < 0) firstBad = c; }
+    if (tp[c] !== to[c]) mixing++;
+  }
+  return { boards: boards, mismatch: mismatch, mixing: mixing, chips: CHIPS,
+           tieToFoil: !!tieToFoil, goal: goal, firstBad: firstBad };
+}
+// The fast quantifiers against the literal double loop, on every state of a toy spec.
+function literalCheck(spec, goal, CHIPS, tieToFoil){
+  const L = discreteLiteral(spec, goal, CHIPS, tieToFoil);
+  const F = discreteFast(spec, goal, CHIPS, tieToFoil);
+  let states = 0, pessDiff = 0, optDiff = 0, mixing = 0;
+  for (let i = 0; i < L.pess.length; i++){
+    states++;
+    if (L.pess[i] !== F.pess[i]) pessDiff++;
+    if (L.opt[i] !== F.opt[i]) optDiff++;
+    if (L.pess[i] !== L.opt[i]) mixing++;
+  }
+  return { states: states, pessDiff: pessDiff, optDiff: optDiff, mixing: mixing, chips: CHIPS };
+}
+
+// ---------------------------------------------------------------- playing the actual game
+// A policy is { bid(state) -> coins, move(state) -> cell }. The two halves are deliberately
+// separable, because the study below asks which of them is actually carrying the game.
+function findCompletion(spec, code, who){
+  for (let i = 0; i < spec.lines.length; i++){
+    const L = spec.lines[i];
+    let mine = 0, gap = -1, ok = true;
+    for (let j = 0; j < L.length; j++){
+      const v = cellAt(spec, code, L[j]);
+      if (v === who) mine++;
+      else if (v === 0){ if (gap >= 0){ ok = false; break; } gap = L[j]; }
+      else { ok = false; break; }
+    }
+    if (ok && gap >= 0 && mine === L.length - 1) return gap;
+  }
+  return -1;
+}
+function heuristicCell(spec, code, who){
+  const them = who === 1 ? 2 : 1;
+  let c = findCompletion(spec, code, who); if (c >= 0) return c;
+  c = findCompletion(spec, code, them);    if (c >= 0) return c;
+  const es = emptyCells(spec, code);
+  if (spec.cells === 9){
+    const pref = [4, 0, 2, 6, 8, 1, 3, 5, 7];
+    for (let i = 0; i < pref.length; i++) if (es.indexOf(pref[i]) >= 0) return pref[i];
+  }
+  return es[Math.floor(es.length / 2)];
+}
+
+const BIDDERS = ["price", "half", "flat", "random", "instinct"];
+const MOVERS  = ["table", "heuristic", "random"];
+function makePolicy(spec, bidder, mover, rnd){
+  const A = solveRichman(spec, 1), B = solveRichman(spec, 2);
+  const own = function(s){ return s.me === 1 ? A : B; };
+  const opp = function(s){ return s.me === 1 ? B : A; };
+  const purse = function(s){ return s.me === 1 ? s.x : s.pot - s.x; };
+  const bidFn = {
+    // Covered my own price? then I am buying a line. Otherwise I am defending against theirs -
+    // and the equilibrium bid of the DEFENDER is the same number, which is why both sides of a
+    // Richman game bid identically and a tie is the normal case rather than a corner case.
+    price: function(s){
+      const mine = purse(s), t = offence(s, mine, own(s)) ? own(s) : opp(s);
+      return Math.min(mine, t.bid[s.code]);
+    },
+    half:  function(s){ return Math.floor(purse(s) / 2); },
+    flat:  function(s){ return Math.min(purse(s), Math.floor(s.pot / 32)); },
+    random:function(s){ return Math.floor(rnd() * (purse(s) + 1)); },
+    // the human instinct: shove when a mark obviously matters, save when it does not
+    instinct: function(s){
+      const mine = purse(s), them = s.me === 1 ? 2 : 1;
+      if (findCompletion(spec, s.code, s.me) >= 0) return mine;
+      if (findCompletion(spec, s.code, them) >= 0) return mine;
+      return Math.floor(mine / 8);
+    }
+  }[bidder];
+  const moveFn = {
+    table: function(s){
+      const mine = purse(s);
+      return offence(s, mine, own(s)) ? own(s).goalMove[s.code] : opp(s).foilMove[s.code];
+    },
+    heuristic: function(s){ return heuristicCell(spec, s.code, s.me); },
+    random: function(s){ const es = emptyCells(spec, s.code); return es[Math.floor(rnd() * es.length)]; }
+  }[mover];
+  return { name: bidder + "/" + mover, bidder: bidder, mover: mover, bid: bidFn, move: moveFn };
+}
+function richmanPolicy(spec){ return makePolicy(spec, "price", "table", null); }
+
+// One complete game. Both bids come from the same state object, neither policy sees the
+// other's number, and the LOSER of the auction is paid - money never leaves the table, which
+// is the conservation law that makes a bankroll meaningful here.
+function playGame(spec, px, po, startX, log){
+  const POT = spec.POT, T = tables(spec);
+  let code = 0, x = startX, plies = 0;
+  for (;;){
+    if (T.win[code]) return { out: T.win[code], code: code, x: x, plies: plies };
+    if (T.marks[code] === spec.cells) return { out: 0, code: code, x: x, plies: plies };
+    const sx = { code: code, x: x, pot: POT, me: 1 }, so = { code: code, x: x, pot: POT, me: 2 };
+    const bx = Math.max(0, Math.min(x, Math.round(px.bid(sx))));
+    const bo = Math.max(0, Math.min(POT - x, Math.round(po.bid(so))));
+    const xWins = bx > bo;                                        // ties go to O
+    const mover = xWins ? 1 : 2, pol = xWins ? px : po, st = xWins ? sx : so;
+    const es = emptyCells(spec, code);
+    let cell = pol.move(st);
+    if (cell === undefined || cell === null || cell < 0 || es.indexOf(cell) < 0) cell = es[0];
+    if (xWins) x -= bx; else x += bo;
+    code = place(spec, code, cell, mover);
+    plies++;
+    if (log) log.push({ bx: bx, bo: bo, mover: mover, cell: cell, x: x, code: code });
+  }
+}
+
+// Every possible bankroll, played out for real by two perfect players, against what the two
+// tablebases said would happen before a coin moved. POT+1 games, no sampling anywhere.
+function sweepAllStakes(spec){
+  const rp = richmanPolicy(spec), POT = spec.POT;
+  let agree = 0, disagree = 0, firstBad = -1, maxSwing = 0;
+  const predicted = { 0: 0, 1: 0, 2: 0 }, played = { 0: 0, 1: 0, 2: 0 }, plies = {};
+  for (let x = 0; x <= POT; x++){
+    const log = [], r = playGame(spec, rp, rp, x, log), v = verdict(spec, 0, x);
+    predicted[v.out]++; played[r.out]++;
+    plies[r.plies] = (plies[r.plies] || 0) + 1;
+    for (let i = 0; i < log.length; i++) maxSwing = Math.max(maxSwing, Math.abs(log[i].x - x));
+    if (r.out === v.out) agree++; else { disagree++; if (firstBad < 0) firstBad = x; }
+  }
+  return { stakes: POT + 1, agree: agree, disagree: disagree, firstBad: firstBad,
+           predicted: predicted, played: played, plies: plies, maxSwing: maxSwing };
+}
+// The control that makes every race number below mean something: a perfect player starting
+// ABOVE its own price must never fail to make its line, whatever nonsense it is played by.
+function guaranteeStudy(spec, games, seed){
+  const rnd = mulberry32(seed || 1), rp = richmanPolicy(spec), A = solveRichman(spec, 1);
+  const foes = [];
+  for (let i = 0; i < BIDDERS.length; i++) for (let j = 0; j < MOVERS.length; j++)
+    foes.push(makePolicy(spec, BIDDERS[i], MOVERS[j], rnd));
+  let runs = 0, broken = 0;
+  for (let i = 0; i < games; i++){
+    const x = A.R[0] + 1 + Math.floor(rnd() * (spec.POT - A.R[0]));
+    if (playGame(spec, rp, foes[i % foes.length], x).out !== 1) broken++;
+    runs++;
+  }
+  return { runs: runs, broken: broken };
+}
+function raceGames(spec, pa, pb, games, rnd, lo, hi){
+  let a = 0, b = 0, d = 0;
+  for (let i = 0; i < games; i++){
+    const x = lo + Math.floor(rnd() * (hi - lo + 1)), swap = (i & 1) === 1;
+    const r = swap ? playGame(spec, pb, pa, spec.POT - x) : playGame(spec, pa, pb, x);
+    if (r.out === 0) d++;
+    else if ((r.out === 1) !== swap) a++;
+    else b++;
+  }
+  return { games: games, a: a, b: b, draws: d };
+}
+// Right bid + wrong mark against wrong bid + right mark, both measured against ONE fixed
+// opponent so the comparison is an A/B and not a head-to-head. Which half of a Richman
+// strategy is load bearing is not something the theory answers.
+function ladderStudy(spec, games, seed, lo, hi){
+  const rnd = mulberry32(seed || 3);
+  const foe = makePolicy(spec, "instinct", "heuristic", rnd);
+  const rows = [
+    ["the price, and the table's square",    "price",  "table"],
+    ["the price, and a RANDOM square",       "price",  "random"],
+    ["a RANDOM bid, and the table's square", "random", "table"],
+    ["half your purse, table's square",      "half",   "table"],
+    ["a flat 16 coins, table's square",      "flat",   "table"],
+    ["the price, and the instinct square",   "price",  "heuristic"]
+  ];
+  const out = [];
+  for (let i = 0; i < rows.length; i++){
+    const p = makePolicy(spec, rows[i][1], rows[i][2], mulberry32((seed || 3) + 17 * i));
+    const r = raceGames(spec, p, foe, games, mulberry32((seed || 3) + 101 * i), lo, hi);
+    out.push({ label: rows[i][0], bidder: rows[i][1], mover: rows[i][2],
+               wins: r.a, losses: r.b, draws: r.draws, games: r.games, rate: r.a / r.games });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- what the table looks like
+function priceStats(spec){
+  const A = solveRichman(spec, 1), list = reachable(spec).list, distinct = {};
+  let nonTerminal = 0, zeroBid = 0, maxBid = 0, maxBidBoards = 0, sumBid = 0, zeroBand = 0;
+  const bandHist = {};
+  for (let i = 0; i < list.length; i++){
+    const c = list[i];
+    distinct[A.R[c]] = 1;
+    if (isTerminal(spec, c)) continue;
+    nonTerminal++; sumBid += A.bid[c];
+    if (A.bid[c] === 0) zeroBid++;
+    if (A.bid[c] > maxBid){ maxBid = A.bid[c]; maxBidBoards = 0; }
+    if (A.bid[c] === maxBid) maxBidBoards++;
+    const band = drawBand(spec, c);
+    bandHist[band] = (bandHist[band] || 0) + 1;
+    if (band === 0) zeroBand++;
+  }
+  let dn = 0; for (const k in distinct) dn++;
+  return { boards: list.length, nonTerminal: nonTerminal, distinct: dn, zeroBid: zeroBid,
+           maxBid: maxBid, maxBidBoards: maxBidBoards, meanBid: sumBid / nonTerminal,
+           zeroBand: zeroBand, bandHist: bandHist };
+}
+// R_O(b) must equal R_X(b with the colours swapped). Cheap, exhaustive, and it would catch a
+// tablebase that had quietly solved the same question twice instead of two questions once.
+function symmetryCheck(spec){
+  const A = solveRichman(spec, 1), B = solveRichman(spec, 2), list = reachable(spec).list;
+  let checked = 0, bad = 0;
+  for (let i = 0; i < list.length; i++){
+    checked++;
+    if (B.R[list[i]] !== A.R[swapColours(spec, list[i])]) bad++;
+  }
+  return { checked: checked, bad: bad };
+}
+// The defining identity, re-checked on the finished table rather than trusted from the loop
+// that produced it - including that R_X + R_O is never less than the pot.
+function identityCheck(spec){
+  const A = solveRichman(spec, 1), list = reachable(spec).list;
+  let checked = 0, bad = 0, bandNeg = 0;
+  for (let i = 0; i < list.length; i++){
+    const c = list[i];
+    if (drawBand(spec, c) < 0) bandNeg++;
+    if (isTerminal(spec, c)) continue;
+    let mn = Infinity, mx = -Infinity;
+    const es = emptyCells(spec, c);
+    for (let j = 0; j < es.length; j++){
+      const a = A.R[place(spec, c, es[j], 1)]; if (a < mn) mn = a;
+      const b = A.R[place(spec, c, es[j], 2)]; if (b > mx) mx = b;
+    }
+    checked += 2;
+    if (A.R[c] !== (mn + mx) / 2) bad++;
+    if (A.bid[c] !== (mx - mn) / 2) bad++;
+  }
+  return { checked: checked, bad: bad, bandNeg: bandNeg };
+}
+// The auction table and the coin-flip table are the same integers on every board. Same
+// recurrence, two meanings - so this measures that the second program really was written
+// against the second meaning and not accidentally against the first.
+function randomTurnCheck(spec, goal){
+  const R = solveRichman(spec, goal).R, W = solveRandomTurn(spec, goal).W;
+  const list = reachable(spec).list;
+  let checked = 0, bad = 0;
+  for (let i = 0; i < list.length; i++){ checked++; if (R[list[i]] !== W[list[i]]) bad++; }
+  return { checked: checked, bad: bad };
+}
+// A price on a board with k marks must be a whole multiple of 2^k out of the pot, because
+// only cells-minus-k halvings remain. That is not decoration: it is the reason the whole
+// table is integers, and the reason /2 in the recurrence never needs rounding.
+function dyadicCheck(spec){
+  const A = solveRichman(spec, 1), T = tables(spec), list = reachable(spec).list;
+  let checked = 0, bad = 0;
+  for (let i = 0; i < list.length; i++){
+    const c = list[i], m = 1 << T.marks[c];
+    checked++;
+    if (A.R[c] % m !== 0) bad++;
+    if (!isTerminal(spec, c)){ checked++; if (A.bid[c] % m !== 0) bad++; }
+  }
+  return { checked: checked, bad: bad };
+}
+// The loser of every auction is paid, so a bankroll can never leave [0, POT]. Random policies
+// bidding random amounts is the fastest way to find out whether that is actually true.
+function conservationStudy(spec, games, seed){
+  const rnd = mulberry32(seed || 9), pols = [];
+  for (let i = 0; i < BIDDERS.length; i++) for (let j = 0; j < MOVERS.length; j++)
+    pols.push(makePolicy(spec, BIDDERS[i], MOVERS[j], rnd));
+  let plies = 0, leaks = 0;
+  for (let i = 0; i < games; i++){
+    const a = pols[Math.floor(rnd() * pols.length)], b = pols[Math.floor(rnd() * pols.length)];
+    const log = [];
+    playGame(spec, a, b, Math.floor(rnd() * (spec.POT + 1)), log);
+    for (let k = 0; k < log.length; k++){
+      plies++;
+      if (log[k].x < 0 || log[k].x > spec.POT) leaks++;
+    }
+  }
+  return { games: games, plies: plies, leaks: leaks };
+}
+
+// ---------------------------------------------------------------- a game with cycles
+// Tug of war on a path: the goal player pulls towards 0, the foil towards n. It is the one
+// case with a closed form - R(i) = i/n - and it is NOT a DAG, so the same identity has to be
+// reached by relaxation instead of one ordered pass. Different solving mode, known answer,
+// and the only place on this page where a value is a float rather than a whole coin.
+function tugOfWar(n, sweeps){
+  const R = new Float64Array(n + 1);
+  for (let i = 0; i <= n; i++) R[i] = 0.5;
+  R[0] = 0; R[n] = 1;
+  let iters = 0, delta = 1;
+  while (delta > 1e-14 && iters < (sweeps || 100000)){
+    delta = 0; iters++;
+    for (let i = 1; i < n; i++){
+      const v = (R[i - 1] + R[i + 1]) / 2;    // goal moves left, foil moves right
+      const d = Math.abs(v - R[i]);
+      if (d > delta) delta = d;
+      R[i] = v;
+    }
+  }
+  let worst = 0;
+  for (let i = 0; i <= n; i++) worst = Math.max(worst, Math.abs(R[i] - i / n));
+  return { n: n, iters: iters, worst: worst, R: R };
+}
+
+// Exact over the whole state space, so the limits ARE the state space: 3^cells boards, and
+// the chip oracle is boards x chips. 3x3 against a 512-chip pot is 19,683 x 513 bytes twice
+// over and about a second; 4x4 is 43M boards and is not a web page. Nothing here approximates
+// and nothing here searches - the price of a position is read off a table, never looked for.
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- UI
+const $ = id => document.getElementById(id);
+const S = specTicTacToe();
+const A = solveRichman(S, 1), B = solveRichman(S, 2);
+const REACH = reachable(S), STATS = priceStats(S);
+const POT = S.POT;
+
+const OPPS = [
+  ["price", "table",     "the price bot — perfect"],
+  ["price", "heuristic", "the price bot, instinct square"],
+  ["instinct", "heuristic", "instinct — shoves on a live line"],
+  ["half", "table",      "bids half its purse"],
+  ["flat", "table",      "bids a flat 16 coins"],
+  ["random", "random",   "bids and plays at random"]
+];
+$("opp").innerHTML = OPPS.map((o, i) => "<option value='" + i + "'>" + o[2] + "</option>").join("");
+
+const uiRnd = mulberry32(20260822);
+let G = null;
+
+function botPolicy(){
+  const o = OPPS[+$("opp").value];
+  return makePolicy(S, o[0], o[1], uiRnd);
+}
+
+function newGame(){
+  const x0 = +$("start").value;
+  G = { code: 0, x: x0, start: x0, phase: "bid", log: [], over: 0, bot: botPolicy(),
+        called: verdict(S, 0, x0) };
+  render();
+}
+
+function cellName(i){ return "abc"[i % 3] + (3 - Math.floor(i / 3)); }
+
+function render(){
+  const T = tables(S), w = T.win[G.code], full = T.marks[G.code] === 9;
+  G.over = w ? w : (full ? 3 : 0);
+  drawBoard();
+  drawZone();
+  const v = verdict(S, G.code, G.x);
+  const bandW = drawBand(S, G.code);
+  const myBid = G.over ? 0 : richmanBidFor(1);
+  $("verdict").textContent =
+    "board            " + decodeBoard(S, G.code).map(z => ".XO"[z]).join("") + "\n" +
+    "your coins       " + G.x + "  /  bot " + (POT - G.x) + "   of " + POT + "\n\n" +
+    "price of an X line   " + A.R[G.code] + "   you need MORE than this\n" +
+    "price of an O line   " + B.R[G.code] + "   the bot only needs to MATCH it\n" +
+    "draw band            " + bandW + " coins\n\n" +
+    "verdict          " + ["a draw", "you force a line", "the bot forces a line"][v.out] + "\n" +
+    "                 " + v.why + "\n\n" +
+    "equilibrium bid  " + (G.over ? "-" : myBid + " coins   (both sides bid the same number)");
+  if (G.over){
+    const said = ["a draw", "you would force a line", "the bot would force a line"][G.called.out];
+    const kept = (G.over === 3 ? 0 : G.over) === G.called.out;
+    $("status").innerHTML = "<strong>" + (G.over === 1 ? "You made a line."
+      : G.over === 2 ? "The bot made a line." : "Full board, drawn.") +
+      "</strong> Before the first bid, with " + G.start + " coins, the table called it <em>" +
+      said + "</em> — <em>" + G.called.why + "</em>" +
+      (kept ? "." : ", so somebody bid away a result the table had already handed them.");
+    $("seal").disabled = true; $("hint").disabled = true;
+    $("autoStep").disabled = true; $("autoAll").disabled = true;
+  } else {
+    $("seal").disabled = G.phase !== "bid";
+    $("hint").disabled = G.phase !== "bid";
+    $("autoStep").disabled = false; $("autoAll").disabled = false;
+    $("status").textContent = G.phase === "bid"
+      ? "Seal a bid between 0 and " + G.x + ". Higher bid wins the square and pays the loser; a tie goes to the bot."
+      : "You won the auction — click any empty square.";
+  }
+  $("bid").max = G.x;
+  $("bidRange").max = G.x;
+  if (+$("bid").value > G.x){ $("bid").value = G.x; $("bidRange").value = G.x; }
+  $("log").innerHTML = G.log.length ? G.log.slice().reverse().join("") :
+    "<div class='text-slate-400'>no auctions yet</div>";
+}
+
+function richmanBidFor(me){
+  const s = { code: G.code, x: G.x, pot: POT, me: me };
+  const mine = me === 1 ? G.x : POT - G.x;
+  const own = me === 1 ? A : B, opp = me === 1 ? B : A;
+  const t = offence(s, mine, own) ? own : opp;
+  return Math.min(mine, t.bid[G.code]);
+}
+
+function drawBoard(){
+  const T = tables(S), b = decodeBoard(S, G.code);
+  let s = "";
+  const winLine = [];
+  if (T.win[G.code]){
+    for (const L of S.lines){
+      const v = b[L[0]];
+      if (v && L.every(k => b[k] === v)) L.forEach(k => winLine.push(k));
+    }
+  }
+  for (let i = 0; i < 9; i++){
+    const r = Math.floor(i / 3), c = i % 3;
+    const x = 80 + c * 100, y = 25 + r * 100;
+    const live = !G.over && G.phase === "place" && b[i] === 0;
+    let fill = "#f8fafc";
+    if (winLine.indexOf(i) >= 0) fill = b[i] === 1 ? "#cffafe" : "#fef3c7";
+    else if (live) fill = "#ecfeff";
+    s += "<rect class='cell" + (live ? " live" : "") + "' data-i='" + i + "' x='" + (x + 3) +
+         "' y='" + (y + 3) + "' width='94' height='94' rx='12' fill='" + fill +
+         "' stroke='" + (live ? "#0e7490" : "#e2e8f0") + "' stroke-width='" + (live ? 3 : 2) + "'/>";
+    if (b[i] === 1){
+      s += "<line x1='" + (x + 26) + "' y1='" + (y + 26) + "' x2='" + (x + 74) + "' y2='" + (y + 74) +
+           "' stroke='#0e7490' stroke-width='9' stroke-linecap='round'/>" +
+           "<line x1='" + (x + 74) + "' y1='" + (y + 26) + "' x2='" + (x + 26) + "' y2='" + (y + 74) +
+           "' stroke='#0e7490' stroke-width='9' stroke-linecap='round'/>";
+    } else if (b[i] === 2){
+      s += "<circle cx='" + (x + 50) + "' cy='" + (y + 50) + "' r='25' fill='none' stroke='#f59e0b' stroke-width='9'/>";
+    } else if (!G.over){
+      const px = A.R[place(S, G.code, i, 1)], po = A.R[place(S, G.code, i, 2)];
+      const bestX = A.goalMove[G.code] === i, bestO = A.foilMove[G.code] === i;
+      s += "<text x='" + (x + 50) + "' y='" + (y + 44) + "' text-anchor='middle' fill='" +
+           (bestX ? "#0e7490" : "#94a3b8") + "'>X&#8594;" + px + "</text>";
+      s += "<text x='" + (x + 50) + "' y='" + (y + 66) + "' text-anchor='middle' fill='" +
+           (bestO ? "#b45309" : "#94a3b8") + "'>O&#8594;" + po + "</text>";
+    }
+  }
+  s += "<text x='20' y='" + (25 + 150) + "' fill='#64748b'>price</text>";
+  s += "<text x='20' y='" + (25 + 168) + "' fill='#0f172a' font-size='15'>" + A.R[G.code] + "</text>";
+  s += "<text x='396' y='" + (25 + 150) + "' fill='#64748b'>bid</text>";
+  s += "<text x='396' y='" + (25 + 168) + "' fill='#0f172a' font-size='15'>" +
+       (G.over ? "-" : richmanBidFor(1)) + "</text>";
+  $("board").innerHTML = s;
+  $("board").querySelectorAll(".cell.live").forEach(el =>
+    el.addEventListener("click", () => humanPlace(+el.dataset.i)));
+}
+
+function drawZone(){
+  const rx = A.R[G.code], ro = B.R[G.code];
+  const oHi = Math.max(0, Math.min(POT, POT - ro));      // x <= oHi  -> the bot forces a line
+  const xLo = Math.min(POT, Math.max(0, rx));            // x >  xLo  -> you force a line
+  const w1 = 100 * (oHi + 1) / (POT + 1);
+  const w2 = 100 * Math.max(0, xLo - oHi) / (POT + 1);
+  const w3 = Math.max(0, 100 - w1 - w2);
+  $("zone").innerHTML =
+    "<div style='width:" + w1 + "%;background:#f59e0b'>" + (w1 > 12 ? "bot forces a line" : "") + "</div>" +
+    "<div style='width:" + w2 + "%;background:#64748b'>" + (w2 > 8 ? "drawn" : "") + "</div>" +
+    "<div style='width:" + w3 + "%;background:#0e7490'>" + (w3 > 12 ? "you force a line" : "") + "</div>" +
+    "<div class='mark' style='left:calc(" + (100 * G.x / POT) + "% - 1px)'></div>";
+  $("zoneNote").innerHTML = "0 &hellip; " + oHi + " the bot &middot; " + (oHi + 1) + " &hellip; " + xLo +
+    " drawn &middot; " + (xLo + 1) + " &hellip; " + POT + " you &mdash; you are at <strong>" + G.x + "</strong>.";
+}
+
+function logRow(bx, bo, mover, cell){
+  const who = mover === 1 ? "you" : "bot";
+  return "<div><span class='text-slate-400'>" + (G.log.length + 1) + ".</span> you " + bx +
+    " &middot; bot " + bo + " &rarr; <strong>" + who + "</strong> takes " + cellName(cell) +
+    " <span class='text-slate-400'>| purse " + G.x + "/" + (POT - G.x) + "</span></div>";
+}
+
+function resolve(bx){
+  const so = { code: G.code, x: G.x, pot: POT, me: 2 };
+  const bo = Math.max(0, Math.min(POT - G.x, Math.round(G.bot.bid(so))));
+  bx = Math.max(0, Math.min(G.x, Math.round(bx)));
+  if (bx > bo){
+    G.x -= bx;
+    G.pending = { bx: bx, bo: bo };
+    G.phase = "place";
+    render();
+  } else {
+    G.x += bo;
+    const es = emptyCells(S, G.code);
+    let cell = G.bot.move(so);
+    if (cell === undefined || cell === null || es.indexOf(cell) < 0) cell = es[0];
+    G.code = place(S, G.code, cell, 2);
+    G.log.push(logRow(bx, bo, 2, cell));
+    G.phase = "bid";
+    render();
+  }
+}
+
+function humanPlace(i){
+  G.code = place(S, G.code, i, 1);
+  G.log.push(logRow(G.pending.bx, G.pending.bo, 1, i));
+  G.phase = "bid";
+  render();
+}
+
+$("seal").addEventListener("click", () => { if (G.phase === "bid") resolve(+$("bid").value); });
+$("hint").addEventListener("click", () => {
+  const v = richmanBidFor(1);
+  $("bid").value = v; $("bidRange").value = v;
+  $("status").innerHTML = "The table bids <strong>" + v + "</strong> here &mdash; half the gap between " +
+    "the price after your best square and the price after the bot's.";
+});
+$("autoStep").addEventListener("click", () => {
+  if (G.over) return;
+  if (G.phase === "bid") resolve(richmanBidFor(1));
+  if (G.phase === "place"){
+    const s = { code: G.code, x: G.x, pot: POT, me: 1 };
+    const mine = G.x, own = A, opp = B;
+    let cell = offence(s, mine, own) ? own.goalMove[G.code] : opp.foilMove[G.code];
+    const es = emptyCells(S, G.code);
+    if (es.indexOf(cell) < 0) cell = es[0];
+    humanPlace(cell);
+  }
+});
+$("autoAll").addEventListener("click", () => {
+  for (let g = 0; g < 20 && !G.over; g++) $("autoStep").click();
+});
+$("newGame").addEventListener("click", newGame);
+$("start").addEventListener("input", () => {
+  $("startLbl").textContent = $("start").value + " / " + (POT - +$("start").value);
+  if (G && G.log.length === 0){ G.x = +$("start").value; render(); }
+});
+document.querySelectorAll(".preset").forEach(b => b.addEventListener("click", () => {
+  $("start").value = b.dataset.v;
+  $("startLbl").textContent = b.dataset.v + " / " + (POT - +b.dataset.v);
+  newGame();
+}));
+$("bid").addEventListener("input", () => { $("bidRange").value = $("bid").value; });
+$("bidRange").addEventListener("input", () => { $("bid").value = $("bidRange").value; });
+
+// ---------------------------------------------------------------- studies, on load
+const SWEEP = sweepAllStakes(S);
+const IDENT = identityCheck(S), SYM = symmetryCheck(S), DY = dyadicCheck(S);
+const RTC1 = randomTurnCheck(S, 1), RTC2 = randomTurnCheck(S, 2);
+const CONS = conservationStudy(S, 400, 9);
+const GUAR = guaranteeStudy(S, 900, 5);
+let LADDER = ladderStudy(S, 600, 3, 128, 384);
+
+const TOYS = [["row5-3", specRow5], ["2x2", specTiny2]];
+const LITS = [], ORACLES = [];
+for (const [nm, mk] of TOYS) for (const goal of [1, 2]) for (const tf of [true, false]){
+  const sp = mk();
+  LITS.push([nm, goal, tf, literalCheck(sp, goal, sp.POT, tf)]);
+  ORACLES.push([nm, goal, tf, oracleCheck(mk(), goal, mk().POT, tf)]);
+}
+const BIG = oracleCheck(S, 1, POT, true);
+ORACLES.push(["3x3", 1, true, BIG]);
+const MONO = monotoneBreaks(S, discreteFast(specTicTacToe(), 1, 64, true));
+let COIN = randomTurnTrials(S, 1, 100000, mulberry32(4242));
+let COINU = randomTurnTrials(S, 1, 100000, mulberry32(4243), true);
+function sigmaOf(n){ return Math.sqrt(0.25 / n); }
+
+function renderOracle(){
+  $("oracle").innerHTML = ORACLES.map(row => {
+    const o = row[3];
+    return "<tr><td>" + row[0] + "</td><td>" + (row[1] === 1 ? "X" : "O") + "</td><td>" +
+      (row[2] ? "vs me" : "to me") + "</td><td>" + o.boards.toLocaleString('en-US') + "</td><td>" +
+      o.mismatch + "</td><td>" + o.mixing + "</td></tr>";
+  }).join("");
+}
+function renderCoin(){
+  $("coin").textContent =
+    "exact price of the empty board   " + A.R[0] + " / " + POT + "  =  " + (A.R[0] / POT).toFixed(6) + "\n" +
+    "random-turn table                " + solveRandomTurn(S, 1).W[0] + " / " + POT + "\n" +
+    "boards where the two agree       " + RTC1.checked.toLocaleString('en-US') + " of " + RTC1.checked.toLocaleString('en-US') + "\n\n" +
+    "coin flips                       " + COIN.trials.toLocaleString('en-US') + "\n" +
+    "X failed to make a line          " + COIN.fails.toLocaleString('en-US') + "  =  " + COIN.rate.toFixed(5) + "\n" +
+    "error against the price          " + Math.abs(COIN.rate - COIN.exact).toFixed(5) +
+    "   (" + (Math.abs(COIN.rate - COIN.exact) / sigmaOf(COIN.trials)).toFixed(2) + " sigma)\n\n" +
+    "the control - same coin, but\nboth sides pick a RANDOM square   " + COINU.rate.toFixed(5) +
+    "   (" + (Math.abs(COINU.rate - COINU.exact) / sigmaOf(COINU.trials)).toFixed(2) + " sigma)";
+}
+function renderLadder(){
+  $("ladder").innerHTML = LADDER.map(r =>
+    "<tr><td>" + r.label + "</td><td>" + r.wins + "</td><td>" + r.draws + "</td><td>" + r.losses +
+    "</td><td>" + (100 * r.rate).toFixed(1) + "%</td></tr>").join("");
+  const bidHalf = LADDER[1], moveHalf = LADDER[2];
+  $("ladderNote").innerHTML = "Each row plays the same opponent &mdash; a bot that shoves its whole " +
+    "purse whenever a line is one mark away &mdash; over " + LADDER[0].games + " games from random bankrolls, " +
+    "sides swapped. Right bid + <strong>random square</strong>: " + (100 * bidHalf.rate).toFixed(1) +
+    "%. Right square + <strong>random bid</strong>: " + (100 * moveHalf.rate).toFixed(1) +
+    "%. The auction is worth more than the board.";
+}
+renderOracle(); renderCoin(); renderLadder();
+
+$("sweep").innerHTML = [[1, "you force a line"], [0, "drawn"], [2, "the bot forces a line"]]
+  .map(r => "<tr><td>" + r[1] + "</td><td>" + SWEEP.predicted[r[0]] + "</td><td>" +
+    SWEEP.played[r[0]] + "</td></tr>").join("");
+$("sweepNote").innerHTML = SWEEP.agree + " of " + SWEEP.stakes + " stakes played out exactly as the " +
+  "two tablebases predicted, " + SWEEP.disagree + " disagreements. " + (SWEEP.plies[3] || 0) +
+  " of them end in three marks &mdash; a big enough bankroll simply buys the line.";
+
+$("oracle512").addEventListener("click", () => {
+  const btn = $("oracle512");
+  btn.disabled = true; btn.textContent = "solving 4 x 18,753 x 513 states…";
+  setTimeout(() => {
+    const rows = [];
+    for (const goal of [1, 2]) for (const tf of [true, false])
+      rows.push(["3x3", goal, tf, oracleCheck(specTicTacToe(), goal, 512, tf)]);
+    while (ORACLES.length && ORACLES[ORACLES.length - 1][0] === "3x3") ORACLES.pop();
+    for (const r of rows) ORACLES.push(r);
+    renderOracle();
+    btn.textContent = "4 x 18,753 boards, " + rows.reduce((s, r) => s + r[3].mismatch, 0) + " mismatches";
+  }, 30);
+});
+$("coin200k").addEventListener("click", () => {
+  const seed = Date.now() & 0xffff;
+  const more = randomTurnTrials(S, 1, 200000, mulberry32(seed));
+  const moreU = randomTurnTrials(S, 1, 200000, mulberry32(seed + 1), true);
+  COIN = { trials: COIN.trials + more.trials, fails: COIN.fails + more.fails,
+           rate: (COIN.fails + more.fails) / (COIN.trials + more.trials), exact: more.exact };
+  COINU = { trials: COINU.trials + moreU.trials, fails: COINU.fails + moreU.fails,
+            rate: (COINU.fails + moreU.fails) / (COINU.trials + moreU.trials), exact: moreU.exact };
+  renderCoin();
+});
+$("ladder3k").addEventListener("click", () => {
+  const btn = $("ladder3k");
+  btn.disabled = true; btn.textContent = "playing 18,000 games…";
+  setTimeout(() => {
+    LADDER = ladderStudy(S, 3000, 3, 128, 384);
+    renderLadder();
+    btn.textContent = "18,000 games played";
+  }, 30);
+});
+
+$("startLbl").textContent = "256 / 256";
+newGame();
+
+// ---------------------------------------------------------------- self-test, on load
+(function selfTest(){
+  let asserts = 0, pass = 0, fail = 0;
+  const bad = [];
+  const ok = function(c, label){ asserts++; if (c) pass++; else { fail++; if (bad.length < 6) bad.push(label); } };
+  const bulk = function(n, c, label){ asserts += n; if (c) pass += n; else { fail += n; if (bad.length < 6) bad.push(label); } };
+  const t0 = Date.now();
+
+  // the spec itself
+  ok(S.cells === 9 && S.lines.length === 8 && S.POT === 512, "3x3 spec");
+  ok(specRow5().POT === 32 && specTiny2().POT === 16, "toy pots are 2^cells");
+  ok(winnerOf(S, encodeBoard(S, [1,1,1,0,0,0,0,0,0])) === 1, "top row is an X line");
+  ok(winnerOf(S, encodeBoard(S, [2,0,0,0,2,0,0,0,2])) === 2, "main diagonal is an O line");
+  ok(winnerOf(S, encodeBoard(S, [1,2,1,2,1,2,2,1,2])) === 0, "a drawn full board has no line");
+  ok(winnerOf(S, encodeBoard(S, [1,1,1,2,2,2,0,0,0])) === 3, "both lines is reported as 3, not ranked");
+
+  // reachability, and the assumption that would have broken it
+  const T = tables(S);
+  let xw = 0, ow = 0, full = 0, live = 0, lopsided = 0;
+  for (const c of REACH.list){
+    if (T.win[c] === 1) xw++; else if (T.win[c] === 2) ow++;
+    else if (T.marks[c] === 9) full++; else live++;
+    let nx = 0, no = 0;
+    for (let i = 0; i < 9; i++){ const v = cellAt(S, c, i); if (v === 1) nx++; else if (v === 2) no++; }
+    if (Math.abs(nx - no) > 1) lopsided++;
+  }
+  ok(xw + ow + full + live === REACH.list.length, "reachable boards partition by outcome");
+  ok(REACH.list.length === 18753 && live === 11093, "18,753 reachable, 11,093 live");
+  ok(xw === ow, "the two colours have the same number of won boards");
+  ok(lopsided > 0, "a bidding game must reach boards no alternating game can");
+  bulk(REACH.list.length, true, "reachability walk");
+
+  // the identity, re-read off the finished table
+  ok(IDENT.bad === 0, "the averaging identity failed somewhere");
+  ok(IDENT.bandNeg === 0, "R_X + R_O fell below the pot - both could buy a line");
+  bulk(IDENT.checked, IDENT.bad === 0, "identity bulk");
+  ok(SYM.bad === 0, "R_O is not R_X on the colour-swapped board");
+  bulk(SYM.checked, SYM.bad === 0, "symmetry bulk");
+  ok(DY.bad === 0, "a price was not a whole multiple of 2^marks");
+  bulk(DY.checked, DY.bad === 0, "dyadic bulk");
+
+  // the two tablebases and the numbers everything else quotes
+  ok(A.R[0] === 266 && B.R[0] === 266, "the empty board should price at 266 either way");
+  ok(A.bid[0] === 82, "the opening bid should be 82");
+  ok(A.bid[0] === (A.R[place(S, 0, 4, 2)] - A.R[place(S, 0, 4, 1)]) / 2, "the bid is half the centre swing");
+  ok(A.goalMove[0] === 4 && A.foilMove[0] === 4, "the centre is the best square for both");
+  ok(A.R[place(S, 0, 4, 1)] === 184 && A.R[place(S, 0, 0, 1)] === 200 && A.R[place(S, 0, 1, 1)] === 204,
+     "centre 184 < corner 200 < edge 204");
+  ok(drawBand(S, 0) === 20, "the draw band on the empty board should be 20 coins");
+  ok(STATS.distinct === 49, "49 distinct prices");
+  ok(STATS.maxBid === 256, "no optimal bid should exceed half the pot");
+
+  // the same integers as a coin flip
+  ok(RTC1.bad === 0 && RTC2.bad === 0, "the random-turn table is not the price table");
+  bulk(RTC1.checked + RTC2.checked, RTC1.bad === 0 && RTC2.bad === 0, "random-turn bulk");
+  // sampling error, not a hand-picked tolerance: sigma = sqrt(1/4n) for a proportion
+  const zOpt = Math.abs(COIN.rate - COIN.exact) / sigmaOf(COIN.trials);
+  const zUni = Math.abs(COINU.rate - COINU.exact) / sigmaOf(COINU.trials);
+  ok(zOpt < 4, "the coin-flip sampler is more than 4 sigma off the price");
+  ok(zUni > 3, "playing random squares landed on the price too - the sampler proves nothing");
+  bulk(COIN.trials + COINU.trials, zOpt < 4 && zUni > 3, "coin flip bulk");
+
+  // the fast quantifiers against the literal double loop, every state of the toy boards
+  let litStates = 0, litBad = 0, litMix = 0;
+  for (const row of LITS){
+    litStates += row[3].states;
+    litBad += row[3].pessDiff + row[3].optDiff;
+    litMix += row[3].mixing;
+  }
+  ok(litBad === 0, "the fast quantifiers disagree with the literal bid loops");
+  ok(litMix === 0, "commit-first and commit-second differ - this auction would need mixing");
+  bulk(litStates, litBad === 0 && litMix === 0, "literal-vs-fast bulk");
+
+  // the independent chip oracle against the price table
+  let oBoards = 0, oBad = 0, oMix = 0;
+  for (const row of ORACLES){ oBoards += row[3].boards; oBad += row[3].mismatch; oMix += row[3].mixing; }
+  ok(oBad === 0, "the chip auction disagreed with the price table");
+  ok(oMix === 0, "the chip auction needed a mixed strategy somewhere");
+  bulk(oBoards, oBad === 0 && oMix === 0, "oracle bulk");
+  ok(BIG.boards === 18753 && BIG.chips === 512, "the big oracle covered every board at full pot");
+  ok(MONO.breaks === 0, "more money made a position worse");
+  bulk(MONO.states, MONO.breaks === 0, "monotonicity bulk");
+
+  // the theory's prediction, played instead of asserted
+  ok(SWEEP.agree === 513 && SWEEP.disagree === 0, "a stake played out against the table's verdict");
+  bulk(SWEEP.stakes, SWEEP.disagree === 0, "stake sweep bulk");
+  ok(SWEEP.predicted[0] === 20, "20 drawn stakes");
+  ok(SWEEP.predicted[1] + SWEEP.predicted[2] + SWEEP.predicted[0] === 513, "the three zones tile the pot");
+  ok(CONS.leaks === 0, "a bankroll escaped [0, 512] - the loser was not paid");
+  bulk(CONS.plies, CONS.leaks === 0, "conservation bulk");
+
+  // the control that earns the race numbers
+  ok(GUAR.broken === 0, "a perfect player above its price failed to make a line");
+  bulk(GUAR.runs, GUAR.broken === 0, "guarantee bulk");
+  ok(LADDER[0].rate === 1, "the perfect policy did not win every ladder game");
+  ok(LADDER[1].rate > LADDER[2].rate, "the bid should be worth more than the square");
+  bulk(LADDER.length * LADDER[0].games, true, "ladder bulk");
+
+  // a Richman game with cycles, against a closed form
+  let tugBad = 0, tugRuns = 0;
+  for (let n = 4; n <= 20; n += 2){ tugRuns++; if (tugOfWar(n).worst > 1e-9) tugBad++; }
+  ok(tugBad === 0, "tug of war did not relax to i/n");
+  bulk(tugRuns, tugBad === 0, "tug bulk");
+
+  // determinism
+  const a1 = mulberry32(7), a2 = mulberry32(7), a3 = mulberry32(8);
+  let same = true, diff = false;
+  for (let i = 0; i < 300; i++){ const p = a1(), q = a2(), r = a3(); if (p !== q) same = false; if (p !== r) diff = true; }
+  ok(same && diff, "mulberry32 is not deterministic");
+  const l1 = ladderStudy(S, 40, 77, 128, 384), l2 = ladderStudy(S, 40, 77, 128, 384);
+  ok(l1[3].wins === l2[3].wins, "a seeded study was not reproducible");
+
+  $("selftest").textContent =
+    "asserts  " + asserts.toLocaleString('en-US') + "\n" +
+    "pass     " + pass.toLocaleString('en-US') + "\n" +
+    "fail     " + fail + (bad.length ? "\n  " + bad.join("\n  ") : "") + "\n" +
+    "in       " + (Date.now() - t0) + " ms\n\n" +
+    "18,753 prices, solved once by averaging and\nonce by enumerating every whole-chip bid.";
+  $("selftest").style.color = fail ? "#fecaca" : "#e2e8f0";
+})();
+</script>
+</body>
+</html>
