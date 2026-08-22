@@ -1,0 +1,2030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 69 — Colonel Blotto</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Inter", sans-serif; }
+  .tab-active { background:#0f172a; color:#fff; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  table.num td, table.num th { padding:4px 8px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid #e2e8f0; }
+  .log { font-family:ui-monospace,monospace; font-size:12px; }
+  .bar { height:9px; border-radius:99px; background:#e2e8f0; overflow:hidden; }
+  .bar span { display:block; height:100%; background:#0e7490; }
+  svg text { font-family:ui-monospace,monospace; font-size:11px; font-weight:700; pointer-events:none; }
+  .pill { padding:5px 10px; border-radius:8px; font-size:12px; font-weight:800;
+          border:1px solid #e2e8f0; background:#fff; }
+  .pill:hover { background:#ecfeff; border-color:#0e7490; }
+  .pill:disabled { opacity:.32; }
+  .key { display:inline-block; width:11px; height:11px; border-radius:3px; vertical-align:-1px; }
+  .fld { display:grid; grid-template-columns:58px 1fr 30px 30px; gap:8px; align-items:center; }
+  .frac { font-family:ui-monospace,monospace; font-weight:700; }
+  .mono { font-family:ui-monospace,monospace; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+    <p class="text-xs font-bold tracking-widest text-cyan-700 mb-2">GAMEFROMZERO · DAY 69</p>
+    <h1 class="text-xl md:text-2xl font-black leading-tight mb-4">
+      ⚔️ Colonel Blotto — the first game here where both sides move at the <strong>same
+      time</strong>. Split your army across the battlefields, your opponent splits theirs, both
+      sealed; whoever sends more soldiers takes the field, and whoever takes more fields wins.
+      No turn order means no tree, no side to move and <em>no best move</em>: every allocation
+      you can name has a counter that beats it outright, so the best guaranteed pure result is
+      &minus;1 while the value of the game is 0 — randomising is worth one whole battle. What
+      the engine returns is therefore not a move but a <strong>distribution</strong>, and the way
+      to get one exactly is <strong>linear programming</strong>: the two players' programs are
+      LP duals of each other, and that duality <em>is</em> von Neumann's minimax theorem. The
+      simplex runs in exact BigInt fractions and is then thrown away — what it emits is a
+      <strong>certificate</strong>, two mixed strategies and a value, and the page re-checks the
+      certificate with arithmetic that has never heard of a pivot. The matrix is also symmetric
+      under permuting equally-valued fields, so the 28 allocations of six soldiers collapse to
+      <strong>7 shapes</strong>; the LP solves the small game and the answer is lifted back and
+      certified against the big matrix. Then the part that is measured rather than claimed:
+      against a bot playing that equilibrium, <strong>two of the five</strong> naive strategies
+      score <strong>exactly 0</strong> — the value of the game, indistinguishable from perfect
+      play — and one of those two loses <strong>every single battle</strong> to an opponent that
+      has merely watched its distribution. Pure vanilla JavaScript, one file, no build step.
+    </h1>
+    <div class="flex gap-2 flex-wrap" id="tabs">
+      <button data-tab="look" class="tab-active px-5 py-2 rounded-lg font-semibold text-sm">⚔️ PLAY</button>
+      <button data-tab="understand" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🧠 UNDERSTAND</button>
+      <button data-tab="build" class="bg-slate-100 px-5 py-2 rounded-lg font-semibold text-sm">🔨 BUILD</button>
+    </div>
+  </div>
+</header>
+
+<section id="look" class="tab-panel">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-100">
+    <div class="max-w-6xl mx-auto grid lg:grid-cols-5 gap-5">
+
+      <div class="lg:col-span-3 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <div class="flex gap-2 flex-wrap items-center mb-3">
+            <select id="fields" class="pill"></select>
+            <select id="payoff" class="pill">
+              <option value="majority">most fields wins</option>
+              <option value="margin">score = fields won &minus; lost</option>
+            </select>
+            <select id="worth" class="pill">
+              <option value="equal">all fields worth 1</option>
+              <option value="prize">last field worth 2</option>
+              <option value="graded">fields worth 1, 2, 3&hellip;</option>
+            </select>
+            <select id="bot" class="pill">
+              <option value="eq">bot: the exact equilibrium</option>
+              <option value="ex">bot: watches you, then best-responds</option>
+              <option value="even">bot: spreads evenly</option>
+              <option value="mult">bot: one soldier at a time, at random</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <div class="flex justify-between text-xs font-bold text-slate-500 mb-1">
+              <span>SOLDIERS PER SIDE</span><span id="soldLbl"></span>
+            </div>
+            <input id="soldiers" type="range" min="1" max="12" step="1" value="6" class="w-full" />
+          </div>
+          <p class="text-sm text-slate-600" id="gameLine"></p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-3">YOUR ORDERS</p>
+          <div id="editor" class="space-y-2"></div>
+          <div class="flex gap-2 flex-wrap items-center mt-3">
+            <button id="commit" class="px-4 py-2 rounded-lg bg-cyan-700 text-white font-bold text-sm">Send them in</button>
+            <button id="quickEven" class="pill">spread evenly</button>
+            <button id="quickAll" class="pill">all on one</button>
+            <button id="quickEq" class="pill">draw from the equilibrium</button>
+            <button id="quickRun" class="pill">play 200 rounds for me</button>
+            <button id="reset" class="pill">reset the match</button>
+          </div>
+          <svg id="board" viewBox="0 0 460 300" class="w-full mt-3" style="max-height:340px"></svg>
+          <p class="text-sm text-slate-700 mt-1" id="status"></p>
+          <p class="text-xs text-slate-500 mt-2">
+            <span class="key" style="background:#0e7490"></span> you &nbsp;
+            <span class="key" style="background:#f59e0b"></span> the bot &nbsp;
+            a field is taken by strictly more soldiers — equal numbers take it for nobody, which
+            is the rule that makes ties matter and the thresholds jump.
+          </p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">DISPATCH LOG</p>
+          <div id="log" class="log space-y-1"></div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">
+            THE SAME FIVE STRATEGIES, JUDGED BY TWO DIFFERENT OPPONENTS
+          </p>
+          <p class="text-sm text-slate-600 mb-3" id="raceNote"></p>
+          <table class="num w-full">
+            <thead><tr><th>strategy</th><th>vs equilibrium</th><th>played</th><th>if watched</th><th>played</th><th>counter</th></tr></thead>
+            <tbody id="race"></tbody>
+          </table>
+          <button id="race5k" class="pill mt-3">play 5,000 rounds of each</button>
+        </div>
+      </div>
+
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE SOLUTION</p>
+          <pre id="verdict" style="margin:0"></pre>
+          <table class="num w-full mt-3">
+            <thead><tr><th>shape</th><th>orders</th><th>in the mix</th><th>alone</th><th></th></tr></thead>
+            <tbody id="shapes"></tbody>
+          </table>
+          <p class="text-xs text-slate-500 mt-2" id="shapeNote"></p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THE CERTIFICATE</p>
+          <p class="text-sm text-slate-600 mb-2">
+            Not "the simplex says so". Two distributions, the row player's worst column, the
+            column player's best row — checked over the <em>full</em> matrix, in fractions.
+          </p>
+          <pre id="cert" style="margin:0"></pre>
+          <button id="direct" class="pill mt-3">solve the full matrix with no symmetry argument</button>
+          <p class="text-xs text-slate-500 mt-2" id="directNote"></p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">HOW EXPLOITABLE ARE YOU</p>
+          <pre id="expl" style="margin:0"></pre>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">WHAT ONE MORE SOLDIER IS WORTH</p>
+          <p class="text-sm text-slate-600 mb-2" id="ratioNote"></p>
+          <table class="num w-full">
+            <thead><tr><th>your army</th><th>value</th><th>as a number</th></tr></thead>
+            <tbody id="ratio"></tbody>
+          </table>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">THERE IS NO BEST ALLOCATION</p>
+          <pre id="cycles" style="margin:0"></pre>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">LEARNING IT VS SOLVING IT</p>
+          <p class="text-sm text-slate-600 mb-2">
+            Regret matching, the standard way to approach a big game: both sides play in
+            proportion to positive regret and the averages converge. Watch what it costs to
+            reach a number the LP already returned exactly.
+          </p>
+          <table class="num w-full">
+            <thead><tr><th>iterations</th><th>value</th><th>exploitable by</th><th>&times;&radic;T</th></tr></thead>
+            <tbody id="rm"></tbody>
+          </table>
+          <button id="rm1m" class="pill mt-3">run a million</button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">EVERY SMALL GAME THERE IS</p>
+          <p class="text-sm text-slate-600 mb-2">
+            The LP against support enumeration — a solver with no pivots and no duality in it —
+            on every matrix over &minus;1/0/1, plus the transpose identity v(&minus;A&#7488;) =
+            &minus;v(A) on each.
+          </p>
+          <table class="num w-full">
+            <thead><tr><th>shape</th><th>games</th><th>value differs</th><th>bad certificate</th><th>duality</th></tr></thead>
+            <tbody id="oracle"></tbody>
+          </table>
+          <button id="sweep3" class="pill mt-3">sweep all 19,683 of the 3&times;3s</button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <p class="text-xs font-bold tracking-wider text-slate-500 mb-2">SELF-TEST</p>
+          <pre id="selftest" style="margin:0">running&hellip;</pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">Delete the turn order, and the answer stops being a move</h2>
+
+      <p>Every engine in this series so far has been able to ask one question: <em>given this
+      position, what should I do</em>. Day 68 took the turn variable out of the state and the
+      answer became a price. Colonel Blotto takes something else away — the <strong>order</strong>.
+      Both armies are committed at the same instant. Neither side sees the other's orders. There
+      is no "position after my move" to evaluate, because there is no such thing as my move
+      happening first.</p>
+
+      <p>And the moment you try to name a best allocation, the game refuses. Take three fields
+      and six soldiers. <strong>4&ndash;1&ndash;1 beats 3&ndash;3&ndash;0</strong>, which
+      <strong>beats 2&ndash;2&ndash;2</strong>, which <strong>beats 4&ndash;1&ndash;1</strong> —
+      a rock-paper-scissors triangle in an army's worth of soldiers, and the page counts
+      <strong>180</strong> such triangles among the 28 allocations. Every single one of those 28
+      has something that beats it outright, so the best you can <em>guarantee</em> with a fixed
+      plan is to lose:</p>
+
+      <pre>max over my allocations   min over theirs   =  -1        (pick anything, they answer it)
+min over their allocations max over mine    =  +1        (they pick, I answer)
+                       the value of the game =   0</pre>
+
+      <p>That gap of 2 is not a rounding problem or a weak evaluation function. It is the whole
+      reason mixed strategies exist. The number in the middle only appears once you are allowed
+      to be unpredictable, and the engine's job is to find <em>how</em> unpredictable, exactly.</p>
+
+      <h3 class="text-xl font-bold">The engine is a linear program, and duality is the theorem</h3>
+
+      <p>Write down what the row player wants. Choose weights <em>x</em> over allocations,
+      non-negative, summing to one, and maximise the worst column:</p>
+
+      <pre>max v   s.t.   sum_i x_i A_ij  &gt;=  v   for every enemy allocation j
+               sum_i x_i = 1,   x &gt;= 0</pre>
+
+      <p>Shift the matrix so every entry is positive (adding a constant to a payoff matrix adds
+      the same constant to its value), substitute <em>w = x / v</em>, and the normalisation turns
+      into the objective:</p>
+
+      <pre>min 1'w   s.t.  A'w &gt;= 1,  w &gt;= 0                 the row player
+max 1'z   s.t.  A'z &lt;= 1,  z &gt;= 0                 the column player</pre>
+
+      <p>Those two are an LP dual pair. Strong duality says their optima are equal — and that
+      equality, spelled out in terms of the game, says that the best the row player can
+      guarantee equals the best the column player can hold them to. That is the minimax theorem.
+      It is not proved <em>using</em> linear programming here; in this formulation it <em>is</em>
+      linear programming. And because the second form has all-positive right-hand sides, the
+      origin is feasible, there is no phase 1 to write, and one primal solve returns both
+      strategies: the primal variables rescaled are the column mix, the dual prices rescaled are
+      the row mix.</p>
+
+      <h3 class="text-xl font-bold">Why the arithmetic has to be exact</h3>
+
+      <p>The values that come out are fractions like 4/9, 13/21, 53/115. Worse, an equilibrium is
+      a system of <em>equalities</em> — the opponent is made indifferent across their support —
+      and which strategies are in that support is decided by sign tests on the solution. One
+      rounded comparison and a strategy silently enters or leaves the support; the value drifts by
+      10<sup>&minus;16</sup> and the <em>structure</em> of the answer changes. So every number the
+      solver compares is a ratio of two BigInts in lowest terms, and the ratio test compares by
+      cross-multiplication rather than dividing.</p>
+
+      <p>Exactness also buys the anti-cycling rule. A Blotto tableau is enormously degenerate —
+      whole blocks of identical ratios, because the payoffs are only &minus;1, 0 and +1 — which
+      is exactly the condition under which a naive simplex can cycle forever. The leaving row is
+      picked lexicographically over the slack columns, which are the rows of B<sup>&minus;1</sup>
+      and therefore linearly independent, so the tie always resolves and the objective is
+      strictly lexicographically increasing. No perturbation, no epsilon, no iteration cap doing
+      the work of a proof.</p>
+
+      <h3 class="text-xl font-bold">The simplex is not trusted</h3>
+
+      <div class="bg-cyan-50 border-l-4 border-cyan-600 p-4">
+        <p class="text-sm">An equilibrium is <strong>self-certifying</strong>. If <em>x</em> and
+        <em>y</em> are distributions, and the row player's worst column under <em>x</em> equals
+        the column player's best row under <em>y</em> equals <em>v</em>, then neither side can
+        deviate profitably and <em>v</em> is the value — by definition, no matter how the pair was
+        found. So the LP's job ends at "produce a candidate". The page then verifies it with a
+        loop over the full matrix that contains no pivots, no tableau and no duality.</p>
+      </div>
+
+      <p>This is the difference between a program you believe and a program you check. A search
+      engine's output cannot be verified without re-searching. An LP's can: the certificate is
+      smaller than the computation that produced it.</p>
+
+      <h3 class="text-xl font-bold">455 allocations, 34 shapes</h3>
+
+      <p>All the battlefields are worth the same, so permuting them maps allocations to
+      allocations and leaves every payoff alone. If <em>x</em> is optimal then so is every
+      permutation of <em>x</em>, and since optimal strategies form a convex set, the average over
+      all N! permutations is optimal too — and that average is <strong>uniform inside each
+      orbit</strong>. So there is always an optimal strategy that plays a <em>shape</em>
+      (5&ndash;3&ndash;1) and then shuffles which field gets which number.</p>
+
+      <p>Restricting both players to such strategies cannot change the value, so the LP can be
+      solved on shapes instead of allocations: partitions instead of compositions. Four fields
+      and twelve soldiers is 455 allocations and 34 shapes. The quotient payoff is a
+      representative of shape <em>i</em> against the uniform mix on shape <em>j</em>, multiplied
+      through by the group order so it stays integral — every orbit size divides |G|.</p>
+
+      <p>And the symmetry is a symmetry of the <strong>worth vector</strong>, not of the board.
+      Set one field's value to 2 and the group collapses; set them to 1, 2, 3 and it collapses to
+      the identity, the reduction evaporates, and the page has to solve the full matrix. You can
+      watch that happen in the dropdown.</p>
+
+      <h3 class="text-xl font-bold">The measurement that decides what this page says</h3>
+
+      <p>Five strategies, judged twice. Against a bot playing the exact equilibrium,
+      "spread evenly" (2&ndash;2&ndash;2) scores <strong>0.0000</strong> — the value of the game,
+      indistinguishable from perfect play. So does "two fronts". Against an opponent who has
+      simply watched the distribution and best-responds to it, 2&ndash;2&ndash;2 scores
+      <strong>&minus;1</strong>: it loses every battle, forever, to 3&ndash;3&ndash;0.</p>
+
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-4">
+        <p class="text-sm">An equilibrium opponent does not punish you. It only declines to lose.
+        Playing a strong bot to a draw is therefore <em>no evidence at all</em> that your strategy
+        is sound — and the page prints both numbers side by side for exactly that reason. The
+        quantity that matters is <strong>exploitability</strong>, which is not a score against
+        anybody: it is the minimum over all columns, and it can be computed rather than played.</p>
+      </div>
+
+      <h3 class="text-xl font-bold">What the equilibrium actually looks like</h3>
+
+      <p>Six soldiers on three fields: play <strong>4&ndash;1&ndash;1</strong>,
+      <strong>3&ndash;3&ndash;0</strong> and <strong>3&ndash;2&ndash;1</strong> with probability
+      1/3 each, shuffling the fields. Nine soldiers: a <em>single</em> shape,
+      <strong>5&ndash;3&ndash;1</strong>, uniformly over its six orderings — one shape, played
+      randomly, is unbeatable. And five soldiers on five fields has an optimal
+      <strong>pure</strong> strategy, one soldier each, because that game does have a saddle
+      point. The engine tells you which case you are in; nothing about "simultaneous moves"
+      forces you to randomise.</p>
+
+      <p>One thing the page had to be talked out of claiming, though: that mixture is not
+      <em>the</em> answer. Scan every shape on its own and <strong>4&ndash;2&ndash;0 shuffled
+      across the three fields is already unbeatable by itself</strong> — exploitability exactly 0,
+      the value of the game, from a single shape the LP never put any weight on. The value of a
+      matrix game is unique; an optimal strategy is not, and re-solving with the shapes in a
+      different order returns a different vertex of the same optimal face. So the page reports
+      what it found <em>and</em> how many other supports it found, rather than presenting one
+      vertex as the solution.</p>
+
+      <h3 class="text-xl font-bold">One more soldier is worth a lot</h3>
+
+      <p>Equal armies of six on three fields: value 0. Seven against six: value
+      <strong>1/3</strong> — you win two battles for every one you lose. Below a threshold the
+      value is exactly &minus;1 (the enemy has a pure allocation that beats everything you own),
+      above another it is exactly +1, and in between it is a fraction that the LP produces and
+      nothing simpler predicts. The naive guess for the upper threshold is "twice the army": you
+      put S+1 on two fields and win them both. Measured, on three fields, it is
+      <strong>&lceil;1.5&nbsp;S&rceil;</strong> — 9 soldiers beat 6, not 14 — and the page checks
+      that number two independent ways, the LP value hitting exactly 1 and a search for a single
+      allocation that beats every enemy allocation.</p>
+
+    </div>
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="min-h-[calc(100vh-72px)] p-4 md:p-8 bg-slate-50">
+    <div class="max-w-3xl mx-auto space-y-6">
+
+      <h2 class="text-2xl font-black">🔨 How it is built</h2>
+
+      <h3 class="text-xl font-bold">1. A strategy is a composition, and there are C(S+N&minus;1, N&minus;1) of them</h3>
+      <pre>function compositions(S, N){        // every way to split S soldiers over N fields
+  ...  for (let v = left; v &gt;= 0; v--){ cur[pos] = v; rec(pos + 1, left - v); }
+}
+compositions(6, 3).length === 28 === binom(8, 2)</pre>
+      <p>The enumeration order is fixed and the count is asserted against the binomial, because
+      every index on this page — matrix rows, orbit members, policy weights — is a position in
+      that list.</p>
+
+      <h3 class="text-xl font-bold">2. Rationals first, and only then a simplex</h3>
+      <pre>function fr(n, d){                   // BigInt / BigInt, lowest terms, positive denominator
+  if (d &lt; 0n){ n = -n; d = -d; }
+  const g = bgcd(n, d);
+  return { n: n / g, d: d / g };
+}
+function fcmp(a, b){ const l = a.n * b.d, r = b.n * a.d; return l &lt; r ? -1 : (l &gt; r ? 1 : 0); }</pre>
+      <p>There is no float anywhere in the solver. Values like 13/21 and 53/115 are not
+      representable, and the support of an equilibrium is decided by sign tests, so a rounded
+      comparison does not shift an answer slightly — it returns a different strategy.</p>
+
+      <h3 class="text-xl font-bold">3. The ratio test that cannot cycle</h3>
+      <pre>// ratios by cross-multiplication: T[i][RHS]/T[i][q] vs T[k][RHS]/T[k][q]
+cmp = fcmp(fmul(T[i][RHS], T[k][q]), fmul(T[k][RHS], T[i][q]));
+// ties broken LEXICOGRAPHICALLY over the slack columns - which are the rows of B^-1
+for (let s = n; s &lt; n + m &amp;&amp; cmp === 0; s++)
+  cmp = fcmp(fmul(T[i][s], T[p][q]), fmul(T[p][s], T[i][q]));</pre>
+      <p>Payoffs are only &minus;1/0/+1, so equal ratios are the rule rather than the exception —
+      the default game reports a degenerate pivot on nearly every iteration. Bland's rule would
+      also terminate but crawls; the lexicographic rule keeps Dantzig's entering choice and still
+      makes the objective row strictly increase in lexicographic order.</p>
+
+      <h3 class="text-xl font-bold">4. One primal solve returns both players</h3>
+      <pre>// max 1'z  s.t.  A'z &lt;= 1, z &gt;= 0     - origin feasible, so no phase 1
+const vs = fdiv(F1, s.obj);          // 1 / optimum = the shifted value
+y = s.z.map(t =&gt; fmul(t, vs));       // primal  -&gt; column player
+x = s.dual.map(t =&gt; fmul(t, vs));    // duals   -&gt; row player
+value = fsub(vs, fi(shift));</pre>
+      <p>The dual prices are read straight off the objective row's slack columns at optimality.
+      Getting that wrong is the classic silent bug here: you still get a plausible value and a
+      plausible-looking strategy for one player, and the other player's strategy is nonsense —
+      which is precisely what the certificate catches.</p>
+
+      <h3 class="text-xl font-bold">5. The certificate, over the full matrix</h3>
+      <pre>lo = min over ALL columns j of  sum_i x_i M[i][j]
+hi = max over ALL rows i    of  sum_j y_j M[i][j]
+ok = distributions &amp;&amp; lo === value &amp;&amp; hi === value</pre>
+      <p>Three lines, and they are the actual definition of an equilibrium. Note what is
+      <em>not</em> in them: the tableau, the shift, the orbit reduction, the group. The lifted
+      strategy is checked against the matrix the game is actually played on. A negative control
+      backs this up — perturb the strategy by one unit and the certificate must fail, which the
+      self-test asserts rather than assumes.</p>
+
+      <h3 class="text-xl font-bold">6. The orbit sums that make the check cheap</h3>
+      <pre>colSum[orbit(i)][j] += M[i][j];        // built once with the matrix
+(x'M)_j = sum over shapes  ( x_shape / |orbit| ) * colSum[shape][j]</pre>
+      <p>A group-uniform strategy is constant inside each orbit, so its column values need
+      #shapes&nbsp;&times;&nbsp;n rational operations instead of m&nbsp;&times;&nbsp;n. Certifying
+      455 allocations against 455 allocations costs 34&nbsp;&times;&nbsp;455 fractions. That is
+      why the full-matrix certificate can run on every configuration change.</p>
+
+      <h3 class="text-xl font-bold">7. The quotient game, and why it is integral</h3>
+      <pre>U[i][j] = ( |G| / |orbit j| ) * sum over b in orbit j of M[rep_i][b];</pre>
+      <p>Every orbit size divides the group order, so multiplying through by |G| keeps the
+      quotient matrix in integers and scales the value by |G| — divided back out at the end. The
+      representative is arbitrary, and the page asserts that: the row sums per column-orbit are
+      identical for <em>every</em> member of a row orbit, not just the one that got picked.</p>
+
+      <h3 class="text-xl font-bold">8. Two independent solvers, because agreement has to mean something</h3>
+      <pre>supportSolve : guess a support, solve the indifference system by exact Gauss,
+               test the guess globally. No pivots, no duality, no shifting.
+regretMatching : both sides play proportional to positive regret, average
+                 the strategies. Floats, iterative, converges like 1/sqrt(T).</pre>
+      <p>Support enumeration is exponential and is pointed only at tiny games — all 81
+      2&times;2 matrices over &minus;1/0/1, all 729 2&times;3s, and behind a button all 19,683
+      3&times;3s. Regret matching is not exact and is not meant to be; it is the control that
+      shows what solving buys over learning.</p>
+
+      <h3 class="text-xl font-bold">9. Policies weighed exactly, not sampled</h3>
+      <pre>// a policy is integer numerators over one common denominator
+exploitability = min over j of ( sum_i num_i * M[i][j] ) / den      // an exact fraction
+// and the same policy is then PLAYED, so the sampled mean has to land on it</pre>
+      <p>"Spread evenly" is exactly &minus;1 exploitable and exactly 0 against the equilibrium;
+      both numbers are fractions, not averages. The sampled rounds are there to confirm the
+      arithmetic describes the game being played, and the self-test checks the sample against the
+      exact value in sigmas rather than eyeballing it.</p>
+
+      <h3 class="text-xl font-bold">10. What this engine is not</h3>
+      <pre>// Exact over the whole strategy space, so the limit IS the strategy space:
+// C(S+N-1, N-1) allocations, and the tableau is #shapes squared. Three fields
+// and twelve soldiers is 91 allocations and 19 shapes and solves in 10 ms; the
+// SAME game on the full 91x91 matrix is 180 pivots and 0.9 s, and four fields
+// with eight soldiers - 165 allocations, 15 shapes, 11 ms here - takes 749
+// pivots and 3 minutes done directly. Continuous Blotto is a different problem
+// with a different (Roberson) answer and is not in here at all.</pre>
+      <p>The reduction is not an optimisation detail — it is the difference between a page that
+      solves four fields and a page that does not.</p>
+
+      <h3 class="text-xl font-bold">🎉 GameFromZero Day 69 shipped.</h3>
+      <p class="text-slate-600">Sixty-nine games. The first one played simultaneously, and the
+      first whose engine is a linear program that hands back a proof.</p>
+
+    </div>
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => { x.classList.remove("tab-active"); x.classList.add("bg-slate-100"); });
+  t.classList.add("tab-active"); t.classList.remove("bg-slate-100");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// Colonel Blotto. Both armies are committed SIMULTANEOUSLY, so this game has no move order, no
+// side to move, no tree and therefore no best move - only a best DISTRIBUTION over allocations.
+// The engine is not a search: it is a linear program. Enumerate every composition of S soldiers
+// into N battlefields, build the payoff matrix, and solve the matrix game by exact rational
+// simplex - LP duality here IS von Neumann's minimax theorem, the row player's program and the
+// column player's program being one dual pair read from either end.
+//
+// Two things keep it honest. First, the solver emits a CERTIFICATE (two mixed strategies and a
+// value) and the certificate is re-checked by arithmetic that knows nothing about simplex: if x
+// and y are distributions and the row player's worst column equals the column player's best row
+// equals v, then v is the value by definition, whatever the pivots did. Second, the matrix is
+// symmetric under permuting equally-valued battlefields, so there is an optimal strategy that is
+// uniform inside each orbit, and the LP is solved on the SHAPES instead of the allocations. The
+// small solution is then lifted back and certified against the full matrix.
+// Nothing in this block touches the DOM.
+
+function mulberry32(seed){
+  let s = seed >>> 0;
+  return function(){
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t = (t ^ (t + Math.imul(t ^ (t >>> 7), t | 61))) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- exact rationals over BigInt
+// An equilibrium is a system of equalities, and its support is decided by sign tests on the
+// solution of that system. A value like 4/9 or 13/21 has no float representation, so one
+// rounded comparison does not perturb the answer slightly - it returns a different strategy.
+// Every number the solver compares is a fraction of two BigInts in lowest terms.
+
+function bgcd(a, b){
+  if (a < 0n) a = -a;
+  if (b < 0n) b = -b;
+  while (b){ const t = a % b; a = b; b = t; }
+  return a;
+}
+function fr(n, d){
+  if (d === 0n) throw new Error("zero denominator");
+  if (d < 0n){ n = -n; d = -d; }
+  if (n === 0n) return F0;
+  const g = bgcd(n, d);
+  return { n: n / g, d: d / g };
+}
+const F0 = { n: 0n, d: 1n }, F1 = { n: 1n, d: 1n };
+function fi(k){ return k === 0 ? F0 : { n: BigInt(k), d: 1n }; }
+function fadd(a, b){ return a.n === 0n ? b : (b.n === 0n ? a : fr(a.n * b.d + b.n * a.d, a.d * b.d)); }
+function fsub(a, b){ return b.n === 0n ? a : fr(a.n * b.d - b.n * a.d, a.d * b.d); }
+function fmul(a, b){ return (a.n === 0n || b.n === 0n) ? F0 : fr(a.n * b.n, a.d * b.d); }
+function fdiv(a, b){ return fr(a.n * b.d, a.d * b.n); }
+function fneg(a){ return a.n === 0n ? F0 : { n: -a.n, d: a.d }; }
+function fcmp(a, b){ const l = a.n * b.d, r = b.n * a.d; return l < r ? -1 : (l > r ? 1 : 0); }
+function fsgn(a){ return a.n < 0n ? -1 : (a.n > 0n ? 1 : 0); }
+function feq(a, b){ return a.n === b.n && a.d === b.d; }
+function fnum(a){
+  if (a.n === 0n) return 0;
+  const neg = a.n < 0n, n = neg ? -a.n : a.n;
+  const q = Number((n * 1000000000000n) / a.d) / 1e12;
+  return neg ? -q : q;
+}
+function fstr(a){ return a.d === 1n ? String(a.n) : a.n + "/" + a.d; }
+
+// ---------------------------------------------------------------- exact primal simplex
+// max c'z subject to Az <= b, z >= 0, with b >= 0 - so the slack basis is feasible at z = 0 and
+// there is no phase 1 to write. Blotto tableaux are massively degenerate (whole blocks of equal
+// ratios, because the payoffs are only -1, 0 and +1), which is exactly the condition under which
+// a naive ratio test can cycle forever, so the leaving row is chosen LEXICOGRAPHICALLY over the
+// slack columns. Those columns are the rows of B inverse; they are linearly independent, so the
+// comparison always resolves and the objective row strictly increases in lexicographic order -
+// no perturbation, no epsilon, no iteration cap standing in for a proof. Ratios are compared by
+// cross-multiplication so the hot loop never divides.
+
+function simplexMax(A, b, c, m, n){
+  const RHS = n + m, W = n + m + 1;
+  const T = [];
+  for (let i = 0; i < m; i++){
+    const row = new Array(W).fill(F0);
+    for (let j = 0; j < n; j++) row[j] = A[i][j];
+    row[n + i] = F1;
+    row[RHS] = b[i];
+    T.push(row);
+  }
+  const obj = new Array(W).fill(F0);
+  for (let j = 0; j < n; j++) obj[j] = fneg(c[j]);
+  const basis = new Array(m);
+  for (let i = 0; i < m; i++) basis[i] = n + i;
+  let pivots = 0, degen = 0;
+  for (;;){
+    let q = -1;
+    for (let j = 0; j < n + m; j++)
+      if (fsgn(obj[j]) < 0 && (q < 0 || fcmp(obj[j], obj[q]) < 0)) q = j;
+    if (q < 0) break;
+    let cand = [];
+    for (let i = 0; i < m; i++){
+      if (fsgn(T[i][q]) <= 0) continue;
+      if (!cand.length){ cand.push(i); continue; }
+      const k = cand[0];
+      const cmp = fcmp(fmul(T[i][RHS], T[k][q]), fmul(T[k][RHS], T[i][q]));
+      if (cmp < 0) cand = [i];
+      else if (cmp === 0) cand.push(i);
+    }
+    if (!cand.length) return { status: "unbounded", pivots };
+    let p = cand[0];
+    if (cand.length > 1){
+      degen++;
+      for (let t = 1; t < cand.length; t++){
+        const i = cand[t];
+        let cmp = 0;
+        for (let s = n; s < n + m && cmp === 0; s++)
+          cmp = fcmp(fmul(T[i][s], T[p][q]), fmul(T[p][s], T[i][q]));
+        if (cmp < 0) p = i;
+      }
+    }
+    const piv = T[p][q];
+    if (!feq(piv, F1)) for (let j = 0; j < W; j++) if (fsgn(T[p][j])) T[p][j] = fdiv(T[p][j], piv);
+    for (let i = 0; i < m; i++){
+      if (i === p) continue;
+      const f = T[i][q];
+      if (fsgn(f) === 0) continue;
+      for (let j = 0; j < W; j++) if (fsgn(T[p][j])) T[i][j] = fsub(T[i][j], fmul(f, T[p][j]));
+    }
+    const g = obj[q];
+    for (let j = 0; j < W; j++) if (fsgn(T[p][j])) obj[j] = fsub(obj[j], fmul(g, T[p][j]));
+    basis[p] = q;
+    if (++pivots > 200000) return { status: "cycled", pivots };
+  }
+  const z = new Array(n).fill(F0);
+  for (let i = 0; i < m; i++) if (basis[i] < n) z[basis[i]] = T[i][RHS];
+  const dual = new Array(m);
+  for (let i = 0; i < m; i++) dual[i] = obj[n + i];
+  return { status: "optimal", z, dual, obj: obj[RHS], pivots, degen, basis };
+}
+
+// ---------------------------------------------------------------- a matrix game, by LP
+// Shift the matrix so every entry is at least 1 (a constant added to a payoff matrix is added to
+// its value), which makes the column player's program
+//     max 1'z   s.t.   A'z <= 1,  z >= 0
+// feasible at the origin with optimum 1/v'. One primal solve then hands back BOTH strategies:
+// the primal z rescaled is the column mix and the m dual prices rescaled are the row mix, which
+// is the whole content of "the two players' programs are duals of each other".
+
+function solveMatrixGame(M, m, n){
+  let lo = Infinity;
+  for (let i = 0; i < m; i++){ const r = M[i]; for (let j = 0; j < n; j++) if (r[j] < lo) lo = r[j]; }
+  const shift = 1 - lo;
+  const A = [], b = [], c = [];
+  for (let i = 0; i < m; i++){
+    const row = new Array(n), r = M[i];
+    for (let j = 0; j < n; j++) row[j] = fi(r[j] + shift);
+    A.push(row); b.push(F1);
+  }
+  for (let j = 0; j < n; j++) c.push(F1);
+  const t0 = Date.now();
+  const s = simplexMax(A, b, c, m, n);
+  if (s.status !== "optimal") return { status: s.status, pivots: s.pivots };
+  const vs = fdiv(F1, s.obj);
+  return { status: "optimal", value: fsub(vs, fi(shift)),
+           y: s.z.map(t => fmul(t, vs)), x: s.dual.map(t => fmul(t, vs)),
+           pivots: s.pivots, degen: s.degen, shift, ms: Date.now() - t0, m, n };
+}
+
+// The certificate. It takes x, y, v and decides optimality without knowing where they came from:
+// two distributions, plus "the row player's worst column" equal to "the column player's best
+// row" equal to v. Nothing else is needed - and nothing else is trusted.
+function certifyDense(M, m, n, x, y, value){
+  let sx = F0, sy = F0, neg = 0;
+  for (let i = 0; i < m; i++){ sx = fadd(sx, x[i]); if (fsgn(x[i]) < 0) neg++; }
+  for (let j = 0; j < n; j++){ sy = fadd(sy, y[j]); if (fsgn(y[j]) < 0) neg++; }
+  let lo = null, hi = null, loJ = -1, hiI = -1;
+  for (let j = 0; j < n; j++){
+    let s = F0;
+    for (let i = 0; i < m; i++) if (x[i].n !== 0n) s = fadd(s, fmul(x[i], fi(M[i][j])));
+    if (lo === null || fcmp(s, lo) < 0){ lo = s; loJ = j; }
+  }
+  for (let i = 0; i < m; i++){
+    let s = F0; const r = M[i];
+    for (let j = 0; j < n; j++) if (y[j].n !== 0n) s = fadd(s, fmul(y[j], fi(r[j])));
+    if (hi === null || fcmp(s, hi) > 0){ hi = s; hiI = i; }
+  }
+  const dist = neg === 0 && feq(sx, F1) && feq(sy, F1);
+  return { ok: dist && feq(lo, value) && feq(hi, value), dist, neg, lo, hi, loJ, hiI,
+           gap: fsub(hi, lo), sumX: sx, sumY: sy };
+}
+
+// ---------------------------------------------------------------- an independent exact solver
+// Support enumeration. No pivots, no duality, no shifting: guess which rows and which columns
+// carry weight, solve the linear system that makes each side indifferent across the other's
+// support, then test the guess globally. Exponential, so it is only ever pointed at tiny games -
+// which is all an oracle has to be.
+
+function gaussSolve(A, b, k){
+  const T = [];
+  for (let i = 0; i < k; i++) T.push(A[i].slice().concat([b[i]]));
+  for (let col = 0; col < k; col++){
+    let p = -1;
+    for (let i = col; i < k; i++) if (fsgn(T[i][col])){ p = i; break; }
+    if (p < 0) return null;
+    if (p !== col){ const t = T[p]; T[p] = T[col]; T[col] = t; }
+    const piv = T[col][col];
+    for (let j = col; j <= k; j++) T[col][j] = fdiv(T[col][j], piv);
+    for (let i = 0; i < k; i++){
+      if (i === col || fsgn(T[i][col]) === 0) continue;
+      const f = T[i][col];
+      for (let j = col; j <= k; j++) T[i][j] = fsub(T[i][j], fmul(f, T[col][j]));
+    }
+  }
+  const out = new Array(k);
+  for (let i = 0; i < k; i++) out[i] = T[i][k];
+  return out;
+}
+function subsets(n, k){
+  const out = [], cur = [];
+  (function rec(start){
+    if (cur.length === k){ out.push(cur.slice()); return; }
+    for (let i = start; i < n; i++){ cur.push(i); rec(i + 1); cur.pop(); }
+  })(0);
+  return out;
+}
+function indifference(M, R, C, k, byRow){
+  const A = [], b = [];
+  for (let e = 0; e < k; e++){
+    const row = new Array(k + 1).fill(F0);
+    for (let u = 0; u < k; u++) row[u] = fi(byRow ? M[R[u]][C[e]] : M[R[e]][C[u]]);
+    row[k] = fi(-1);
+    A.push(row); b.push(F0);
+  }
+  const norm = new Array(k + 1).fill(F1); norm[k] = F0;
+  A.push(norm); b.push(F1);
+  return gaussSolve(A, b, k + 1);
+}
+function supportSolve(M, m, n){
+  const kMax = Math.min(m, n);
+  let tried = 0;
+  for (let k = 1; k <= kMax; k++){
+    const RS = subsets(m, k), CS = subsets(n, k);
+    for (const R of RS) for (const C of CS){
+      tried++;
+      const sx = indifference(M, R, C, k, true);
+      if (!sx) continue;
+      const sy = indifference(M, R, C, k, false);
+      if (!sy || !feq(sx[k], sy[k])) continue;
+      const v = sx[k];
+      const x = new Array(m).fill(F0), y = new Array(n).fill(F0);
+      let bad = false;
+      for (let u = 0; u < k; u++){ if (fsgn(sx[u]) < 0) bad = true; x[R[u]] = sx[u]; }
+      for (let u = 0; u < k; u++){ if (fsgn(sy[u]) < 0) bad = true; y[C[u]] = sy[u]; }
+      if (bad) continue;
+      if (certifyDense(M, m, n, x, y, v).ok)
+        return { status: "optimal", value: v, x, y, support: k, R, C, tried };
+    }
+  }
+  return { status: "none", tried };
+}
+
+// ---------------------------------------------------------------- an independent iterative one
+// Regret matching in plain floating point: both sides play proportionally to positive cumulative
+// regret, and in a zero-sum game the AVERAGE strategies converge to an equilibrium. It is here
+// to be beaten. It approaches a number the LP already knows exactly, and how slowly it gets
+// there is the argument for solving instead of learning.
+function regretMatching(M, m, n, iters){
+  const rx = new Float64Array(m), ry = new Float64Array(n);
+  const ax = new Float64Array(m), ay = new Float64Array(n);
+  const px = new Float64Array(m), py = new Float64Array(n);
+  const uRow = new Float64Array(m), uCol = new Float64Array(n);
+  const strat = (reg, out, k) => {
+    let s = 0;
+    for (let i = 0; i < k; i++){ out[i] = reg[i] > 0 ? reg[i] : 0; s += out[i]; }
+    if (s <= 0) for (let i = 0; i < k; i++) out[i] = 1 / k;
+    else for (let i = 0; i < k; i++) out[i] /= s;
+  };
+  for (let t = 0; t < iters; t++){
+    strat(rx, px, m); strat(ry, py, n);
+    for (let i = 0; i < m; i++) ax[i] += px[i];
+    for (let j = 0; j < n; j++) ay[j] += py[j];
+    let ev = 0;
+    for (let i = 0; i < m; i++){
+      let s = 0; const r = M[i];
+      for (let j = 0; j < n; j++) s += py[j] * r[j];
+      uRow[i] = s; ev += px[i] * s;
+    }
+    for (let j = 0; j < n; j++) uCol[j] = 0;
+    for (let i = 0; i < m; i++){
+      const w = px[i]; if (w === 0) continue;
+      const r = M[i];
+      for (let j = 0; j < n; j++) uCol[j] += w * r[j];
+    }
+    for (let i = 0; i < m; i++) rx[i] += uRow[i] - ev;
+    for (let j = 0; j < n; j++) ry[j] += ev - uCol[j];
+  }
+  let sx = 0, sy = 0;
+  for (let i = 0; i < m; i++) sx += ax[i];
+  for (let j = 0; j < n; j++) sy += ay[j];
+  for (let i = 0; i < m; i++) ax[i] /= sx;
+  for (let j = 0; j < n; j++) ay[j] /= sy;
+  let lo = Infinity, hi = -Infinity, val = 0;
+  for (let j = 0; j < n; j++){
+    let s = 0;
+    for (let i = 0; i < m; i++) s += ax[i] * M[i][j];
+    if (s < lo) lo = s;
+    val += ay[j] * s;
+  }
+  for (let i = 0; i < m; i++){
+    let s = 0; const r = M[i];
+    for (let j = 0; j < n; j++) s += ay[j] * r[j];
+    if (s > hi) hi = s;
+  }
+  return { value: val, lo, hi, exploit: hi - lo, x: Array.from(ax), y: Array.from(ay), iters };
+}
+
+// ---------------------------------------------------------------- Colonel Blotto
+function binom(a, b){
+  let r = 1;
+  for (let i = 1; i <= b; i++) r = r * (a - b + i) / i;
+  return Math.round(r);
+}
+function compositions(S, N){
+  const out = [], cur = new Array(N).fill(0);
+  (function rec(pos, left){
+    if (pos === N - 1){ cur[pos] = left; out.push(cur.slice()); return; }
+    for (let v = left; v >= 0; v--){ cur[pos] = v; rec(pos + 1, left - v); }
+  })(0, S);
+  return out;
+}
+function permutations(N){
+  const out = [], cur = [], used = new Array(N).fill(false);
+  (function rec(){
+    if (cur.length === N){ out.push(cur.slice()); return; }
+    for (let i = 0; i < N; i++) if (!used[i]){ used[i] = true; cur.push(i); rec(); cur.pop(); used[i] = false; }
+  })();
+  return out;
+}
+function worthVector(fields, mode){
+  const w = new Array(fields).fill(1);
+  if (mode === "prize") w[fields - 1] = 2;
+  else if (mode === "graded") for (let k = 0; k < fields; k++) w[k] = k + 1;
+  return w;
+}
+function blottoSpec(o){
+  const fields = o.fields;
+  const worth = o.worth ? o.worth.slice() : worthVector(fields, o.worthMode || "equal");
+  const sa = o.soldiersA;
+  return { fields, worth, soldiersA: sa,
+           soldiersB: o.soldiersB === undefined ? sa : o.soldiersB,
+           payoff: o.payoff || "majority" };
+}
+function battle(spec, a, b){
+  let wA = 0, wB = 0, tie = 0, sA = 0, sB = 0;
+  for (let k = 0; k < spec.fields; k++){
+    if (a[k] > b[k]){ wA++; sA += spec.worth[k]; }
+    else if (a[k] < b[k]){ wB++; sB += spec.worth[k]; }
+    else tie++;
+  }
+  return { wA, wB, tie, sA, sB };
+}
+function payoffOf(spec, a, b){
+  const r = battle(spec, a, b);
+  if (spec.payoff === "margin") return r.sA - r.sB;
+  return r.sA > r.sB ? 1 : (r.sA < r.sB ? -1 : 0);
+}
+
+// The symmetry group is the symmetry of the WORTH VECTOR, not of the board: permuting
+// battlefields is a symmetry exactly when every field lands on one of equal value. Make one
+// field worth more and the group shrinks; make them all different and it is the identity alone,
+// and the reduction below disappears entirely.
+function symmetryGroup(spec){
+  const out = [];
+  for (const p of permutations(spec.fields)){
+    let ok = true;
+    for (let k = 0; k < spec.fields && ok; k++) if (spec.worth[p[k]] !== spec.worth[k]) ok = false;
+    if (ok) out.push(p);
+  }
+  return out;
+}
+function applyPerm(p, a){
+  const out = new Array(a.length);
+  for (let k = 0; k < a.length; k++) out[k] = a[p[k]];
+  return out;
+}
+// Orbits of the allocations under the group. Uniform-inside-each-orbit strategies are exactly
+// the group-invariant ones; averaging an optimal strategy over the group leaves it optimal, so
+// restricting BOTH players to them cannot change the value of the game.
+function orbitsOf(list, group){
+  const seen = new Map(), orbits = [], orbitOf = new Int32Array(list.length);
+  for (let i = 0; i < list.length; i++){
+    const a = list[i];
+    let canon = null;
+    for (const p of group){
+      const k = applyPerm(p, a).join(",");
+      if (canon === null || k < canon) canon = k;
+    }
+    if (!seen.has(canon)){ seen.set(canon, orbits.length); orbits.push({ key: canon, rep: i, members: [] }); }
+    const oi = seen.get(canon);
+    orbits[oi].members.push(i);
+    orbitOf[i] = oi;
+  }
+  for (const o of orbits) o.size = o.members.length;
+  return { orbits, orbitOf };
+}
+function blottoGame(spec){
+  const rows = compositions(spec.soldiersA, spec.fields);
+  const cols = spec.soldiersB === spec.soldiersA ? rows : compositions(spec.soldiersB, spec.fields);
+  const m = rows.length, n = cols.length;
+  const M = [];
+  for (let i = 0; i < m; i++){
+    const r = new Int32Array(n), a = rows[i];
+    for (let j = 0; j < n; j++) r[j] = payoffOf(spec, a, cols[j]);
+    M.push(r);
+  }
+  const group = symmetryGroup(spec);
+  const RO = orbitsOf(rows, group), CO = orbitsOf(cols, group);
+  const colSum = RO.orbits.map(() => new Int32Array(n));
+  const rowSum = [];
+  for (let i = 0; i < m; i++){
+    const acc = new Int32Array(CO.orbits.length), r = M[i], cs = colSum[RO.orbitOf[i]];
+    for (let j = 0; j < n; j++){ acc[CO.orbitOf[j]] += r[j]; cs[j] += r[j]; }
+    rowSum.push(acc);
+  }
+  const rowIdx = new Map();
+  for (let i = 0; i < m; i++) rowIdx.set(rows[i].join(","), i);
+  return { spec, rows, cols, M, m, n, group, RO, CO, colSum, rowSum, rowIdx };
+}
+// The quotient game on shapes. U[i][j] is a representative of shape i against the uniform mix on
+// shape j; multiply through by |G| and every entry is an integer, because every orbit size
+// divides the group order. The quotient's value is |G| times the value of the game.
+function quotientMatrix(G){
+  const g = G.group.length, R = G.RO.orbits, C = G.CO.orbits, U = [];
+  for (let i = 0; i < R.length; i++){
+    const row = new Int32Array(C.length), rs = G.rowSum[R[i].rep];
+    for (let j = 0; j < C.length; j++) row[j] = (g / C[j].size) * rs[j];
+    U.push(row);
+  }
+  return { U, m: R.length, n: C.length, scale: g };
+}
+// Column values of a group-uniform row strategy, exactly, over the FULL matrix. The orbit sums
+// were built with the matrix, so this costs #shapes x n fractions and not m x n.
+function colValuesFromOrbit(G, xq){
+  const R = G.RO.orbits, out = new Array(G.n);
+  const w = R.map((o, i) => xq[i].n === 0n ? F0 : fdiv(xq[i], fi(o.size)));
+  for (let j = 0; j < G.n; j++){
+    let s = F0;
+    for (let i = 0; i < R.length; i++) if (w[i].n !== 0n) s = fadd(s, fmul(w[i], fi(G.colSum[i][j])));
+    out[j] = s;
+  }
+  return out;
+}
+function rowValuesFromOrbit(G, yq){
+  const C = G.CO.orbits, out = new Array(G.m);
+  const w = C.map((o, j) => yq[j].n === 0n ? F0 : fdiv(yq[j], fi(o.size)));
+  for (let i = 0; i < G.m; i++){
+    let s = F0; const rs = G.rowSum[i];
+    for (let j = 0; j < C.length; j++) if (w[j].n !== 0n) s = fadd(s, fmul(w[j], fi(rs[j])));
+    out[i] = s;
+  }
+  return out;
+}
+function liftOrbit(G, xq, which){
+  const O = which === "row" ? G.RO.orbits : G.CO.orbits;
+  const out = new Array(which === "row" ? G.m : G.n).fill(F0);
+  for (let i = 0; i < O.length; i++){
+    if (xq[i].n === 0n) continue;
+    const w = fdiv(xq[i], fi(O[i].size));
+    for (const k of O[i].members) out[k] = w;
+  }
+  return out;
+}
+function minOf(list){
+  let b = null, bi = -1;
+  for (let i = 0; i < list.length; i++) if (b === null || fcmp(list[i], b) < 0){ b = list[i]; bi = i; }
+  return { v: b, i: bi };
+}
+function maxOf(list){
+  let b = null, bi = -1;
+  for (let i = 0; i < list.length; i++) if (b === null || fcmp(list[i], b) > 0){ b = list[i]; bi = i; }
+  return { v: b, i: bi };
+}
+// Solve on shapes, lift, then certify against the FULL matrix. The reduction is a claim about
+// this game's symmetry; the certificate does not take the claim on trust.
+function solveBlotto(spec){
+  const G = blottoGame(spec);
+  const Q = quotientMatrix(G);
+  const S = solveMatrixGame(Q.U, Q.m, Q.n);
+  if (S.status !== "optimal") return Object.assign(G, { status: S.status });
+  const value = fdiv(S.value, fi(Q.scale));
+  const colV = colValuesFromOrbit(G, S.x), rowV = rowValuesFromOrbit(G, S.y);
+  const lo = minOf(colV), hi = maxOf(rowV);
+  let sx = F0, sy = F0, neg = 0;
+  for (const t of S.x){ sx = fadd(sx, t); if (fsgn(t) < 0) neg++; }
+  for (const t of S.y){ sy = fadd(sy, t); if (fsgn(t) < 0) neg++; }
+  const cert = { ok: neg === 0 && feq(sx, F1) && feq(sy, F1) && feq(lo.v, value) && feq(hi.v, value),
+                 neg, sumX: sx, sumY: sy, lo: lo.v, hi: hi.v, loJ: lo.i, hiI: hi.i,
+                 gap: fsub(hi.v, lo.v) };
+  return Object.assign(G, { status: "optimal", value, xq: S.x, yq: S.y, quotient: Q, lp: S,
+                            cert, colV, rowV, x: liftOrbit(G, S.x, "row"), y: liftOrbit(G, S.y, "col") });
+}
+
+// ---------------------------------------------------------------- policies, weighed exactly
+// A policy is an integer numerator per allocation over one common denominator, so the payoff it
+// concedes to an opponent who has seen the distribution - its exploitability - is a single exact
+// fraction, computed rather than sampled. The integers stay well inside 2^53, which is asserted.
+function polUniform(k, label){
+  return { num: new Float64Array(k).fill(1), den: k, label: label || "uniform over every allocation" };
+}
+function polFromFrac(x, label){
+  let d = 1n;
+  for (const t of x) d = (d / bgcd(d, t.d)) * t.d;
+  const dn = Number(d);
+  if (!Number.isSafeInteger(dn)) return null;
+  const num = new Float64Array(x.length);
+  for (let i = 0; i < x.length; i++){
+    const v = Number((x[i].n * d) / x[i].d);
+    if (!Number.isSafeInteger(v)) return null;
+    num[i] = v;
+  }
+  return { num, den: dn, label: label || "the equilibrium" };
+}
+function polFromCounts(counts, label){
+  let s = 0;
+  for (const c of counts) s += c;
+  if (s <= 0) return null;
+  return { num: Float64Array.from(counts), den: s, label: label || "your own history" };
+}
+function polMultinomial(list, N, S, label){
+  const fact = [1];
+  for (let i = 1; i <= S; i++) fact.push(fact[i - 1] * i);
+  const num = new Float64Array(list.length);
+  for (let i = 0; i < list.length; i++){
+    let c = fact[S];
+    for (const v of list[i]) c /= fact[v];
+    num[i] = c;
+  }
+  return { num, den: Math.pow(N, S), label: label || "one soldier at a time, at random" };
+}
+// Uniform over the orbit of one allocation: "play this shape, shuffle the fields".
+function polShape(G, alloc, label){
+  const idx = G.rowIdx.get(alloc.join(","));
+  if (idx === undefined) return null;
+  const o = G.RO.orbits[G.RO.orbitOf[idx]];
+  const num = new Float64Array(G.m);
+  for (const k of o.members) num[k] = 1;
+  return { num, den: o.size, label: label, shape: G.rows[o.rep].slice().sort((a, b) => b - a) };
+}
+function exploitOf(G, pol){
+  const sums = new Float64Array(G.n);
+  for (let i = 0; i < G.m; i++){
+    const w = pol.num[i]; if (w === 0) continue;
+    const r = G.M[i];
+    for (let j = 0; j < G.n; j++) sums[j] += w * r[j];
+  }
+  let bj = 0;
+  for (let j = 1; j < G.n; j++) if (sums[j] < sums[bj]) bj = j;
+  return { value: fr(BigInt(sums[bj]), BigInt(pol.den)), col: bj,
+           safe: Number.isSafeInteger(sums[bj]) && Number.isSafeInteger(pol.den) };
+}
+function expectedAgainst(G, pol, rowV){
+  let s = F0;
+  for (let i = 0; i < G.m; i++) if (pol.num[i]) s = fadd(s, fmul(fi(pol.num[i]), rowV[i]));
+  return fdiv(s, fi(pol.den));
+}
+function sampleFrom(pol, rnd){
+  const r = rnd() * pol.den;
+  let acc = 0;
+  for (let i = 0; i < pol.num.length; i++){ acc += pol.num[i]; if (r < acc) return i; }
+  for (let i = pol.num.length - 1; i >= 0; i--) if (pol.num[i]) return i;
+  return 0;
+}
+function bestResponseCol(G, rowPol){
+  const sums = new Float64Array(G.n);
+  for (let i = 0; i < G.m; i++){
+    const w = rowPol.num[i]; if (w === 0) continue;
+    const r = G.M[i];
+    for (let j = 0; j < G.n; j++) sums[j] += w * r[j];
+  }
+  let bj = 0;
+  for (let j = 1; j < G.n; j++) if (sums[j] < sums[bj]) bj = j;
+  return bj;
+}
+function bestResponseRow(G, colPol){
+  const sums = new Float64Array(G.m);
+  for (let j = 0; j < G.n; j++){
+    const w = colPol.num[j]; if (w === 0) continue;
+    for (let i = 0; i < G.m; i++) sums[i] += w * G.M[i][j];
+  }
+  let bi = 0;
+  for (let i = 1; i < G.m; i++) if (sums[i] > sums[bi]) bi = i;
+  return bi;
+}
+function raceRounds(G, pol, oppPol, games, rnd){
+  let w = 0, l = 0, t = 0, sum = 0;
+  for (let g = 0; g < games; g++){
+    const v = G.M[sampleFrom(pol, rnd)][sampleFrom(oppPol, rnd)];
+    sum += v;
+    if (v > 0) w++; else if (v < 0) l++; else t++;
+  }
+  return { w, l, t, games, mean: sum / games };
+}
+function raceExploited(G, pol, games, rnd){
+  const j = bestResponseCol(G, pol);
+  let w = 0, l = 0, t = 0, sum = 0;
+  for (let g = 0; g < games; g++){
+    const v = G.M[sampleFrom(pol, rnd)][j];
+    sum += v;
+    if (v > 0) w++; else if (v < 0) l++; else t++;
+  }
+  return { w, l, t, games, mean: sum / games, col: j };
+}
+
+// ---------------------------------------------------------------- structure studies
+function pureBounds(G){
+  let maximin = -Infinity, mmRow = -1, minimax = Infinity, mmCol = -1;
+  for (let i = 0; i < G.m; i++){
+    let lo = Infinity; const r = G.M[i];
+    for (let j = 0; j < G.n; j++) if (r[j] < lo) lo = r[j];
+    if (lo > maximin){ maximin = lo; mmRow = i; }
+  }
+  for (let j = 0; j < G.n; j++){
+    let hi = -Infinity;
+    for (let i = 0; i < G.m; i++) if (G.M[i][j] > hi) hi = G.M[i][j];
+    if (hi < minimax){ minimax = hi; mmCol = j; }
+  }
+  return { maximin, minimax, mmRow, mmCol, saddle: maximin === minimax, gap: minimax - maximin };
+}
+function antisymmetryCheck(G){
+  if (G.spec.soldiersA !== G.spec.soldiersB) return { applies: false, checked: 0, bad: 0 };
+  let bad = 0, checked = 0;
+  for (let i = 0; i < G.m; i++) for (let j = 0; j < G.n; j++){ checked++; if (G.M[i][j] !== -G.M[j][i]) bad++; }
+  return { applies: true, checked, bad };
+}
+function invarianceCheck(G){
+  let checked = 0, bad = 0;
+  const ri = new Map(), ci = new Map();
+  for (let i = 0; i < G.rows.length; i++) ri.set(G.rows[i].join(","), i);
+  for (let j = 0; j < G.cols.length; j++) ci.set(G.cols[j].join(","), j);
+  for (const p of G.group) for (let i = 0; i < G.m; i++){
+    const pi = ri.get(applyPerm(p, G.rows[i]).join(","));
+    for (let j = 0; j < G.n; j++){
+      const pj = ci.get(applyPerm(p, G.cols[j]).join(","));
+      checked++;
+      if (G.M[pi][pj] !== G.M[i][j]) bad++;
+    }
+  }
+  return { checked, bad, perms: G.group.length };
+}
+function repIndependence(G){
+  let checked = 0, bad = 0;
+  const C = G.CO.orbits.length;
+  for (const o of G.RO.orbits){
+    const base = G.rowSum[o.rep];
+    for (const mem of o.members){
+      const rs = G.rowSum[mem];
+      for (let j = 0; j < C; j++){ checked++; if (rs[j] !== base[j]) bad++; }
+    }
+  }
+  return { checked, bad };
+}
+function orbitCheck(G){
+  let bad = 0, total = 0;
+  const fact = [1];
+  for (let i = 1; i <= 12; i++) fact.push(fact[i - 1] * i);
+  for (const o of G.RO.orbits){
+    total += o.size;
+    // an orbit's size is |G| divided by the stabiliser: for the full symmetric group that is
+    // the multinomial of the repeated counts
+    if (G.group.length === fact[G.spec.fields]){
+      const counts = new Map();
+      for (const v of G.rows[o.rep]) counts.set(v, (counts.get(v) || 0) + 1);
+      let expect = fact[G.spec.fields];
+      for (const c of counts.values()) expect /= fact[c];
+      if (expect !== o.size) bad++;
+    }
+    if (G.group.length % o.size !== 0) bad++;
+  }
+  return { total, bad, orbits: G.RO.orbits.length, m: G.m };
+}
+function transitivityScan(G, cap){
+  if (G.spec.soldiersA !== G.spec.soldiersB) return { applies: false, cycles: 0 };
+  let cycles = 0, example = null;
+  const m = Math.min(G.m, cap || G.m);
+  for (let a = 0; a < m; a++) for (let b = 0; b < m; b++){
+    if (G.M[a][b] <= 0) continue;
+    for (let c = 0; c < m; c++)
+      if (G.M[b][c] > 0 && G.M[c][a] > 0){ cycles++; if (!example) example = [a, b, c]; }
+  }
+  return { applies: true, cycles: cycles / 3, example, scanned: m };
+}
+function everyRowBeaten(G){
+  let beaten = 0, safe = 0;
+  for (let i = 0; i < G.m; i++){
+    let lo = Infinity; const r = G.M[i];
+    for (let j = 0; j < G.n; j++) if (r[j] < lo) lo = r[j];
+    if (lo < 0) beaten++; else safe++;
+  }
+  return { beaten, safe, m: G.m };
+}
+// Reorder the shapes and solve again: the VALUE is unique, an equilibrium need not be.
+function permutationStudy(spec, trials, seed){
+  const G = blottoGame(spec), Q = quotientMatrix(G);
+  const base = solveMatrixGame(Q.U, Q.m, Q.n);
+  const rnd = mulberry32(seed || 1), supports = new Set();
+  let bad = 0, done = 0;
+  const shuffle = (k) => {
+    const p = [];
+    for (let i = 0; i < k; i++) p.push(i);
+    for (let i = k - 1; i > 0; i--){ const j = Math.floor(rnd() * (i + 1)); const t = p[i]; p[i] = p[j]; p[j] = t; }
+    return p;
+  };
+  supports.add(base.x.map(t => (t.n !== 0n ? 1 : 0)).join(""));
+  for (let t = 0; t < trials; t++){
+    const rp = shuffle(Q.m), cp = shuffle(Q.n), U2 = [];
+    for (let i = 0; i < Q.m; i++){
+      const row = new Int32Array(Q.n);
+      for (let j = 0; j < Q.n; j++) row[j] = Q.U[rp[i]][cp[j]];
+      U2.push(row);
+    }
+    const s2 = solveMatrixGame(U2, Q.m, Q.n);
+    done++;
+    if (s2.status !== "optimal" || !feq(s2.value, base.value)) bad++;
+    else {
+      const inv = new Array(Q.m);
+      for (let i = 0; i < Q.m; i++) inv[rp[i]] = i;
+      supports.add(inv.map(i => (s2.x[i].n !== 0n ? 1 : 0)).join(""));
+    }
+  }
+  return { trials: done, bad, value: fdiv(base.value, fi(Q.scale)), distinctSupports: supports.size,
+           shapes: Q.m };
+}
+// The full matrix solved directly, with no symmetry argument anywhere. Only for small games -
+// which is exactly the point of the reduction.
+function directSolve(spec){
+  const G = blottoGame(spec);
+  const S = solveMatrixGame(G.M, G.m, G.n);
+  if (S.status !== "optimal") return { status: S.status, m: G.m, n: G.n };
+  return { status: "optimal", value: S.value, cert: certifyDense(G.M, G.m, G.n, S.x, S.y, S.value),
+           pivots: S.pivots, ms: S.ms, m: G.m, n: G.n, support: S.x.filter(t => t.n !== 0n).length };
+}
+// How many soldiers guarantee a win outright? Two answers that must agree - the LP value hitting
+// exactly +1, and the existence of one pure allocation that beats every enemy allocation. (They
+// must: a value of 1 with payoffs in {-1,0,1} forces every row in the support to win everywhere.)
+// Is there ONE allocation that beats every enemy allocation? No LP, no orbits, no matrix kept -
+// just the definition, scanned. A value of exactly 1 with payoffs in {-1,0,1} forces every row
+// in the support to win against every column, so this cheap search must find the same threshold
+// the LP does; the LP is then asked to confirm it at the boundary and only there.
+function pureGuarantee(fields, sa, sb, payoff, worth){
+  const spec = blottoSpec({ fields, soldiersA: sa, soldiersB: sb, payoff, worth });
+  const rows = compositions(sa, fields), cols = compositions(sb, fields);
+  for (const a of rows){
+    let all = true;
+    for (let j = 0; j < cols.length && all; j++) if (payoffOf(spec, a, cols[j]) !== 1) all = false;
+    if (all) return a;
+  }
+  return null;
+}
+function guaranteeThreshold(fields, sb, cap, payoff, capAlloc){
+  const lim = cap || 3 * sb + 4;
+  for (let sa = 1; sa <= lim; sa++){
+    if (capAlloc && binom(sa + fields - 1, fields - 1) > capAlloc) return { sa: null, capped: true };
+    const win = pureGuarantee(fields, sa, sb, payoff);
+    if (!win) continue;
+    const here = solveBlotto(blottoSpec({ fields, soldiersA: sa, soldiersB: sb, payoff }));
+    const below = sa > 1
+      ? solveBlotto(blottoSpec({ fields, soldiersA: sa - 1, soldiersB: sb, payoff })).value
+      : fi(-1);
+    const byLP = feq(here.value, F1) && fcmp(below, F1) < 0;
+    return { sa, byLP, byPure: true, agree: byLP, fields, sb,
+             shape: win.slice().sort((x, y) => y - x) };
+  }
+  return null;
+}
+function ratioScan(fields, sb, from, upto, payoff, worthMode){
+  const out = [];
+  for (let sa = Math.max(1, from); sa <= upto; sa++){
+    const R = solveBlotto(blottoSpec({ fields, soldiersA: sa, soldiersB: sb, payoff, worthMode }));
+    out.push({ sa, value: R.value, ok: R.cert.ok, shapes: R.quotient.m, m: R.m });
+  }
+  return out;
+}
+function monotoneScan(fields, maxS){
+  let checked = 0, bad = 0;
+  for (let sb = 1; sb <= maxS; sb++){
+    let prev = null;
+    for (let sa = 1; sa <= maxS; sa++){
+      const R = solveBlotto(blottoSpec({ fields, soldiersA: sa, soldiersB: sb }));
+      if (prev !== null){ checked++; if (fcmp(R.value, prev) < 0) bad++; }
+      prev = R.value;
+    }
+  }
+  return { checked, bad };
+}
+// Every matrix game of a given shape over a small alphabet: LP against support enumeration,
+// against the certificate, against the transpose identity v(-A^T) = -v(A).
+function sweepAllMatrices(m, n, vals, limit){
+  const total = Math.pow(vals.length, m * n);
+  const cap = limit ? Math.min(total, limit) : total;
+  let bad = 0, badCert = 0, badDual = 0;
+  for (let code = 0; code < cap; code++){
+    let c = code; const M = [];
+    for (let i = 0; i < m; i++){
+      const r = new Int32Array(n);
+      for (let j = 0; j < n; j++){ r[j] = vals[c % vals.length]; c = Math.floor(c / vals.length); }
+      M.push(r);
+    }
+    const lp = solveMatrixGame(M, m, n);
+    const se = supportSolve(M, m, n);
+    if (lp.status !== "optimal" || se.status !== "optimal" || !feq(lp.value, se.value)) bad++;
+    if (!certifyDense(M, m, n, lp.x, lp.y, lp.value).ok) badCert++;
+    const T = [];
+    for (let j = 0; j < n; j++){
+      const r = new Int32Array(m);
+      for (let i = 0; i < m; i++) r[i] = -M[i][j];
+      T.push(r);
+    }
+    if (!feq(solveMatrixGame(T, n, m).value, fneg(lp.value))) badDual++;
+  }
+  return { m, n, games: cap, bad, badCert, badDual };
+}
+// The negative control. A checker that cannot fail is not checking anything, so each clause of
+// the certificate is broken on purpose and must reject: a value off by a hair, a strategy that
+// does not sum to one, a negative weight, and a strategy that is simply bad (all soldiers on one
+// field, which any symmetric game answers outright). Every one of these is a guaranteed
+// violation, so a pass here is a property of the checker and not of the game.
+function certificateControl(spec){
+  const R = solveBlotto(spec), G = blottoGame(spec);
+  let checks = 0, rejected = 0;
+  const test = (x, y, v) => { checks++; if (!certifyDense(G.M, G.m, G.n, x, y, v).ok) rejected++; };
+  test(R.x, R.y, fadd(R.value, fr(1n, 1000n)));
+  test(R.x.map(t => fdiv(t, fi(2))), R.y, R.value);
+  {
+    const bad = R.x.slice();
+    let i = 0;
+    while (i < bad.length && bad[i].n === 0n) i++;
+    let j = 0;
+    while (j < bad.length && (j === i || bad[j].n !== 0n)) j++;
+    if (j < bad.length){ bad[j] = fneg(bad[i]); bad[i] = fmul(bad[i], fi(2)); test(bad, R.y, R.value); }
+  }
+  {
+    const allIn = new Array(spec.fields).fill(0);
+    allIn[0] = spec.soldiersA;
+    const idx = G.rowIdx.get(allIn.join(","));
+    if (idx !== undefined){
+      const x = new Array(G.m).fill(F0);
+      x[idx] = F1;
+      test(x, R.y, R.value);
+    }
+  }
+  return { checks, rejected, allRejected: checks > 0 && checks === rejected };
+}
+// The interactive limits, computed rather than guessed: allocations, shapes, and a hard ceiling
+// so no dropdown can ask the page for a tableau it cannot finish.
+function maxSoldiersFor(fields, worthMode, capM, capQ){
+  let best = 1;
+  for (let S = 1; S <= 20; S++){
+    const m = binom(S + fields - 1, fields - 1);
+    if (m > capM) break;
+    const spec = blottoSpec({ fields, soldiersA: S, worthMode });
+    const q = orbitsOf(compositions(S, fields), symmetryGroup(spec)).orbits.length;
+    if (q > capQ) break;
+    best = S;
+  }
+  return best;
+}
+function maxArmyFor(fields, capM){
+  let best = 1;
+  for (let S = 1; S <= 60; S++){
+    if (binom(S + fields - 1, fields - 1) > capM) break;
+    best = S;
+  }
+  return best;
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- UI
+const $ = id => document.getElementById(id);
+const uiRnd = mulberry32(20260823);
+const CFG = { fields: 3, soldiers: 6, payoff: "majority", worth: "equal", bot: "eq" };
+let R = null, POLS = null, EQROW = null, EQCOL = null, MYA = [], HIST = null, LOG = [];
+let RM = [], ORACLE = [], RACE = [], RATIO = [], THRESH = null, PERM = null;
+
+function fmtFrac(f){ return fstr(f) + (f.d === 1n ? "" : "  (" + fnum(f).toFixed(4) + ")"); }
+function allocStr(a){ return a.join("–"); }
+
+function specNow(){
+  return blottoSpec({ fields: CFG.fields, soldiersA: CFG.soldiers, payoff: CFG.payoff,
+                      worthMode: CFG.worth });
+}
+function buildPolicies(){
+  const S = CFG.soldiers, N = CFG.fields;
+  const even = new Array(N).fill(0);
+  for (let k = 0; k < S; k++) even[k % N]++;
+  const allIn = new Array(N).fill(0); allIn[0] = S;
+  const two = new Array(N).fill(0);
+  two[0] = Math.ceil(S / 2); if (N > 1) two[1] = S - two[0];
+  POLS = [];
+  POLS.push({ name: "the equilibrium", pol: polFromFrac(R.x) });
+  POLS.push({ name: "spread evenly (" + allocStr(even.slice().sort((a, b) => b - a)) + ")",
+              pol: polShape(R, even) });
+  POLS.push({ name: "two fronts (" + allocStr(two.slice().sort((a, b) => b - a)) + ")",
+              pol: polShape(R, two) });
+  POLS.push({ name: "all on one (" + allocStr(allIn) + ")", pol: polShape(R, allIn) });
+  POLS.push({ name: "a random allocation", pol: polUniform(R.m) });
+  POLS.push({ name: "one soldier at a time", pol: polMultinomial(R.rows, N, S) });
+  POLS = POLS.filter(p => p.pol);
+  EQROW = polFromFrac(R.x);
+  EQCOL = polFromFrac(R.y);
+}
+function rebuild(){
+  const spec = specNow();
+  R = solveBlotto(spec);
+  buildPolicies();
+  MYA = new Array(CFG.fields).fill(0);
+  const ev = MYA;
+  for (let k = 0; k < CFG.soldiers; k++) ev[k % CFG.fields]++;
+  HIST = { rounds: 0, w: 0, l: 0, t: 0, sum: 0, counts: new Float64Array(R.m) };
+  LOG = [];
+  RACE = runRace(400);
+  const big = R.m > 150;
+  const armyCap = maxArmyFor(CFG.fields, big ? 500 : 800);
+  RATIO = ratioScan(CFG.fields, CFG.soldiers, CFG.soldiers - (big ? 3 : 4),
+                    Math.min(CFG.soldiers + (big ? 5 : 8), armyCap), CFG.payoff, CFG.worth);
+  THRESH = guaranteeThreshold(CFG.fields, CFG.soldiers, 3 * CFG.soldiers + 4, CFG.payoff, 900);
+  PERM = permutationStudy(spec, R.quotient.m <= 12 ? 40 : (R.quotient.m <= 24 ? 12 : 6), 5);
+  RM = rmTable(1e8);
+  renderAll();
+}
+// The iteration counts are chosen by a WORK budget, not by taste: a 495x495 matrix costs 245k
+// multiplies per iteration, so the same list of iteration counts would be a different amount of
+// arithmetic on every configuration.
+function rmTable(budget){
+  const out = [], cost = R.m * R.n;
+  for (const it of [100, 1000, 10000, 100000, 1000000]){
+    if (it * cost > budget) break;
+    out.push(regretMatching(R.M, R.m, R.n, it));
+  }
+  if (!out.length) out.push(regretMatching(R.M, R.m, R.n, 100));
+  return out;
+}
+function runRace(games){
+  const rows = [];
+  for (let i = 0; i < POLS.length; i++){
+    const p = POLS[i].pol;
+    const ex = exploitOf(R, p);
+    rows.push({
+      name: POLS[i].name,
+      vsEq: expectedAgainst(R, p, R.rowV),
+      exact: ex.value,
+      counter: R.cols[ex.col],
+      playedEq: raceRounds(R, p, EQCOL, games, mulberry32(1000 + 7 * i)),
+      playedEx: raceExploited(R, p, games, mulberry32(2000 + 7 * i))
+    });
+  }
+  return rows;
+}
+
+function renderAll(){
+  renderGameLine(); renderEditor(); renderBoard(null); renderVerdict(); renderShapes();
+  renderCert(); renderExpl(); renderRatio(); renderCycles(); renderRM(); renderRace(); renderLog();
+}
+function renderGameLine(){
+  const w = R.spec.worth.join("/"), pb = pureBounds(R);
+  $("gameLine").innerHTML =
+    "<strong>" + R.m + "</strong> allocations, <strong>" + R.quotient.m + "</strong> shapes, " +
+    "symmetry group of size " + R.group.length + ", field values " + w + ". " +
+    "Value <strong class='frac'>" + fstr(R.value) + "</strong>; best guaranteed pure result " +
+    pb.maximin + ", best they can hold you to " + pb.minimax + ".";
+  $("soldLbl").textContent = CFG.soldiers + " each";
+}
+function renderEditor(){
+  const box = $("editor");
+  box.innerHTML = "";
+  let used = 0;
+  for (const v of MYA) used += v;
+  for (let k = 0; k < CFG.fields; k++){
+    const row = document.createElement("div");
+    row.className = "fld";
+    row.innerHTML =
+      "<span class='text-xs font-bold text-slate-500'>field " + (k + 1) +
+      (R.spec.worth[k] > 1 ? " <span class='text-amber-600'>&times;" + R.spec.worth[k] + "</span>" : "") +
+      "</span>" +
+      "<div class='bar'><span style='width:" + (CFG.soldiers ? 100 * MYA[k] / CFG.soldiers : 0) + "%'></span></div>" +
+      "<span class='mono text-sm font-bold text-center'>" + MYA[k] + "</span>";
+    const minus = document.createElement("button");
+    minus.className = "pill"; minus.textContent = "−";
+    minus.onclick = () => { if (MYA[k] > 0){ MYA[k]--; renderEditor(); } };
+    const plus = document.createElement("button");
+    plus.className = "pill"; plus.textContent = "+";
+    plus.onclick = () => { let u = 0; for (const v of MYA) u += v; if (u < CFG.soldiers){ MYA[k]++; renderEditor(); } };
+    row.appendChild(minus); row.appendChild(plus);
+    box.appendChild(row);
+  }
+  const left = CFG.soldiers - used;
+  const note = document.createElement("p");
+  note.className = "text-xs font-bold mt-1 " + (left === 0 ? "text-cyan-700" : "text-amber-600");
+  note.textContent = left === 0 ? "all " + CFG.soldiers + " committed" : left + " still in reserve — they will not fight";
+  box.appendChild(note);
+}
+function renderBoard(res){
+  const N = CFG.fields, W = 460, H = 300, pad = 26;
+  const cw = (W - 2 * pad) / N, mid = H / 2, unit = Math.min(18, (mid - 34) / Math.max(1, CFG.soldiers));
+  let s = "<rect x='0' y='0' width='" + W + "' height='" + H + "' fill='#f8fafc' rx='10'/>";
+  s += "<line x1='" + pad + "' y1='" + mid + "' x2='" + (W - pad) + "' y2='" + mid + "' stroke='#cbd5e1'/>";
+  for (let k = 0; k < N; k++){
+    const x = pad + k * cw + cw * 0.5, bw = Math.min(46, cw * 0.5);
+    const mine = res ? res.a[k] : MYA[k], theirs = res ? res.b[k] : 0;
+    const hm = mine * unit, ht = theirs * unit;
+    s += "<rect x='" + (x - bw / 2) + "' y='" + (mid - hm) + "' width='" + bw + "' height='" + hm +
+         "' fill='#0e7490' rx='3'/>";
+    s += "<rect x='" + (x - bw / 2) + "' y='" + mid + "' width='" + bw + "' height='" + ht +
+         "' fill='#f59e0b' rx='3'/>";
+    s += "<text x='" + x + "' y='" + (mid - hm - 6) + "' text-anchor='middle' fill='#0e7490'>" + mine + "</text>";
+    if (res) s += "<text x='" + x + "' y='" + (mid + ht + 14) + "' text-anchor='middle' fill='#b45309'>" + theirs + "</text>";
+    const lbl = "F" + (k + 1) + (R.spec.worth[k] > 1 ? "×" + R.spec.worth[k] : "");
+    s += "<text x='" + x + "' y='" + (H - 8) + "' text-anchor='middle' fill='#64748b'>" + lbl + "</text>";
+    if (res){
+      const mark = mine > theirs ? "▲ yours" : (mine < theirs ? "▼ theirs" : "· nobody");
+      const col = mine > theirs ? "#0e7490" : (mine < theirs ? "#b45309" : "#94a3b8");
+      s += "<text x='" + x + "' y='" + (mid + 4) + "' text-anchor='middle' fill='" + col + "'>" + mark + "</text>";
+    }
+  }
+  $("board").innerHTML = s;
+}
+function renderVerdict(){
+  const pb = pureBounds(R), rb = everyRowBeaten(R);
+  const sup = R.xq.filter(t => t.n !== 0n).length;
+  $("verdict").textContent =
+    "value of the game   " + fmtFrac(R.value) + "\n" +
+    "pure maximin        " + pb.maximin + "   (best you can guarantee with a fixed plan)\n" +
+    "pure minimax        " + pb.minimax + "   (best they can hold you to)\n" +
+    "saddle point        " + (pb.saddle ? "yes - an optimal PURE allocation exists" : "no - you must mix") + "\n" +
+    "allocations beaten  " + rb.beaten + " of " + rb.m + " have a counter that beats them\n" +
+    "shapes in the mix   " + sup + " of " + R.quotient.m + "\n" +
+    "simplex             " + R.lp.pivots + " pivots, " + R.lp.degen + " of them degenerate";
+}
+function renderShapes(){
+  const body = $("shapes");
+  body.innerHTML = "";
+  const rows = [];
+  for (let i = 0; i < R.quotient.m; i++){
+    const o = R.RO.orbits[i];
+    const solo = polShape(R, R.rows[o.rep]);
+    rows.push({ shape: R.rows[o.rep].slice().sort((a, b) => b - a), size: o.size, p: R.xq[i],
+                solo: solo ? exploitOf(R, solo).value : null });
+  }
+  rows.sort((a, b) => fcmp(b.p, a.p) || fcmp(b.solo, a.solo));
+  let soloOpt = 0;
+  for (const r of rows){
+    if (r.solo && feq(r.solo, R.value)) soloOpt++;
+    const tr = document.createElement("tr");
+    const dim = r.p.n === 0n ? " class='text-slate-400'" : "";
+    tr.innerHTML = "<td class='mono'" + dim + ">" + allocStr(r.shape) + "</td><td" + dim + ">" + r.size + "</td>" +
+      "<td class='frac'" + dim + ">" + fstr(r.p) + "</td>" +
+      "<td class='frac'" + dim + ">" + (r.solo ? fstr(r.solo) : "—") + "</td>" +
+      "<td style='width:56px'><div class='bar'><span style='width:" + (100 * fnum(r.p)).toFixed(1) + "%'></span></div></td>";
+    body.appendChild(tr);
+  }
+  $("shapeNote").innerHTML =
+    "<em>alone</em> is what that shape concedes if you play only it, shuffling the fields — an " +
+    "exact fraction, not a score against anybody. Shapes that reach the value on their own: " +
+    "<strong>" + soloOpt + "</strong> of " + R.quotient.m + " — so an optimal strategy is not unique; " +
+    "reordering the shapes and re-solving found <strong>" + PERM.distinctSupports +
+    "</strong> different supports over " + PERM.trials + " runs, all with the same value" +
+    (PERM.bad ? " — except " + PERM.bad + ", which is a bug" : "") + ".";
+}
+function renderCert(){
+  const c = R.cert;
+  $("cert").textContent =
+    "sum of x            " + fstr(c.sumX) + "        negative weights " + c.neg + "\n" +
+    "sum of y            " + fstr(c.sumY) + "\n" +
+    "worst column for x  " + fstr(c.lo) + "   (" + allocStr(R.cols[c.loJ]) + ")\n" +
+    "best row against y  " + fstr(c.hi) + "   (" + allocStr(R.rows[c.hiI]) + ")\n" +
+    "gap                 " + fstr(c.gap) + "\n" +
+    "checked over        " + R.m + " x " + R.n + " payoffs, in fractions\n" +
+    "verdict             " + (c.ok ? "CERTIFIED - this is the value" : "REJECTED");
+}
+function renderExpl(){
+  const lines = [];
+  let used = 0;
+  for (const v of MYA) used += v;
+  if (used === CFG.soldiers){
+    const idx = R.rowIdx.get(MYA.join(","));
+    if (idx !== undefined){
+      let worst = Infinity, wj = 0;
+      for (let j = 0; j < R.n; j++) if (R.M[idx][j] < worst){ worst = R.M[idx][j]; wj = j; }
+      lines.push("your orders         " + allocStr(MYA));
+      lines.push("worst case          " + worst + "  against " + allocStr(R.cols[wj]));
+      lines.push("against the bot     " + fstr(R.rowV[idx]) + "  (expected)");
+    }
+  } else lines.push("your orders         " + (CFG.soldiers - used) + " soldiers still in reserve");
+  const hp = polFromCounts(HIST.counts);
+  if (hp){
+    const ex = exploitOf(R, hp);
+    lines.push("");
+    lines.push("your history         " + HIST.rounds + " rounds, " + HIST.w + "W " + HIST.t + "D " + HIST.l + "L");
+    lines.push("its exploitability   " + fmtFrac(ex.value) + "  via " + allocStr(R.cols[ex.col]));
+    lines.push("the value            " + fmtFrac(R.value));
+    lines.push("you are conceding    " + fmtFrac(fsub(R.value, ex.value)) + " to anyone watching");
+  } else {
+    lines.push("");
+    lines.push("play a round and this measures how exploitable your own distribution is,");
+    lines.push("exactly, as a fraction - the number no opponent's score can tell you.");
+  }
+  $("expl").textContent = lines.join("\n");
+}
+function renderRatio(){
+  const body = $("ratio");
+  body.innerHTML = "";
+  for (const r of RATIO){
+    const tr = document.createElement("tr");
+    const tag = r.sa === CFG.soldiers ? " class='bg-cyan-50'" : "";
+    tr.innerHTML = "<td" + tag + ">" + r.sa + " vs " + CFG.soldiers + "</td>" +
+      "<td class='frac'" + tag + ">" + fstr(r.value) + "</td><td" + tag + ">" + fnum(r.value).toFixed(4) + "</td>";
+    body.appendChild(tr);
+  }
+  $("ratioNote").innerHTML = (THRESH && THRESH.sa)
+    ? "Against " + CFG.soldiers + " soldiers you need <strong>" + THRESH.sa + "</strong> to be "
+      + "guaranteed a win, found the same by the LP value hitting 1 and by the search for one "
+      + "allocation (" + allocStr(THRESH.shape) + ") that beats every enemy allocation"
+      + (THRESH.agree ? "" : " — and they DISAGREE, which is a bug") + "."
+    : "The guarantee threshold for this configuration is past the size limit of the scan.";
+}
+function renderCycles(){
+  const tr = transitivityScan(R, 40), pb = pureBounds(R), rb = everyRowBeaten(R);
+  const lines = [];
+  lines.push("allocations          " + R.m);
+  lines.push("with a counter       " + rb.beaten + "   (they lose outright to something)");
+  lines.push("never losing         " + rb.safe);
+  if (tr.applies && tr.example){
+    const e = tr.example.map(i => allocStr(R.rows[i]));
+    lines.push("3-cycles found       " + tr.cycles + "   over the first " + tr.scanned + " allocations");
+    lines.push("");
+    lines.push(e[0] + " beats " + e[1]);
+    lines.push(e[1] + " beats " + e[2]);
+    lines.push(e[2] + " beats " + e[0]);
+    lines.push("");
+    lines.push("A cycle is a proof that no ranking of allocations exists, which is why");
+    lines.push("the answer has to be a distribution and not a choice.");
+  } else if (tr.applies) {
+    lines.push("3-cycles found       0 - this configuration is transitive");
+  }
+  $("cycles").textContent = lines.join("\n");
+}
+function renderRM(){
+  const body = $("rm");
+  body.innerHTML = "";
+  for (const r of RM){
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + r.iters.toLocaleString("en-US") + "</td><td>" + r.value.toFixed(6) + "</td>" +
+      "<td>" + r.exploit.toFixed(6) + "</td><td>" + (r.exploit * Math.sqrt(r.iters)).toFixed(3) + "</td>";
+    body.appendChild(tr);
+  }
+  const tr2 = document.createElement("tr");
+  tr2.innerHTML = "<td class='font-bold'>the LP</td><td class='frac'>" + fstr(R.value) +
+    "</td><td class='frac'>0</td><td>" + R.lp.pivots + " pivots</td>";
+  body.appendChild(tr2);
+}
+function renderRace(){
+  const body = $("race");
+  body.innerHTML = "";
+  for (const r of RACE){
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td>" + r.name + "</td>" +
+      "<td class='frac'>" + fstr(r.vsEq) + "</td>" +
+      "<td>" + r.playedEq.mean.toFixed(3) + "</td>" +
+      "<td class='frac'>" + fstr(r.exact) + "</td>" +
+      "<td>" + r.playedEx.mean.toFixed(3) + "</td>" +
+      "<td class='mono'>" + allocStr(r.counter) + "</td>";
+    body.appendChild(tr);
+  }
+  $("raceNote").innerHTML =
+    "The left pair is played against a bot drawing from the exact equilibrium; the right pair " +
+    "against an opponent who has seen the distribution and answers it with one fixed " +
+    "allocation. Fractions are computed, decimals are " + RACE[0].playedEq.games.toLocaleString("en-US") +
+    " sampled rounds. Read the two columns against each other: <strong>a strategy can score the " +
+    "value of the game against perfect play and still lose every battle to anybody watching.</strong>";
+}
+function renderLog(){
+  const box = $("log");
+  box.innerHTML = "";
+  if (!LOG.length){
+    box.innerHTML = "<p class='text-sm text-slate-500'>No orders sent yet.</p>";
+    return;
+  }
+  for (const l of LOG.slice(-9).reverse()){
+    const d = document.createElement("div");
+    d.className = l.v > 0 ? "text-cyan-700" : (l.v < 0 ? "text-amber-700" : "text-slate-500");
+    d.textContent = l.text;
+    box.appendChild(d);
+  }
+}
+
+function botColumn(){
+  if (CFG.bot === "eq") return sampleFrom(EQCOL, uiRnd);
+  if (CFG.bot === "even"){
+    const even = new Array(CFG.fields).fill(0);
+    for (let k = 0; k < CFG.soldiers; k++) even[k % CFG.fields]++;
+    const p = polShape(R, even);
+    return p ? sampleFrom(p, uiRnd) : 0;
+  }
+  if (CFG.bot === "mult") return sampleFrom(polMultinomial(R.cols, CFG.fields, R.spec.soldiersB), uiRnd);
+  const hp = polFromCounts(HIST.counts);
+  return hp ? bestResponseCol(R, hp) : sampleFrom(EQCOL, uiRnd);
+}
+function playRound(myIdx){
+  const bj = botColumn();
+  const a = R.rows[myIdx], b = R.cols[bj], v = R.M[myIdx][bj];
+  HIST.rounds++; HIST.sum += v; HIST.counts[myIdx]++;
+  if (v > 0) HIST.w++; else if (v < 0) HIST.l++; else HIST.t++;
+  const br = battle(R.spec, a, b);
+  LOG.push({ v, text: "#" + HIST.rounds + "  " + allocStr(a) + "  vs  " + allocStr(b) +
+             "   fields " + br.wA + "-" + br.wB + (br.tie ? " (" + br.tie + " tied)" : "") +
+             "   " + (v > 0 ? "WIN" : v < 0 ? "LOSS" : "DRAW") + "   running " +
+             (HIST.sum / HIST.rounds).toFixed(3) });
+  renderBoard({ a, b });
+  $("status").innerHTML =
+    (v > 0 ? "<strong class='text-cyan-700'>You take the field.</strong>" :
+     v < 0 ? "<strong class='text-amber-700'>They take the field.</strong>" :
+             "<strong class='text-slate-600'>Nobody wins.</strong>") +
+    " After " + HIST.rounds + " rounds your average is <strong>" + (HIST.sum / HIST.rounds).toFixed(3) +
+    "</strong> against a game value of <strong class='frac'>" + fstr(R.value) + "</strong>.";
+  renderLog(); renderExpl();
+}
+
+function bindUI(){
+  const fs = $("fields");
+  for (let n = 2; n <= 5; n++){
+    const o = document.createElement("option");
+    o.value = n; o.textContent = n + " battlefields";
+    fs.appendChild(o);
+  }
+  fs.value = CFG.fields;
+  const clampSoldiers = () => {
+    const cap = maxSoldiersFor(CFG.fields, CFG.worth, 520, 40);
+    $("soldiers").max = cap;
+    if (CFG.soldiers > cap) CFG.soldiers = cap;
+    $("soldiers").value = CFG.soldiers;
+  };
+  fs.onchange = () => { CFG.fields = +fs.value; clampSoldiers(); rebuild(); };
+  $("payoff").onchange = () => { CFG.payoff = $("payoff").value; rebuild(); };
+  $("worth").onchange = () => { CFG.worth = $("worth").value; clampSoldiers(); rebuild(); };
+  $("bot").onchange = () => { CFG.bot = $("bot").value; };
+  $("soldiers").oninput = () => { CFG.soldiers = +$("soldiers").value; $("soldLbl").textContent = CFG.soldiers + " each"; };
+  $("soldiers").onchange = () => { CFG.soldiers = +$("soldiers").value; rebuild(); };
+  $("commit").onclick = () => {
+    let used = 0;
+    for (const v of MYA) used += v;
+    if (used !== CFG.soldiers){ $("status").textContent = "Commit all " + CFG.soldiers + " soldiers first."; return; }
+    const idx = R.rowIdx.get(MYA.join(","));
+    if (idx === undefined){ $("status").textContent = "That is not a legal allocation."; return; }
+    playRound(idx);
+  };
+  $("quickEven").onclick = () => {
+    MYA = new Array(CFG.fields).fill(0);
+    for (let k = 0; k < CFG.soldiers; k++) MYA[k % CFG.fields]++;
+    renderEditor(); renderBoard(null); renderExpl();
+  };
+  $("quickAll").onclick = () => {
+    MYA = new Array(CFG.fields).fill(0); MYA[0] = CFG.soldiers;
+    renderEditor(); renderBoard(null); renderExpl();
+  };
+  $("quickEq").onclick = () => {
+    MYA = R.rows[sampleFrom(EQROW, uiRnd)].slice();
+    renderEditor(); renderBoard(null); renderExpl();
+  };
+  $("quickRun").onclick = () => {
+    for (let k = 0; k < 200; k++) playRound(sampleFrom(EQROW, uiRnd));
+    renderEditor();
+  };
+  $("reset").onclick = () => { rebuild(); $("status").textContent = ""; };
+  $("race5k").onclick = () => {
+    const b = $("race5k");
+    b.disabled = true; b.textContent = "playing…";
+    setTimeout(() => { RACE = runRace(5000); renderRace(); b.textContent = "5,000 rounds of each played"; }, 30);
+  };
+  $("rm1m").onclick = () => {
+    const b = $("rm1m");
+    b.disabled = true; b.textContent = "learning…";
+    setTimeout(() => { RM = rmTable(1000000); renderRM(); b.textContent = "a million done"; }, 30);
+  };
+  $("direct").onclick = () => {
+    const b = $("direct");
+    b.disabled = true; b.textContent = "solving the full matrix…";
+    setTimeout(() => {
+      const d = directSolve(specNow());
+      $("directNote").innerHTML = d.status !== "optimal"
+        ? "the direct solve did not converge"
+        : "Full matrix " + d.m + "×" + d.n + ", no symmetry used: value <strong class='frac'>" +
+          fstr(d.value) + "</strong> in " + d.pivots + " pivots and " + d.ms + " ms, certificate " +
+          (d.cert.ok ? "OK" : "FAILED") + ". The shape quotient gave <strong class='frac'>" +
+          fstr(R.value) + "</strong> in " + R.lp.pivots + " pivots on a " + R.quotient.m +
+          "×" + R.quotient.n + " tableau — " +
+          (feq(d.value, R.value) ? "identical" : "DIFFERENT, which is a bug") + ".";
+      b.textContent = "solved directly";
+    }, 30);
+  };
+  $("sweep3").onclick = () => {
+    const b = $("sweep3");
+    b.disabled = true; b.textContent = "sweeping 19,683 games…";
+    setTimeout(() => {
+      ORACLE.push(sweepAllMatrices(3, 3, [-1, 0, 1]));
+      renderOracle();
+      b.textContent = "all 19,683 swept";
+    }, 30);
+  };
+}
+function renderOracle(){
+  const body = $("oracle");
+  body.innerHTML = "";
+  for (const o of ORACLE){
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + o.m + "×" + o.n + "</td><td>" + o.games.toLocaleString("en-US") +
+      "</td><td>" + o.bad + "</td><td>" + o.badCert + "</td><td>" + o.badDual + "</td>";
+    body.appendChild(tr);
+  }
+}
+
+bindUI();
+$("soldiers").max = maxSoldiersFor(CFG.fields, CFG.worth, 520, 40);
+rebuild();
+ORACLE = [sweepAllMatrices(2, 2, [-1, 0, 1]), sweepAllMatrices(2, 3, [-1, 0, 1])];
+renderOracle();
+
+// ---------------------------------------------------------------- self-test, on load
+(function selfTest(){
+  let asserts = 0, pass = 0, fail = 0;
+  const bad = [];
+  const ok = function(c, label){ asserts++; if (c) pass++; else { fail++; if (bad.length < 6) bad.push(label); } };
+  const bulk = function(n, c, label){ asserts += n; if (c) pass += n; else { fail += n; if (bad.length < 6) bad.push(label); } };
+  const t0 = Date.now();
+
+  // exact rationals
+  ok(feq(fr(6n, -4n), { n: -3n, d: 2n }), "fr does not normalise sign and gcd");
+  ok(feq(fadd(fr(1n, 3n), fr(1n, 6n)), fr(1n, 2n)), "1/3 + 1/6 is not 1/2");
+  ok(fcmp(fr(1n, 3n), fr(333333n, 1000000n)) > 0, "1/3 is not above 0.333333");
+  ok(feq(fmul(fr(2n, 3n), fr(3n, 2n)), F1), "2/3 * 3/2 is not 1");
+  {
+    const rnd = mulberry32(11);
+    let badArith = 0, n = 0;
+    for (let k = 0; k < 4000; k++){
+      const a = fr(BigInt(Math.floor(rnd() * 200) - 100), BigInt(1 + Math.floor(rnd() * 60)));
+      const b = fr(BigInt(Math.floor(rnd() * 200) - 100), BigInt(1 + Math.floor(rnd() * 60)));
+      n += 3;
+      if (!feq(fsub(fadd(a, b), b), a)) badArith++;
+      if (b.n !== 0n && !feq(fdiv(fmul(a, b), b), a)) badArith++;
+      if (fcmp(a, b) !== -fcmp(b, a)) badArith++;
+    }
+    ok(badArith === 0, "rational arithmetic is not self-consistent");
+    bulk(n, badArith === 0, "rational arithmetic bulk");
+  }
+
+  // textbook matrix games
+  {
+    const rps = [[0, -1, 1], [1, 0, -1], [-1, 1, 0]];
+    const s = solveMatrixGame(rps, 3, 3);
+    ok(feq(s.value, F0), "rock paper scissors is not a fair game");
+    ok(s.x.every(t => feq(t, fr(1n, 3n))), "rock paper scissors is not uniform");
+    const sad = [[4, 3], [2, 1]];
+    const s2 = solveMatrixGame(sad, 2, 2);
+    ok(feq(s2.value, fi(3)) && feq(s2.x[0], F1), "a saddle point was not found as a pure strategy");
+    const g = [[2, -1, 6], [0, 1, -1]];
+    const s3 = solveMatrixGame(g, 2, 3), e3 = supportSolve(g, 2, 3);
+    ok(feq(s3.value, e3.value), "the LP and support enumeration disagree on a 2x3");
+    const bias = [[0, -1, 2], [1, 0, -1], [-2, 1, 0]];
+    const s4 = solveMatrixGame(bias, 3, 3);
+    ok(feq(s4.value, F0), "an antisymmetric matrix must have value 0");
+  }
+
+  // every small matrix game there is
+  {
+    let games = 0, b1 = 0;
+    for (const o of ORACLE){ games += o.games; b1 += o.bad + o.badCert + o.badDual; }
+    ok(b1 === 0, "a small matrix game disagreed across the three checks");
+    bulk(games * 3, b1 === 0, "exhaustive small-game sweep");
+    ok(ORACLE[0].games === 81 && ORACLE[1].games === 729, "the sweeps did not cover 3^4 and 3^6");
+  }
+
+  // compositions
+  {
+    let n = 0, badC = 0;
+    for (let N = 2; N <= 5; N++) for (let S = 0; S <= 9; S++){
+      const list = compositions(S, N);
+      n++;
+      if (list.length !== binom(S + N - 1, N - 1)) badC++;
+      const keys = new Set();
+      for (const a of list){
+        let sum = 0;
+        for (const v of a) sum += v;
+        if (sum !== S) badC++;
+        keys.add(a.join(","));
+      }
+      if (keys.size !== list.length) badC++;
+      n += list.length;
+    }
+    ok(badC === 0, "the composition enumeration is wrong");
+    bulk(n, badC === 0, "composition bulk");
+    ok(compositions(6, 3).length === 28 && compositions(12, 4).length === 455, "28 and 455");
+  }
+
+  // the symmetry machinery on the live game
+  {
+    const inv = invarianceCheck(R), anti = antisymmetryCheck(R), rep = repIndependence(R), orb = orbitCheck(R);
+    ok(inv.bad === 0, "the payoff is not invariant under the symmetry group");
+    bulk(inv.checked, inv.bad === 0, "invariance bulk");
+    ok(anti.bad === 0, "equal armies must give an antisymmetric matrix");
+    bulk(anti.checked, anti.bad === 0, "antisymmetry bulk");
+    ok(rep.bad === 0, "the quotient payoff depends on which representative was picked");
+    bulk(rep.checked, rep.bad === 0, "representative bulk");
+    ok(orb.total === orb.m && orb.bad === 0, "the orbits do not partition the allocations");
+    bulk(orb.total, orb.bad === 0, "orbit bulk");
+    ok(R.group.length === 6 && R.quotient.m === 7, "3 fields must give 6 permutations and 7 shapes");
+  }
+
+  // the certificate, and the control that proves it can fail
+  {
+    let n = 0, badCert = 0, badZero = 0;
+    for (let f = 2; f <= 4; f++) for (let s = 1; s <= 7; s++){
+      const Rx = solveBlotto(blottoSpec({ fields: f, soldiersA: s }));
+      n++;
+      if (!Rx.cert.ok) badCert++;
+      if (!feq(Rx.value, F0)) badZero++;                     // equal armies: antisymmetric, value 0
+    }
+    ok(badCert === 0, "a certificate failed on a symmetric game");
+    ok(badZero === 0, "a symmetric game did not have value 0");
+    bulk(n * 2, badCert === 0 && badZero === 0, "symmetric sweep bulk");
+    const ctl = certificateControl(blottoSpec({ fields: 3, soldiersA: 6 }));
+    ok(ctl.checks === 4 && ctl.allRejected,
+       "the certificate accepted a broken input - it is not checking anything");
+    bulk(ctl.checks, ctl.allRejected, "certificate control bulk");
+  }
+
+  // the quotient against the full matrix, solved with no symmetry argument at all
+  {
+    let n = 0, badV = 0;
+    for (const [f, s] of [[2, 6], [3, 4], [3, 6], [3, 8], [4, 5]]){
+      const spec = blottoSpec({ fields: f, soldiersA: s });
+      const d = directSolve(spec), q = solveBlotto(spec);
+      n++;
+      if (!feq(d.value, q.value) || !d.cert.ok) badV++;
+    }
+    ok(badV === 0, "the shape quotient changed the value of the game");
+    bulk(n, badV === 0, "quotient vs direct bulk");
+    const pm = permutationStudy(specNow(), 40, 5);
+    ok(pm.bad === 0, "reordering the shapes changed the value");
+    bulk(pm.trials, pm.bad === 0, "permutation bulk");
+  }
+
+  // asymmetric armies: monotone, thresholds, and the -1 / +1 plateaus
+  {
+    const mono = monotoneScan(3, 7);
+    ok(mono.bad === 0, "more soldiers made the game worse");
+    bulk(mono.checked, mono.bad === 0, "monotonicity bulk");
+    let n = 0, badT = 0;
+    for (let sb = 1; sb <= 6; sb++){
+      const t = guaranteeThreshold(3, sb, 20);
+      n++;
+      if (!t || !t.agree) badT++;
+      if (t && t.sa !== Math.ceil(1.5 * sb)) badT++;          // measured, then pinned
+    }
+    ok(badT === 0, "the guarantee threshold disagrees with ceil(1.5 S) on three fields");
+    bulk(n * 2, badT === 0, "threshold bulk");
+    ok(feq(solveBlotto(blottoSpec({ fields: 3, soldiersA: 7, soldiersB: 6 })).value, fr(1n, 3n)),
+       "7 against 6 on three fields is not 1/3");
+    ok(feq(solveBlotto(blottoSpec({ fields: 3, soldiersA: 4, soldiersB: 6 })).value, fi(-1)),
+       "4 against 6 on three fields is not a dead loss");
+  }
+
+  // no best allocation
+  {
+    const rb = everyRowBeaten(R), tr = transitivityScan(R), pb = pureBounds(R);
+    ok(rb.beaten === rb.m, "some allocation has no counter, on a game whose value is 0");
+    ok(pb.maximin === -1 && pb.minimax === 1, "the pure bounds are not -1 and +1");
+    ok(tr.cycles > 0 && tr.example, "no 3-cycle was found in a non-transitive game");
+    bulk(rb.m + tr.scanned, rb.beaten === rb.m, "no-best-allocation bulk");
+    const five = solveBlotto(blottoSpec({ fields: 5, soldiersA: 5 }));
+    ok(pureBounds(five).saddle, "5 soldiers on 5 fields should have a pure optimum");
+  }
+
+  // policies: exact weights, then the same weights played
+  {
+    const eq = POLS[0].pol;
+    ok(feq(exploitOf(R, eq).value, R.value), "the equilibrium is exploitable");
+    let n = 0, badEx = 0, badSample = 0;
+    for (const row of RACE){
+      n++;
+      if (fcmp(row.exact, R.value) > 0) badEx++;               // nothing beats the value
+      const sd = 1 / Math.sqrt(row.playedEx.games);
+      if (Math.abs(row.playedEx.mean - fnum(row.exact)) > 6 * sd) badSample++;
+      if (Math.abs(row.playedEq.mean - fnum(row.vsEq)) > 6 * sd) badSample++;
+    }
+    ok(badEx === 0, "a policy did better than the value of the game");
+    ok(badSample === 0, "a sampled mean is more than 6 sigma from its exact value");
+    bulk(RACE[0].playedEq.games * RACE.length * 2, badSample === 0, "race sampling bulk");
+    const even = POLS.find(p => p.name.indexOf("evenly") >= 0);
+    if (even){
+      const ex = exploitOf(R, even.pol), vs = expectedAgainst(R, even.pol, R.rowV);
+      ok(feq(vs, F0) && feq(ex.value, fi(-1)),
+         "spreading evenly should score the value against perfection and -1 against a watcher");
+    }
+  }
+
+  // learning vs solving
+  {
+    let badRM = 0;
+    for (let i = 1; i < RM.length; i++) if (RM[i].exploit > RM[i - 1].exploit) badRM++;
+    ok(badRM === 0, "regret matching did not become less exploitable");
+    const last = RM[RM.length - 1];
+    ok(Math.abs(last.value - fnum(R.value)) <= last.exploit + 1e-9,
+       "the learner's value is outside its own exploitability bound");
+    ok(last.exploit > 1e-6, "regret matching reached exactness, which it cannot do");
+    bulk(RM.reduce((a, r) => a + r.iters, 0), badRM === 0, "regret matching bulk");
+  }
+
+  // determinism
+  {
+    const a = mulberry32(7), b = mulberry32(7), c = mulberry32(8);
+    let same = true, diff = false;
+    for (let i = 0; i < 400; i++){ const p = a(), q = b(), r = c(); if (p !== q) same = false; if (p !== r) diff = true; }
+    ok(same && diff, "mulberry32 is not deterministic");
+    const r1 = raceRounds(R, POLS[0].pol, EQCOL, 300, mulberry32(9));
+    const r2 = raceRounds(R, POLS[0].pol, EQCOL, 300, mulberry32(9));
+    ok(r1.w === r2.w && r1.l === r2.l, "a seeded race was not reproducible");
+    const p = polFromFrac(R.x);
+    ok(p && p.num.every(v => Number.isSafeInteger(v)) && Number.isSafeInteger(p.den),
+       "the equilibrium's integer weights left the exact range");
+  }
+
+  $("selftest").textContent =
+    "asserts  " + asserts.toLocaleString("en-US") + "\n" +
+    "pass     " + pass.toLocaleString("en-US") + "\n" +
+    "fail     " + fail + (bad.length ? "\n  " + bad.join("\n  ") : "") + "\n" +
+    "in       " + (Date.now() - t0) + " ms\n\n" +
+    "one LP, one certificate, and 810 small games\nsolved twice by solvers with nothing in common.";
+  $("selftest").style.color = fail ? "#fecaca" : "#e2e8f0";
+})();
+</script>
+</body>
+</html>
