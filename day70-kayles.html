@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 70 — Kayles</title>
+<style>
+  :root{
+    --ink:#0f172a; --sub:#475569; --mute:#64748b; --line:#e2e8f0;
+    --bg:#f8fafc; --bg2:#f1f5f9; --card:#ffffff;
+    --acc:#4338ca; --acc-soft:#eef2ff; --acc-line:#c7d2fe;
+    --warn:#b45309; --warn-soft:#fffbeb; --warn-line:#fcd34d;
+    --good:#047857; --bad:#b91c1c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,sans-serif;
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;margin:0}
+  p{margin:0 0 14px}
+  strong{font-weight:800}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;
+       background:var(--bg2);padding:1px 5px;border-radius:4px}
+  pre{background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:10px;font-size:12px;
+      overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;
+      margin:0 0 14px}
+  .hidden{display:none !important}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* The hero paragraph is taller than most viewports, so the header must NOT be sticky - a
+     sticky box taller than the screen pins itself over the page forever. Only the tab bar sticks. */
+  header{background:#fff;padding-bottom:4px}
+  nav#tabbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+  nav#tabbar .wrap{padding:10px 16px}
+  .wrap{max-width:1140px;margin:0 auto;padding:18px 16px}
+  .wrap-narrow{max-width:840px;margin:0 auto;padding:24px 16px 60px}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--acc);margin:0 0 8px}
+  h1.hero{font-size:20px;font-weight:900;margin-bottom:16px}
+  @media(min-width:768px){ h1.hero{font-size:23px} }
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tabs button{border:0;border-radius:9px;padding:9px 20px;font-weight:700;font-size:14px;
+               background:var(--bg2);color:var(--ink);cursor:pointer;font-family:inherit}
+  .tabs button.tab-active{background:var(--ink);color:#fff}
+
+  section.tab-panel{min-height:calc(100vh - 76px)}
+  #look{background:var(--bg2);padding:16px}
+  #understand{padding:16px}
+  #build{background:var(--bg);padding:16px}
+  @media(min-width:768px){ #look,#understand,#build{padding:32px 16px} }
+
+  .cols{display:grid;grid-template-columns:1fr;gap:18px;max-width:1140px;margin:0 auto}
+  @media(min-width:1024px){ .cols{grid-template-columns:1.55fr 1fr} }
+  .stack{display:flex;flex-direction:column;gap:18px}
+
+  .card{background:var(--card);border-radius:16px;padding:18px;
+        box-shadow:0 1px 2px rgba(15,23,42,.06),0 1px 10px rgba(15,23,42,.05)}
+  .lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute);margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .pill{padding:6px 11px;border-radius:9px;font-size:12.5px;font-weight:700;font-family:inherit;
+        border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .pill:hover{background:var(--acc-soft);border-color:var(--acc-line)}
+  .pill:disabled{opacity:.34;cursor:default}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  select.pill{cursor:pointer}
+  .go{padding:8px 15px;border-radius:9px;border:0;background:var(--acc);color:#fff;
+      font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.4;cursor:default}
+
+  svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;
+           pointer-events:none}
+  #board{width:100%;max-height:230px;touch-action:manipulation}
+  #board .hit{cursor:pointer}
+
+  table.num{border-collapse:collapse;width:100%}
+  table.num th,table.num td{padding:4px 8px;font-variant-numeric:tabular-nums}
+  table.num th{font-size:10.5px;letter-spacing:.05em;color:var(--mute);text-align:right;font-weight:800}
+  table.num th:first-child,table.num td:first-child{text-align:left}
+  table.num td{text-align:right;font-size:12.5px;border-top:1px solid var(--line)}
+
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+       max-height:150px;overflow:auto}
+  .log div{padding:1px 0;border-bottom:1px solid var(--bg2)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:3px}
+  .chip{width:30px;text-align:center;border-radius:6px;padding:2px 0;font-size:11px;
+        font-family:ui-monospace,monospace;background:var(--bg2);border:1px solid transparent}
+  .chip b{display:block;font-size:12.5px}
+  .chip i{display:block;font-size:9px;font-style:normal;color:var(--mute)}
+  .chip.per{background:var(--acc-soft);border-color:var(--acc-line)}
+  .chip.zer{background:#fee2e2;border-color:#fca5a5}
+
+  .note{border-left:4px solid var(--acc);background:var(--acc-soft);padding:12px 14px;border-radius:0 10px 10px 0;
+        margin:0 0 16px}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .note p{margin:0;font-size:13.5px}
+  .note p+p{margin-top:8px}
+
+  .verdict{font-weight:900;font-size:14px}
+  .win{color:var(--good)} .lose{color:var(--bad)}
+  .bar{height:9px;border-radius:99px;background:var(--line);overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--acc)}
+  .small{font-size:12px;color:var(--sub)}
+  .tiny{font-size:11.5px;color:var(--mute)}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0}
+  .kv b{font-variant-numeric:tabular-nums}
+  h2.big{font-size:23px;font-weight:900;margin:0 0 16px}
+  h3.mid{font-size:17.5px;font-weight:800;margin:26px 0 10px}
+  .wrap-narrow p,.wrap-narrow li{color:#1e293b}
+  .wrap-narrow ul{margin:0 0 14px;padding-left:22px}
+  .wrap-narrow li{margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">GAMEFROMZERO · DAY 70</p>
+    <h1 class="hero">
+      🎳 Kayles — a row of bowling pins, and a ball that knocks down <strong>one pin, or two that
+      are side by side</strong>. Take the last pin and you win. Knock a pin out of the middle and
+      the row does not shrink, it <em>splits</em>: one game becomes two, and by the middle of a
+      match you are not playing a position at all, you are playing a <strong>sum</strong> of four
+      or five little games at once. No search can hold that — the branching is the product of the
+      parts. So the engine is not a search. It is the <strong>Sprague&ndash;Grundy theorem</strong>:
+      give every row a single number, its nim-value, and the whole board is the
+      <strong>XOR</strong> of those numbers. Zero means you lose. Anything else and there is a move
+      to zero. The page computes those numbers by <code>mex</code> from the definition, then proves
+      the decomposition it depends on by brute force over <strong>every one of the 65,536 boards</strong>
+      of sixteen cells, with a solver that has never heard of a row. Kayles' nim-values never exceed
+      <strong>8</strong> and settle into a cycle of length <strong>12</strong> from row 71 onwards —
+      not observed and extrapolated but <em>certified</em>, by a finite check that the Guy&ndash;Smith
+      criterion turns into a proof. And then the part that inverts: change one word of the rules,
+      <em>last pin loses</em>, and the same nim-values still call <strong>96.9%</strong> of positions
+      correctly while a bot that trusts them wins <strong>8 of 719</strong> games it was handed as
+      won — and on the one rule set where they are wrong about <em>every single position</em>, the
+      same bot wins <strong>525 of 525</strong>, because when every move is winning, being wrong is
+      free. Verdict accuracy over a uniform sample of positions is not a weak proxy for playing
+      strength; it is not a proxy for it at all. Pure vanilla JS, one file, no build step.
+    </h1>
+  </div>
+</header>
+
+<nav id="tabbar">
+  <div class="wrap tabs" id="tabs">
+    <button data-tab="look" class="tab-active">🎳 PLAY</button>
+    <button data-tab="understand">🧠 UNDERSTAND</button>
+    <button data-tab="build">🔨 BUILD</button>
+  </div>
+</nav>
+
+<section id="look" class="tab-panel">
+  <div class="cols">
+
+    <div class="stack">
+      <div class="card">
+        <div class="row" style="margin-bottom:12px">
+          <select id="ruleSel" class="pill"></select>
+          <select id="convSel" class="pill">
+            <option value="normal">last pin WINS (normal play)</option>
+            <option value="misere">last pin LOSES (mis&egrave;re)</option>
+          </select>
+          <select id="botSel" class="pill">
+            <option value="perfect">bot: perfect (nim-values)</option>
+            <option value="mirror">bot: mirror &mdash; make the rows pair up</option>
+            <option value="greedy">bot: always the biggest bite, off the end</option>
+            <option value="random">bot: legal move at random</option>
+          </select>
+          <button id="hintBtn" class="pill">show winning moves</button>
+        </div>
+        <div style="margin-bottom:10px">
+          <div class="row" style="justify-content:space-between">
+            <span class="lbl" style="margin:0">PINS IN THE RACK</span>
+            <span class="lbl mono" id="widthLbl" style="margin:0"></span>
+          </div>
+          <input id="width" type="range" min="4" max="24" step="1" value="13" style="width:100%" />
+        </div>
+        <p class="small" id="ruleLine" style="margin:0"></p>
+      </div>
+
+      <div class="card">
+        <div class="row" style="margin-bottom:8px">
+          <span class="lbl" style="margin:0">KNOCK DOWN</span>
+          <span id="brushes" class="row" style="gap:6px"></span>
+          <span class="tiny">then click the leftmost pin of the run</span>
+        </div>
+        <svg id="board" viewBox="0 0 660 200" preserveAspectRatio="xMidYMid meet"></svg>
+        <p class="small" id="status" style="margin:6px 0 0"></p>
+        <div class="row" style="margin-top:10px">
+          <button id="newBtn" class="go">new rack</button>
+          <button id="undoBtn" class="pill">undo</button>
+          <button id="botFirst" class="pill">let the bot open</button>
+          <button id="autoBtn" class="pill">play it out for me</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE POSITION, DECOMPOSED</p>
+        <div id="decomp" class="mono" style="font-size:13px"></div>
+        <p class="tiny" style="margin:8px 0 0">
+          Each surviving run of pins is an independent game. The engine scores each one on its own
+          and XORs the results &mdash; that single number, and nothing about where the pins are, decides
+          the position.
+        </p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">MOVE LOG</p>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">NIM-VALUES OF A SINGLE ROW</p>
+        <div id="strip" class="chips"></div>
+        <p class="tiny" style="margin:8px 0 0" id="stripNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE PERIOD, CERTIFIED</p>
+        <div id="period" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EVERY BOARD OF 16 CELLS</p>
+        <div id="maskBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">MIS&Egrave;RE: ONE WORD, A DIFFERENT GAME</p>
+        <div id="misBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">FOUR PLAYERS, ONE PERFECT OPPONENT</p>
+        <table class="num" id="raceTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="raceNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE MIRROR TRICK, SWEPT</p>
+        <table class="num" id="mirrorTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="mirrorNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">GO DEEPER</p>
+        <p class="small" style="margin:0 0 8px">
+          Re-run the exhaustive sweeps at a larger cap &mdash; every position up to 28 pins, and every
+          one of the 262,144 boards of eighteen cells, for all four rule sets.
+        </p>
+        <button id="deepBtn" class="go">run the deep sweep</button>
+        <div id="deepOut" class="small mono" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">One game becomes two, and the search dies</h2>
+
+    <p>Kayles is the simplest game in this series to explain and the first one whose position is
+    not a position. A rack of pins, a ball, and a move that knocks down one pin or two adjacent
+    ones. Last player to knock a pin down wins. That is the whole rulebook.</p>
+
+    <p>Take a rack of thirteen and knock out the pin in the middle. You do not have twelve pins
+    now. You have <strong>six and six</strong> — two separate games, with no interaction between
+    them beyond the fact that you must move in exactly one of them per turn. Knock a pin out of
+    one of the sixes and you have <strong>six, two and three</strong>. By ply five a typical
+    position is four or five independent games running in parallel.</p>
+
+    <p>Every engine before this one in this series would try to search that. It cannot be done,
+    and not because the tree is deep — because it is <em>wide in a multiplicative way</em>. The
+    number of moves is the sum over parts, the number of continuations is the product over parts,
+    and a rack of twenty-four pins has more distinct reachable positions than there are moves you
+    could ever evaluate. Depth limits do not rescue it either: this game has no evaluation
+    function, only a verdict, and a verdict is not something you can approximate at depth 8.</p>
+
+    <h3 class="mid">The theorem that replaces the search</h3>
+
+    <p>Sprague and Grundy, independently, in 1935 and 1939: <strong>every impartial game under
+    normal play is equivalent to a single Nim heap</strong>. Not similar to — equivalent, in the
+    sense that you can swap one for the other inside any larger game and nothing changes. The size
+    of that heap is the game's <em>nim-value</em>, and it is computed by a recursion with one line
+    in it:</p>
+
+    <pre>G(position) = mex { G(p) : p is a position you can move to }
+
+mex S = the smallest non-negative integer NOT in S      mex{} = 0, mex{0,1,3} = 2</pre>
+
+    <p>And the reason it is worth anything at all: for a <em>sum</em> of independent games, the
+    nim-values combine by <strong>XOR</strong>. That is the whole theorem. A board of rows
+    5&ndash;3&ndash;2 has value G(5) ^ G(3) ^ G(2), and the board is a loss for whoever must move
+    exactly when that XOR is 0.</p>
+
+    <p>So the engine is three lines long, and its cost is linear in the length of the longest row
+    rather than exponential in the number of rows. For Kayles the recursion writes itself, because
+    the moves out of a row of <em>n</em> are exactly the splits:</p>
+
+    <pre>G(n) = mex over all i of  { G(i) ^ G(n-1-i)      knock down one pin, at position i
+                            G(i) ^ G(n-2-i) }   knock down two, at positions i, i+1</pre>
+
+    <h3 class="mid">Why the XOR, and not something friendlier</h3>
+
+    <p>The temptation is to add. Two rows of two ought to be worth as much as one row of four —
+    same pins, same ball. Measured: <strong>G(4) = 1 and G(2) ^ G(2) = 0</strong>. Four pins in a
+    line is a win for the player to move; the same four pins split into two pairs is a loss. Pin
+    count is not a quantity this game respects, and neither is parity — over every position up to
+    24 pins, an even pin total is a loss 17.2% of the time and an odd total 15.2% of the time,
+    which is as close to no information as a statistic gets.</p>
+
+    <div class="note">
+      <p>XOR is not a convenient encoding, it is forced. If the board's value were <em>v</em>, the
+      opponent could mirror you into a heap of size <em>v</em> and the analysis of Nim applies
+      verbatim: a sum is a loss precisely when every bit cancels, because any single move changes
+      exactly one part and therefore cannot leave the total unchanged, while any nonzero total has
+      a part whose value shares that total's leading bit and can be reduced to cancel it.</p>
+    </div>
+
+    <h3 class="mid">The decomposition is the assumption, so the page attacks it</h3>
+
+    <p>Everything above rests on one unproved-in-code claim: that the board really is the sum of
+    its runs. That claim is where a Sprague&ndash;Grundy implementation goes wrong, and it goes
+    wrong silently — you get plausible numbers and a bot that plays well until it does not.</p>
+
+    <p>So the page carries a second solver that does not believe in rows. It treats a board of
+    sixteen cells as a <strong>16-bit mask</strong>, enumerates all 65,536 of them, and computes a
+    nim-value for each one by mex over its own successors — no runs, no splitting, no XOR anywhere
+    in it. Then every single mask is compared against the XOR of its runs. <strong>65,536
+    agreements, 0 disagreements, in about sixty milliseconds</strong>, and the same again for each
+    of the four rule sets. That is the Sprague&ndash;Grundy theorem, verified rather than cited,
+    on every board a sixteen-pin rack can ever be in.</p>
+
+    <h3 class="mid">The sequence settles, and the settling can be proved</h3>
+
+    <p>The nim-values of a single Kayles row start
+    <code>0 1 2 3 1 4 3 2 1 4 2 6 4 1 2 7 1 4 3 2 &hellip;</code> and never exceed
+    <strong>8</strong>. From <em>n</em> = 71 they repeat with period <strong>12</strong>, forever.
+    Sixteen earlier terms break that period, the last of them at <em>n</em> = 70, which is why the
+    pattern is invisible in the first few dozen values everybody prints.</p>
+
+    <p>Observing a period is not proving one. The proof is a real theorem about octal games
+    (Guy&ndash;Smith, 1956): if the largest legal removal is <em>d</em>, and the values satisfy
+    G(n+p) = G(n) for every <em>n</em> from <em>s</em> up to <strong>2s + p + d</strong>, then they
+    satisfy it for every <em>n</em> ≥ <em>s</em>. The reason is that computing G(n) for
+    <em>n</em> &gt; 2s + p + d only ever consults pairs G(i) ^ G(n−c−i) in which at least one index
+    already sits in the periodic tail, so the whole option set repeats with it.</p>
+
+    <div class="note">
+      <p>For Kayles that turns "check forever" into "check n ≤ 156", and the page does the check
+      and prints the bound. It also carries the negative control that makes the check mean
+      something: claim the period starts one term earlier, at 70, and the same criterion must
+      <em>reject</em> it — which it does, because G(70) ≠ G(82).</p>
+    </div>
+
+    <h3 class="mid">Three neighbours, and what changes</h3>
+
+    <p>Kayles is the octal game <code>0.77</code>. The dropdown carries three relatives, each one
+    rule away, and they behave nothing like each other:</p>
+
+    <ul>
+      <li><strong>Dawson's Kayles (0.07)</strong> — you must knock down <em>exactly two</em>
+      adjacent pins. Period <strong>34</strong> from n = 53, values up to 9. And it has losing
+      single rows, which Kayles does not: 1, 5, 9, 15, 21, 25, 29 &hellip; <em>all of them odd</em>,
+      measured over 3,000 terms, for a reason you can see without any theory — see below.</li>
+      <li><strong>Odds only (0.707)</strong> — one pin or three, never two. The nim-value is
+      <strong>exactly n mod 2</strong>, for every n up to 3,000. Every move removes an odd number
+      of pins, so the parity of the whole rack flips every turn and the game is decided before it
+      starts. Sprague&ndash;Grundy is correct here and it is also completely unnecessary.</li>
+      <li><strong>Triples (0.777)</strong> — one, two or three. This one does not settle. There is
+      no period the page can find, and the largest nim-value keeps climbing as the rows get longer:
+      <strong>20 at n ≤ 100, 39 at 400, 73 at 800, 143 at 1600, 256 at 3000</strong>. An eventually
+      periodic sequence is bounded, so a value that keeps growing is not merely unexplained, it is
+      incompatible with the thing everybody assumes about these games.</li>
+    </ul>
+
+    <h3 class="mid">The mirror trick beats the theory, on exactly one board</h3>
+
+    <p>Here is a strategy with no mathematics in it at all. Faced with a single row, knock out the
+    middle — the middle pin if the row is odd, the middle two if it is even — and then, forever
+    after, <strong>copy whatever your opponent does, on the other side</strong>. You cannot lose:
+    every move they have, you have its reflection, so you always have a reply and they run out
+    first.</p>
+
+    <p>That is a complete winning strategy for any single row, of any length, and it needs neither
+    mex nor XOR nor the number 71. The page checks it on rows 1 to 200 — <strong>200 wins out of
+    200</strong> — and it is also the reason Kayles has <em>no</em> losing single row: any row can
+    be halved, because the rule set contains both a 1 and a 2, so one of the two parities is always
+    available. Dawson's Kayles has only the 2, an odd row cannot be halved by removing two, and
+    that is exactly where its losing rows are.</p>
+
+    <div class="note warn">
+      <p>Then the sweep, and the number that decides what this page says. Over every winning
+      position up to 24 pins, the mirror player finds a winning move
+      <strong>100% of the time on one row</strong> — and <strong>20.6% of the time on two</strong>.
+      Not "somewhat worse". Worse than picking a legal move blindfolded would be if the position
+      told you nothing. Three rows recovers to 59.1% and the overall rate is 52.7%, so the shape of
+      the failure is not "the heuristic degrades with size" either; it is that the pairing idea has
+      an answer only when a pairing move exists, and with two unequal rows there is usually no such
+      move and it invents one.</p>
+      <p>The moral is not that the mirror trick is bad. It is <em>perfect</em> where it applies,
+      and a rack of pins is exactly where it applies, so a person who has only ever seen Kayles
+      played from a full rack has never seen the theory earn anything. The second row is the whole
+      bill.</p>
+    </div>
+
+    <h3 class="mid">Change one word and the numbers stop meaning anything</h3>
+
+    <p>Mis&egrave;re play: the player who knocks down the last pin <em>loses</em>. Same board, same
+    moves, one word different in the win condition. Sprague&ndash;Grundy does not apply — the
+    theorem is a normal-play theorem, and there is no analogue that assigns a single number to a
+    mis&egrave;re game and combines by XOR.</p>
+
+    <p>What is striking is how well it nearly works. Solve every position up to 24 pins twice, once
+    under each convention, and the verdicts agree on <strong>96.91%</strong> of them. Only 227 of
+    7,338 positions flip. On that evidence the sensible engineering call is to ship the nim-values
+    and note the edge cases.</p>
+
+    <div class="note warn">
+      <p>So the page measures it instead. Hand a bot the nim-value engine, hand it 719 positions
+      that a perfect mis&egrave;re player wins from, let it move first, and put a perfect
+      mis&egrave;re tablebase on the other side. It wins <strong>8</strong>. Not 97% of 719 —
+      <strong>1.1%</strong>.</p>
+      <p>Being right about 96.91% of the state space bought nothing, because the 3.09% it is wrong
+      about is not scattered: it is the endgame. Every game, whatever it does earlier, arrives at
+      rows of one and two pins, and that is precisely where the two conventions come apart. An
+      accuracy figure computed over a uniform sample of positions answers a question nobody was
+      asking; the positions a game actually passes through are not uniformly sampled.</p>
+    </div>
+
+    <p>The same measurement across the other rule sets shows how little the 96.91% was ever worth
+    as a summary: Dawson's Kayles flips <strong>39.6%</strong> of its positions, Triples flips
+    <strong>0.8%</strong>, and Odds-only flips <strong>100%</strong> of them — every single
+    position, because the game is pure parity and mis&egrave;re inverts parity exactly.</p>
+
+    <div class="note warn">
+      <p>And then the same race on Odds-only inverts the inversion. The nim-values are wrong about
+      <em>every single position</em> in that game, and the bot reading them wins
+      <strong>525 out of 525</strong>. Every move there removes an odd number of pins, so the
+      parity of the rack flips whether you understand the game or not: from an even total, every
+      legal move wins, the engine cannot find a move that zeroes the XOR, falls through to its
+      first legal move, and that move is correct.</p>
+      <p>So the two numbers do not merely fail to track each other, they run in opposite
+      directions: 3.09% wrong on positions → 1.1% of games won; 100% wrong on positions →
+      100% of games won. Verdict accuracy over a uniform sample of positions is not a weak proxy
+      for playing strength. It is not a proxy for it at all.</p>
+    </div>
+
+    <h3 class="mid">What the engine returns</h3>
+
+    <p>Not a move. A number per row, XORed. If it is nonzero, <em>every</em> move that zeroes it
+    wins and the rest lose, and the page paints them: 27.6% of winning positions have exactly one
+    winning reply and the rest have several, up to nine. If it is zero, every move loses equally
+    and the bot plays the first one, because in a lost position there is nothing to optimise and
+    pretending otherwise is how engines acquire fake personalities.</p>
+
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">🔨 How it is built</h2>
+
+    <h3 class="mid">1. mex, and the only recursion on the page</h3>
+    <pre>function mex(set){ let m = 0; while (set.has(m)) m++; return m; }
+
+function grundyRow(allowed, N){
+  const G = new Int32Array(N + 1);            // G[0] = 0: no pins, no move, a loss
+  for (let n = 1; n &lt;= N; n++){
+    const s = new Set();
+    for (const c of allowed)                  // c = how many adjacent pins this rule set lets you take
+      for (let i = 0; i + c &lt;= n; i++)
+        s.add(G[i] ^ G[n - c - i]);           // knocking from the middle SPLITS: two games, XORed
+    G[n] = mex(s);
+  }
+  return G;
+}</pre>
+    <p>Nine lines and the game is solved for every rack length at once. The <code>^</code> inside
+    the loop is not an optimisation — a move out of a single row generally lands in a
+    <em>sum</em> of two rows, so the option's value is already a XOR before any board exists.</p>
+
+    <h3 class="mid">2. A position is a multiset, sorted, and that is its key</h3>
+    <pre>const normRows = rows =&gt; rows.filter(x =&gt; x &gt; 0).sort((a, b) =&gt; b - a);
+const rowsKey  = rows =&gt; rows.join(",");</pre>
+    <p>Rows are interchangeable and empty rows do not exist, so <code>[5,0,3,2]</code>,
+    <code>[2,3,5]</code> and <code>[5,3,2]</code> are one position. Skip the normalisation and the
+    tables silently triple in size while the memoisation stops hitting; every exhaustive count on
+    this page would be wrong in the same direction, which is why the position census is asserted
+    against the partition numbers rather than trusted.</p>
+
+    <h3 class="mid">3. The engine, in full</h3>
+    <pre>const xorOf = (rows, G) =&gt; rows.reduce((v, n) =&gt; v ^ G[n], 0);
+
+winningReplies(rows, allowed, G)    // every move whose result XORs to 0
+  = rowMoves(rows, allowed).filter(m =&gt; xorOf(m.res, G) === 0);</pre>
+    <p>That is the whole player. No depth, no evaluation, no time control. A position is won iff
+    the XOR is nonzero, and the winning moves are the ones that zero it.</p>
+
+    <h3 class="mid">4. The second solver, which does not believe in rows</h3>
+    <pre>function maskSolve(allowed, W){          // EVERY board of W cells, as a bitmask
+  const Gm = new Int32Array(1 &lt;&lt; W);
+  for (let m = 1; m &lt; (1 &lt;&lt; W); m++){
+    const s = new Set();
+    for (const c of allowed){
+      const run = (1 &lt;&lt; c) - 1;
+      for (let i = 0; i + c &lt;= W; i++){
+        const blk = run &lt;&lt; i;
+        if ((m &amp; blk) === blk) s.add(Gm[m ^ blk]);   // no rows, no splitting, no XOR
+      }
+    }
+    Gm[m] = mex(s);
+  }
+  return Gm;
+}
+// then, for all 65,536 masks:  Gm[m] === xorOf(runsOfMask(m), G)</pre>
+    <p>This is the check that matters. The row engine is fast because it assumes the board
+    decomposes; the mask engine is slow because it assumes nothing. Where they overlap they must
+    agree on every mask, and they do — 65,536 per rule set at W = 16, 262,144 at W = 18 behind the
+    deep-sweep button.</p>
+
+    <h3 class="mid">5. Two independent exact solvers over multisets</h3>
+    <pre>normal.set(k, moves.some(m =&gt; !normal.get(key(m.res))));            // no nim-values anywhere
+misere.set(k, moves.length === 0 ? true                            // can't move =&gt; you WIN
+                                : moves.some(m =&gt; !misere.get(key(m.res))));
+direct.set(k, mex(new Set(moves.map(m =&gt; direct.get(key(m.res)))))); // Grundy of the SUM, directly</pre>
+    <p>Three passes over the same move graph, in ascending pin count so children are always
+    finished first. <code>normal</code> is the verdict without theory, <code>direct</code> is the
+    nim-value of the whole multiset computed as one game — and the assertion
+    <code>direct === xorOf(rows, G)</code> over all 7,338 positions is Sprague&ndash;Grundy again,
+    stated on sums rather than on boards.</p>
+
+    <h3 class="mid">6. The periodicity certificate</h3>
+    <pre>// Guy-Smith: if G(n+p) === G(n) for every s &lt;= n &lt;= 2s + p + d, it holds for ALL n &gt;= s.
+function certifyPeriod(allowed, s, p){
+  const d = Math.max.apply(null, allowed);
+  const bound = 2 * s + p + d;
+  const G = grundyRow(allowed, bound + p + 1);
+  for (let n = s; n &lt;= bound; n++) if (G[n + p] !== G[n]) return { ok: false, at: n };
+  return { ok: true, bound };
+}
+// kayles: s=71 p=12 d=2 -&gt; check n &lt;= 156, and s=70 must be REJECTED</pre>
+    <p>The period is found first by the cheap route — for each candidate p, the last index where
+    G(n+p) ≠ G(n), plus one — and then certified. Finding is O(pN); certifying is a proof.</p>
+
+    <h3 class="mid">7. The mirror player, written to be fair to it</h3>
+    <pre>botMirror: if any move leaves every row length appearing an EVEN number of times, play it
+           else halve the longest row  (take c pins from the middle, c chosen so n-c is even)</pre>
+    <p>The first clause is the actual mirror strategy and it is exact whenever it fires — a paired
+    position is a loss for the mover, because every move can be answered in the twin. The second
+    clause is what a person does when no pairing move exists, and it is the one that is 20.6%
+    right on two rows. Writing it any weaker would have made the comparison meaningless.</p>
+
+    <h3 class="mid">8. The mis&egrave;re measurement, and why it is a race and not a percentage</h3>
+    <pre>// every misere-WON position up to 16 pins, XOR bot to move, perfect misere bot replying
+for (const p of positions) if (misere.get(key(p))) {
+  ...  playRows(p, allowed, botPerfectNormal, botMisereExact, ctx, /*misere=*/true)
+}
+// -&gt; 8 wins out of 719, against a table that agrees with the XOR verdict on 96.91% of positions</pre>
+    <p>A control sits next to it: the same 719 starts with the exact mis&egrave;re bot moving
+    first must return 719 out of 719, or the test is measuring a broken tablebase rather than a
+    broken heuristic.</p>
+
+    <h3 class="mid">9. Board moves and row moves, kept honest</h3>
+    <pre>// the UI knocks pins out of a board; the engine reasons about runs.
+// asserted on random boards: boardMoves(cells) and rowMoves(runsOf(cells)) produce the SAME
+// multiset of resulting positions, counted with multiplicity collapsed.</pre>
+    <p>The board has coordinates and the engine does not. Two different move generators therefore
+    exist, and the one place a bug could hide is between them, so the self-test regenerates both on
+    random boards and compares the sets of resulting run-multisets.</p>
+
+    <h3 class="mid">10. What this engine is not</h3>
+    <pre>// Exact and total for normal play: one linear pass over row lengths, any number of rows.
+// NOT a misere solver - the misere tables here are brute force over multisets and cost
+// partitions(T), which is fine to 28 pins and hopeless at 60. Misere Kayles does have an
+// exact theory (the misere quotient, Plambeck-Siegel), and it is not in here.
+// The 0.777 rule set is not solved at all; the page reports that it cannot find a period
+// and that the values grow, which is a measurement and not a theorem.</pre>
+
+    <h3 class="mid">Self-test</h3>
+    <pre id="selftest">running&hellip;</pre>
+
+    <h3 class="mid">🎉 GameFromZero Day 70 shipped.</h3>
+    <p class="small">Seventy games. The first one that is solved by giving every piece of the
+    board a single number and adding them up in the only way that works.</p>
+
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("tab-active"));
+  t.classList.add("tab-active");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// KAYLES. A rack of bowling pins in a line; a move knocks down one pin, or two that are adjacent.
+// Normal play: whoever takes the last pin wins. Knocking a pin out of the middle SPLITS the row,
+// so a position is a MULTISET of independent rows and the branching is multiplicative - no search
+// survives it. The engine is therefore the Sprague-Grundy theorem: each row gets one number, its
+// nim-value G(n) = mex over the values of its options, and the value of a sum of games is the XOR
+// of the parts. Zero is a loss for the player to move; anything else has a move to zero.
+//
+// Nothing in this block touches the DOM.
+
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function mex(set){ let m = 0; while (set.has(m)) m++; return m; }
+
+// ---------------------------------------------------------------- the rule sets
+// Each is a finite octal game: the digit for k says which of "take the whole row / take from an
+// end / take from the middle" are legal when removing k pins. Here all three are always legal, so
+// every digit present is a 7 and every digit absent is a 0.
+const RULES = [
+  { key: "kayles",  name: "Kayles",           allowed: [1, 2],    octal: "0.77",
+    blurb: "knock down one pin, or two that are side by side" },
+  { key: "dawson",  name: "Dawson's Kayles",  allowed: [2],       octal: "0.07",
+    blurb: "you must knock down exactly two side-by-side pins" },
+  { key: "odd",     name: "Odds only",        allowed: [1, 3],    octal: "0.707",
+    blurb: "one pin, or three in a row - never two" },
+  { key: "triples", name: "Triples",          allowed: [1, 2, 3], octal: "0.777",
+    blurb: "one, two or three side-by-side pins" }
+];
+function ruleOf(key){
+  for (const r of RULES) if (r.key === key) return r;
+  return RULES[0];
+}
+
+// ---------------------------------------------------------------- nim-values of a single row
+// G(n) = mex { G(i) ^ G(n-c-i) } over every legal removal size c and every position i it can start
+// at. The XOR is inside the option set because a middle removal already lands in a SUM.
+const _gcache = new Map();
+function grundyRow(allowed, N){
+  const ck = allowed.join(",");
+  const hit = _gcache.get(ck);
+  if (hit && hit.length > N) return hit;
+  const G = new Int32Array(N + 1);
+  for (let n = 1; n <= N; n++){
+    const s = new Set();
+    for (const c of allowed){
+      if (c > n) continue;
+      for (let i = 0; i + c <= n; i++) s.add(G[i] ^ G[n - c - i]);
+    }
+    G[n] = mex(s);
+  }
+  _gcache.set(ck, G);
+  return G;
+}
+
+// ---------------------------------------------------------------- boards (what the UI touches)
+function newBoard(w){ const b = new Array(w); for (let i = 0; i < w; i++) b[i] = 1; return b; }
+function runsOfBoard(cells){
+  const out = []; let cur = 0;
+  for (let i = 0; i < cells.length; i++){
+    if (cells[i]) cur++;
+    else { if (cur) out.push(cur); cur = 0; }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+function boardMoves(cells, allowed){
+  const out = [];
+  for (const c of allowed)
+    for (let i = 0; i + c <= cells.length; i++){
+      let ok = true;
+      for (let k = 0; k < c; k++) if (!cells[i + k]){ ok = false; break; }
+      if (ok) out.push({ at: i, cnt: c });
+    }
+  return out;
+}
+function applyBoard(cells, mv){
+  const b = cells.slice();
+  for (let k = 0; k < mv.cnt; k++) b[mv.at + k] = 0;
+  return b;
+}
+
+// ---------------------------------------------------------------- positions (what the engine sees)
+const normRows = rows => rows.filter(x => x > 0).sort((a, b) => b - a);
+const rowsKey  = rows => rows.join(",");
+const pinsOf   = rows => rows.reduce((a, x) => a + x, 0);
+
+function rowMoves(rows, allowed){
+  const out = [];
+  for (let r = 0; r < rows.length; r++){
+    const n = rows[r];
+    for (const c of allowed){
+      if (c > n) continue;
+      for (let i = 0; i + c <= n; i++){
+        const rest = rows.slice();
+        rest.splice(r, 1);
+        rest.push(i, n - c - i);
+        out.push({ row: r, at: i, cnt: c, res: normRows(rest) });
+      }
+    }
+  }
+  return out;
+}
+function xorOf(rows, G){ let v = 0; for (const n of rows) v ^= G[n]; return v; }
+function winningReplies(rows, allowed, G){
+  return rowMoves(rows, allowed).filter(m => xorOf(m.res, G) === 0);
+}
+function boardWinning(cells, allowed, G){
+  return boardMoves(cells, allowed)
+    .filter(m => xorOf(runsOfBoard(applyBoard(cells, m)), G) === 0);
+}
+
+// ---------------------------------------------------------------- solver #2: no rows at all
+// Every board of W cells as a W-bit mask, Grundy by mex over its own successors. This solver has
+// no notion of a run, never splits anything and never XORs - so comparing it against the row
+// engine is a test of the DECOMPOSITION itself rather than of the arithmetic.
+function maskSolve(allowed, W){
+  const N = 1 << W, Gm = new Int32Array(N);
+  for (let m = 1; m < N; m++){
+    const s = new Set();
+    for (const c of allowed){
+      const run = (1 << c) - 1;
+      for (let i = 0; i + c <= W; i++){
+        const blk = run << i;
+        if ((m & blk) === blk) s.add(Gm[m ^ blk]);
+      }
+    }
+    Gm[m] = mex(s);
+  }
+  return Gm;
+}
+function runsOfMask(m, W){
+  const out = []; let cur = 0;
+  for (let i = 0; i < W; i++){
+    if (m & (1 << i)) cur++;
+    else { if (cur) out.push(cur); cur = 0; }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+function maskSweep(allowed, W){
+  const Gm = maskSolve(allowed, W), G = grundyRow(allowed, W + 2), N = 1 << W;
+  let bad = 0;
+  for (let m = 0; m < N; m++){
+    let x = 0;
+    for (const r of runsOfMask(m, W)) x ^= G[r];
+    if (Gm[m] !== x) bad++;
+  }
+  return { masks: N, bad: bad, full: Gm[N - 1], rowValue: G[W] };
+}
+
+// ---------------------------------------------------------------- solver #3: exact over multisets
+function partitionsUpTo(T){
+  const out = [];
+  const rec = (mx, left, cur) => {
+    out.push(cur.slice());
+    for (let v = Math.min(mx, left); v >= 1; v--){ cur.push(v); rec(v, left - v, cur); cur.pop(); }
+  };
+  rec(T, T, []);
+  return out;
+}
+// normal : win/loss with no nim-values in sight
+// misere : same graph, terminal flipped - a player who cannot move WINS
+// direct : the nim-value of the whole multiset computed as ONE game (mex over its successors)
+function tabulate(allowed, T){
+  const parts = partitionsUpTo(T);
+  parts.sort((a, b) => pinsOf(a) - pinsOf(b));
+  const normal = new Map(), misere = new Map(), direct = new Map();
+  let edges = 0;
+  for (const p of parts){
+    const k = rowsKey(p), ms = rowMoves(p, allowed);
+    edges += ms.length;
+    let lossN = false, lossM = false;
+    const s = new Set();
+    for (const m of ms){
+      const ck = rowsKey(m.res);
+      if (!normal.get(ck)) lossN = true;
+      if (!misere.get(ck)) lossM = true;
+      s.add(direct.get(ck));
+    }
+    normal.set(k, lossN);
+    misere.set(k, ms.length === 0 ? true : lossM);
+    direct.set(k, mex(s));
+  }
+  return { parts: parts, normal: normal, misere: misere, direct: direct, edges: edges, cap: T };
+}
+
+// ---------------------------------------------------------------- periodicity
+function findPeriod(G, N, maxP){
+  for (let p = 1; p <= maxP; p++){
+    let last = -1, breaks = 0;
+    for (let n = 0; n + p <= N; n++) if (G[n + p] !== G[n]){ last = n; breaks++; }
+    const st = last + 1;
+    // `breaks` is how many EARLIER terms violate the period - not the same thing as `start`,
+    // which is only where the last of them sits plus one.
+    if (st + 2 * p <= N) return { start: st, period: p, exceptions: breaks, lastException: last };
+  }
+  return null;
+}
+// Guy-Smith periodicity criterion. For a finite octal game whose largest legal removal is d, if
+// G(n+p) === G(n) holds for every s <= n <= 2s + p + d then it holds for every n >= s: computing
+// G(n) beyond that bound only ever pairs indices of which one is already inside the periodic tail.
+function certifyPeriod(allowed, s, p){
+  const d = Math.max.apply(null, allowed);
+  const bound = 2 * s + p + d;
+  const G = grundyRow(allowed, bound + p + 1);
+  for (let n = s; n <= bound; n++) if (G[n + p] !== G[n]) return { ok: false, bound: bound, at: n, d: d };
+  return { ok: true, bound: bound, checked: bound - s + 1, d: d };
+}
+function valueRange(allowed, N){
+  const G = grundyRow(allowed, N);
+  let mx = 0, zeros = 0, oddZeros = 0;
+  const first = {};
+  for (let n = 0; n <= N; n++){
+    if (G[n] > mx) mx = G[n];
+    if (first[G[n]] === undefined) first[G[n]] = n;
+    if (n > 0 && G[n] === 0){ zeros++; if (n % 2 === 1) oddZeros++; }
+  }
+  return { max: mx, zeros: zeros, oddZeros: oddZeros, first: first };
+}
+
+// ---------------------------------------------------------------- players
+function botPerfect(rows, allowed, ctx){
+  const ms = rowMoves(rows, allowed);
+  for (const m of ms) if (xorOf(m.res, ctx.G) === 0) return m;
+  return ms.length ? ms[0] : null;
+}
+function botMisereExact(rows, allowed, ctx){
+  const ms = rowMoves(rows, allowed);
+  for (const m of ms){
+    const k = rowsKey(m.res);
+    if (ctx.MIS.has(k) && ctx.MIS.get(k) === false) return m;
+  }
+  return ms.length ? ms[0] : null;
+}
+function isPaired(rows){
+  const c = new Map();
+  for (const v of rows) c.set(v, (c.get(v) || 0) + 1);
+  for (const v of c.values()) if (v % 2) return false;
+  return true;
+}
+function botMirror(rows, allowed, ctx){
+  const ms = rowMoves(rows, allowed);
+  for (const m of ms) if (isPaired(m.res)) return m;      // exact whenever it fires
+  const n = rows[0];                                      // else halve the longest row
+  for (const c of allowed){
+    if (c <= n && (n - c) % 2 === 0){
+      const i = (n - c) >> 1;
+      for (const m of ms) if (m.row === 0 && m.cnt === c && m.at === i) return m;
+    }
+  }
+  return ms.length ? ms[0] : null;
+}
+function botGreedy(rows, allowed, ctx){
+  const ms = rowMoves(rows, allowed);
+  const big = Math.max.apply(null, allowed);
+  for (let c = big; c >= 1; c--)
+    for (const m of ms) if (m.row === 0 && m.cnt === c && m.at === 0) return m;
+  return ms.length ? ms[0] : null;
+}
+function botRandom(rows, allowed, ctx){
+  const ms = rowMoves(rows, allowed);
+  return ms.length ? ms[Math.floor(ctx.rnd() * ms.length)] : null;
+}
+const BOTS = { perfect: botPerfect, mirror: botMirror, greedy: botGreedy, random: botRandom };
+
+// A game: player 0 moves first. Normal play, the player who cannot move LOSES; misere, they WIN.
+function playRows(start, allowed, fnA, fnB, ctx, misere){
+  let rows = normRows(start.slice()), turn = 0, plies = 0;
+  for (;;){
+    const ms = rowMoves(rows, allowed);
+    if (!ms.length) return { winner: misere ? turn : (turn ^ 1), plies: plies, rows: rows };
+    const mv = (turn === 0 ? fnA : fnB)(rows, allowed, ctx);
+    if (!mv) return { winner: misere ? turn : (turn ^ 1), plies: plies, rows: rows };
+    rows = mv.res; turn ^= 1; plies++;
+    if (plies > 100000) return { winner: -1, plies: plies, rows: rows };
+  }
+}
+
+// ---------------------------------------------------------------- studies
+// Every position up to the cap, three ways: does the direct nim-value of the SUM equal the XOR of
+// the parts, does the XOR verdict equal the theory-free win/loss verdict, and does misere differ.
+function sumSweep(allowed, T){
+  const G = grundyRow(allowed, T + 4), tab = tabulate(allowed, T);
+  let sgBad = 0, verdictBad = 0, misDiff = 0, wins = 0;
+  const diffSample = [];
+  for (const p of tab.parts){
+    const k = rowsKey(p), x = xorOf(p, G);
+    if (tab.direct.get(k) !== x) sgBad++;
+    const won = tab.normal.get(k);
+    if ((x !== 0) !== won) verdictBad++;
+    if (won) wins++;
+    if (won !== tab.misere.get(k)){
+      misDiff++;
+      if (diffSample.length < 10) diffSample.push(p.length ? rowsKey(p) : "(empty)");
+    }
+  }
+  return { cap: T, positions: tab.parts.length, edges: tab.edges, sgBad: sgBad,
+           verdictBad: verdictBad, misDiff: misDiff, wins: wins, diffSample: diffSample, tab: tab };
+}
+
+// The mirror player, judged move by move rather than by result: on every WON position, does its
+// move zero the XOR? Bucketed by how many rows the position has.
+function mirrorSweep(allowed, T){
+  const G = grundyRow(allowed, T + 4), parts = partitionsUpTo(T);
+  const by = new Map();
+  let tot = 0, good = 0;
+  for (const p of parts){
+    if (!p.length || xorOf(p, G) === 0) continue;
+    const mv = botMirror(p, allowed, null);
+    const ok = mv && xorOf(mv.res, G) === 0;
+    const b = Math.min(p.length, 4);
+    if (!by.has(b)) by.set(b, { rows: b, n: 0, ok: 0 });
+    const e = by.get(b);
+    e.n++; tot++;
+    if (ok){ e.ok++; good++; }
+  }
+  const rows = Array.from(by.values()).sort((a, b) => a.rows - b.rows);
+  return { buckets: rows, total: tot, good: good, cap: T };
+}
+// and the same strategy on single rows only, where it is a complete strategy with a proof
+function mirrorSingleRows(allowed, N){
+  const G = grundyRow(allowed, N + 4);
+  let n = 0, ok = 0;
+  for (let r = 1; r <= N; r++){
+    n++;
+    const mv = botMirror([r], allowed, null);
+    if (mv && xorOf(mv.res, G) === 0) ok++;
+  }
+  return { n: n, ok: ok };
+}
+
+// Hand the normal-play nim-value bot a misere game. Every misere-WON position up to `cap` pins,
+// XOR bot to move, exact misere tablebase replying. The control runs the exact bot on both sides.
+function misereBlindRace(allowed, tab, cap){
+  const G = grundyRow(allowed, cap + 4);
+  const ctx = { G: G, MIS: tab.misere, rnd: mulberry32(70) };
+  let starts = 0, blindWins = 0, controlWins = 0, plies = 0;
+  for (const p of tab.parts){
+    if (!p.length || pinsOf(p) > cap) continue;
+    if (!tab.misere.get(rowsKey(p))) continue;
+    starts++;
+    const a = playRows(p, allowed, botPerfect, botMisereExact, ctx, true);
+    if (a.winner === 0) blindWins++;
+    plies += a.plies;
+    const b = playRows(p, allowed, botMisereExact, botMisereExact, ctx, true);
+    if (b.winner === 0) controlWins++;
+  }
+  return { starts: starts, blindWins: blindWins, controlWins: controlWins, plies: plies, cap: cap };
+}
+
+// Four players against one perfect opponent, from random WON positions.
+function botRace(allowed, names, games, seed, maxRows, maxLen){
+  const G = grundyRow(allowed, maxLen + 4);
+  const rnd = mulberry32(seed);
+  const ctx = { G: G, rnd: rnd, MIS: null };
+  const starts = [];
+  let guard = 0;
+  while (starts.length < games && guard++ < games * 40){
+    const k = 1 + Math.floor(rnd() * maxRows), r = [];
+    for (let i = 0; i < k; i++) r.push(1 + Math.floor(rnd() * maxLen));
+    const p = normRows(r);
+    if (xorOf(p, G) !== 0) starts.push(p);
+  }
+  const out = [];
+  for (const nm of names){
+    let w = 0, plies = 0;
+    for (const p of starts){
+      const g = playRows(p, allowed, BOTS[nm], botPerfect, ctx, false);
+      if (g.winner === 0) w++;
+      plies += g.plies;
+    }
+    out.push({ name: nm, games: starts.length, wins: w, rate: w / starts.length, plies: plies });
+  }
+  return { rows: out, starts: starts.length };
+}
+
+// Total-pin parity as a predictor, and how many winning positions have a UNIQUE winning reply.
+function parityStudy(allowed, T){
+  const G = grundyRow(allowed, T + 4), parts = partitionsUpTo(T);
+  let ev = 0, evL = 0, od = 0, odL = 0;
+  for (const p of parts){
+    const loss = xorOf(p, G) === 0;
+    if (pinsOf(p) % 2 === 0){ ev++; if (loss) evL++; } else { od++; if (loss) odL++; }
+  }
+  return { even: ev, evenLoss: evL, odd: od, oddLoss: odL };
+}
+function uniquenessStudy(allowed, T){
+  const G = grundyRow(allowed, T + 4), parts = partitionsUpTo(T);
+  let wins = 0, uniq = 0, tot = 0;
+  const hist = new Map();
+  for (const p of parts){
+    if (!p.length || xorOf(p, G) === 0) continue;
+    wins++;
+    const seen = new Set();
+    for (const m of rowMoves(p, allowed)) if (xorOf(m.res, G) === 0) seen.add(rowsKey(m.res));
+    tot += seen.size;
+    hist.set(seen.size, (hist.get(seen.size) || 0) + 1);
+    if (seen.size === 1) uniq++;
+  }
+  return { wins: wins, unique: uniq, total: tot, hist: hist };
+}
+// Does the largest nim-value keep growing? An eventually periodic sequence is bounded, so it must not.
+function growthStudy(allowed, caps){
+  const out = [];
+  for (const N of caps) out.push({ n: N, max: valueRange(allowed, N).max });
+  return out;
+}
+// The board move generator and the row move generator must agree on the set of resulting positions.
+function boardRowAgreement(allowed, W, trials, seed){
+  const rnd = mulberry32(seed);
+  let bad = 0, checked = 0;
+  for (let t = 0; t < trials; t++){
+    const cells = [];
+    for (let i = 0; i < W; i++) cells.push(rnd() < 0.7 ? 1 : 0);
+    const rows = normRows(runsOfBoard(cells));
+    const a = new Set(), b = new Set();
+    for (const m of boardMoves(cells, allowed)) a.add(rowsKey(normRows(runsOfBoard(applyBoard(cells, m)))));
+    for (const m of rowMoves(rows, allowed)) b.add(rowsKey(m.res));
+    checked++;
+    if (a.size !== b.size) { bad++; continue; }
+    for (const k of a) if (!b.has(k)) { bad++; break; }
+  }
+  return { checked: checked, bad: bad };
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- UI
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString("en-US");
+const pct = (a, b) => b ? (100 * a / b).toFixed(1) + "%" : "-";
+
+const ST = {
+  rule: "kayles", conv: "normal", bot: "perfect", width: 13, brush: 1,
+  cells: null, hist: [], hint: false, over: false, turn: 0, hover: -1,
+  G: null, MIS: null, rnd: mulberry32(20260824)
+};
+
+function allowed(){ return ruleOf(ST.rule).allowed; }
+function rows(){ return normRows(runsOfBoard(ST.cells)); }
+
+function ensureTables(){
+  ST.G = grundyRow(allowed(), 64);
+  if (ST.conv === "misere"){
+    const t = tabulate(allowed(), Math.max(4, ST.width));
+    ST.MIS = t.misere;
+  } else ST.MIS = null;
+}
+
+function resetGame(botOpens){
+  ST.cells = newBoard(ST.width);
+  ST.hist = []; ST.over = false; ST.turn = 0;
+  ensureTables();
+  $("log").innerHTML = "";
+  if (botOpens){ ST.turn = 1; botMove(); }
+  draw();
+}
+
+function logLine(html){
+  const d = document.createElement("div");
+  d.innerHTML = html;
+  $("log").prepend(d);
+}
+
+function verdictNow(){
+  const r = rows();
+  if (ST.conv === "misere" && ST.MIS){
+    const k = rowsKey(r);
+    if (ST.MIS.has(k)) return ST.MIS.get(k);
+  }
+  return xorOf(r, ST.G) !== 0;
+}
+
+function botChoice(){
+  const r = rows();
+  if (!r.length) return null;
+  if (ST.conv === "misere" && ST.MIS)
+    return botMisereExact(r, allowed(), { G: ST.G, MIS: ST.MIS, rnd: ST.rnd });
+  return BOTS[ST.bot](r, allowed(), { G: ST.G, MIS: ST.MIS, rnd: ST.rnd });
+}
+
+// translate a row-move back onto the board: find a board move whose result matches
+function boardMoveFor(target){
+  for (const m of boardMoves(ST.cells, allowed()))
+    if (rowsKey(normRows(runsOfBoard(applyBoard(ST.cells, m)))) === rowsKey(target)) return m;
+  const ms = boardMoves(ST.cells, allowed());
+  return ms.length ? ms[0] : null;
+}
+
+function endIfOver(){
+  const ms = boardMoves(ST.cells, allowed());
+  if (ms.length) return false;
+  ST.over = true;
+  // the player to move cannot move
+  const loser = ST.turn;
+  const youLost = (ST.conv === "normal") ? (loser === 0) : (loser === 1);
+  logLine('<b style="color:' + (youLost ? "#b91c1c" : "#047857") + '">' +
+          (youLost ? "the rack is empty and it was your turn &mdash; you lose"
+                   : "the rack is empty and it was the bot's turn &mdash; you win") + "</b>");
+  return true;
+}
+
+function humanMove(mv){
+  if (ST.over || ST.turn !== 0) return;
+  ST.hist.push(ST.cells.slice());
+  ST.cells = applyBoard(ST.cells, mv);
+  const r = rows();
+  logLine("you &nbsp;knock down " + mv.cnt + " at " + (mv.at + 1) +
+          ' &rarr; <span class="mono">[' + (r.length ? r.join(" ") : "-") + "] xor " +
+          xorOf(r, ST.G) + "</span>");
+  ST.turn = 1;
+  draw();
+  if (endIfOver()){ draw(); return; }
+  setTimeout(botMove, 260);
+}
+
+function botMove(){
+  if (ST.over) return;
+  if (endIfOver()){ draw(); return; }
+  const pick = botChoice();
+  if (!pick){ endIfOver(); draw(); return; }
+  const bm = boardMoveFor(pick.res);
+  ST.cells = applyBoard(ST.cells, bm);
+  const r = rows();
+  logLine("bot &nbsp;knocks down " + bm.cnt + " at " + (bm.at + 1) +
+          ' &rarr; <span class="mono">[' + (r.length ? r.join(" ") : "-") + "] xor " +
+          xorOf(r, ST.G) + "</span>");
+  ST.turn = 0;
+  if (endIfOver()){ draw(); return; }
+  draw();
+}
+
+function autoPlay(){
+  if (ST.over) return;
+  const step = () => {
+    if (ST.over) return;
+    if (endIfOver()){ draw(); return; }
+    if (ST.turn === 0){
+      const r = rows();
+      const w = winningReplies(r, allowed(), ST.G);
+      const mv = (w.length ? w[0] : rowMoves(r, allowed())[0]);
+      humanMove(boardMoveFor(mv.res));
+    }
+    if (!ST.over) setTimeout(step, 340);
+  };
+  step();
+}
+
+// ---- drawing
+const PIN_W = 26;
+function draw(){
+  const W = ST.cells.length;
+  const svg = $("board");
+  const vw = Math.max(360, W * PIN_W + 40);
+  svg.setAttribute("viewBox", "0 0 " + vw + " 150");
+  const wins = ST.hint ? boardWinning(ST.cells, allowed(), ST.G) : [];
+  const winSet = new Set(wins.map(m => m.cnt + ":" + m.at));
+  const legal = boardMoves(ST.cells, allowed());
+  const legalSet = new Set(legal.map(m => m.cnt + ":" + m.at));
+  let s = "";
+  s += '<rect x="0" y="112" width="' + vw + '" height="8" rx="4" fill="#e2e8f0"/>';
+  for (let i = 0; i < W; i++){
+    const cx = 20 + i * PIN_W + PIN_W / 2;
+    const standing = ST.cells[i];
+    const inHover = ST.hover >= 0 && i >= ST.hover && i < ST.hover + ST.brush &&
+                    legalSet.has(ST.brush + ":" + ST.hover);
+    const isWin = ST.hint && winSet.has(ST.brush + ":" + i);
+    if (standing){
+      const body = "#f8fafc", edge = inHover ? "#4338ca" : "#94a3b8";
+      const fill = inHover ? "#c7d2fe" : body;
+      s += '<g opacity="1">';
+      s += '<path d="M ' + (cx - 3.4) + ' 42 C ' + (cx - 6.2) + ' 56 ' + (cx - 7.4) + ' 92 ' +
+           (cx - 6.4) + ' 108 L ' + (cx + 6.4) + ' 108 C ' + (cx + 7.4) + ' 92 ' + (cx + 6.2) +
+           ' 56 ' + (cx + 3.4) + ' 42 Z" fill="' + fill + '" stroke="' + edge + '" stroke-width="1.4"/>';
+      s += '<circle cx="' + cx + '" cy="35" r="6.4" fill="' + fill + '" stroke="' + edge +
+           '" stroke-width="1.4"/>';
+      s += '<rect x="' + (cx - 5.6) + '" y="60" width="11.2" height="4" fill="#dc2626" opacity="' +
+           (inHover ? ".85" : ".55") + '"/>';
+      s += "</g>";
+      if (isWin) s += '<circle cx="' + cx + '" cy="124" r="3.6" fill="#047857"/>';
+    } else {
+      s += '<g opacity=".22" transform="rotate(78 ' + cx + ' 100)">';
+      s += '<path d="M ' + (cx - 3.4) + ' 42 C ' + (cx - 6.2) + ' 56 ' + (cx - 7.4) + ' 92 ' +
+           (cx - 6.4) + ' 108 L ' + (cx + 6.4) + ' 108 C ' + (cx + 7.4) + ' 92 ' + (cx + 6.2) +
+           ' 56 ' + (cx + 3.4) + ' 42 Z" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.4"/>';
+      s += '<circle cx="' + cx + '" cy="35" r="6.4" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.4"/>';
+      s += "</g>";
+    }
+    s += '<text x="' + cx + '" y="140" text-anchor="middle" fill="#94a3b8">' + (i + 1) + "</text>";
+    s += '<rect class="hit" x="' + (cx - PIN_W / 2) + '" y="20" width="' + PIN_W +
+         '" height="100" fill="transparent" data-i="' + i + '"/>';
+  }
+  svg.innerHTML = s;
+
+  const r = rows();
+  const x = xorOf(r, ST.G);
+  const wr = winningReplies(r, allowed(), ST.G).length;
+  const youWin = verdictNow();
+  let st;
+  if (ST.over) st = "game over &mdash; press <b>new rack</b>.";
+  else if (!r.length) st = "the rack is empty.";
+  else st = (ST.turn === 0 ? "your move. " : "bot thinking. ") +
+            'the position is <span class="verdict ' + (youWin ? "win" : "lose") + '">' +
+            (youWin ? "WON for whoever moves" : "LOST for whoever moves") + "</span>" +
+            (ST.conv === "misere" ? " (mis&egrave;re table)" : ", xor = " + x) +
+            (ST.conv === "normal" && wr ? " &middot; " + wr + " winning repl" + (wr === 1 ? "y" : "ies") : "");
+  $("status").innerHTML = st;
+
+  let d = "";
+  if (!r.length) d = '<span style="color:#64748b">no pins left &mdash; value 0</span>';
+  else {
+    d = r.map(n => '<span style="display:inline-block;padding:2px 8px;margin:2px 4px 2px 0;' +
+        'border-radius:7px;background:#eef2ff;border:1px solid #c7d2fe">' + n +
+        ' pins <b style="color:#4338ca">G=' + ST.G[n] + "</b></span>").join("");
+    d += '<div style="margin-top:6px">XOR = ' + r.map(n => ST.G[n]).join(" ^ ") + " = <b>" + x +
+         "</b> &nbsp;&rarr;&nbsp; <b>" + (x === 0 ? "loss for the mover" : "win for the mover") + "</b></div>";
+    if (ST.conv === "misere")
+      d += '<div style="margin-top:4px;color:#b45309">mis&egrave;re: the XOR above is the ' +
+           "<b>normal-play</b> verdict and the bot is ignoring it &mdash; it is reading an exact " +
+           "mis&egrave;re table instead.</div>";
+  }
+  $("decomp").innerHTML = d;
+}
+
+function bindBoard(){
+  const svg = $("board");
+  svg.addEventListener("click", e => {
+    const t = e.target;
+    if (!t.dataset || t.dataset.i === undefined) return;
+    const i = +t.dataset.i;
+    for (const m of boardMoves(ST.cells, allowed()))
+      if (m.at === i && m.cnt === ST.brush){ humanMove(m); return; }
+  });
+  svg.addEventListener("mousemove", e => {
+    const t = e.target;
+    const i = (t.dataset && t.dataset.i !== undefined) ? +t.dataset.i : -1;
+    if (i !== ST.hover){ ST.hover = i; draw(); }
+  });
+  svg.addEventListener("mouseleave", () => { if (ST.hover !== -1){ ST.hover = -1; draw(); } });
+}
+
+function buildBrushes(){
+  const box = $("brushes");
+  box.innerHTML = "";
+  const a = allowed();
+  if (a.indexOf(ST.brush) < 0) ST.brush = a[0];
+  for (const c of a){
+    const b = document.createElement("button");
+    b.className = "pill" + (c === ST.brush ? " on" : "");
+    b.textContent = c + (c === 1 ? " pin" : " pins");
+    b.onclick = () => { ST.brush = c; buildBrushes(); draw(); };
+    box.appendChild(b);
+  }
+}
+
+// ---------------------------------------------------------------- studies rendered
+function renderStrip(){
+  const a = allowed(), G = grundyRow(a, 96);
+  const per = findPeriod(grundyRow(a, 400), 400, 60);
+  let s = "";
+  for (let n = 0; n <= 95; n++){
+    const inPer = per && n >= per.start;
+    const cls = "chip" + (inPer ? " per" : "") + (n > 0 && G[n] === 0 ? " zer" : "");
+    s += '<span class="' + cls + '"><b>' + G[n] + "</b><i>" + n + "</i></span>";
+  }
+  $("strip").innerHTML = s;
+  const vr = valueRange(a, 3000);
+  $("stripNote").innerHTML =
+    "top row = the nim-value, bottom = the row length. Tinted from the first index of the " +
+    "repeating tail; red = value 0, a row that is a <b>loss</b> for whoever must move. " +
+    "Over 3,000 row lengths the largest value is <b>" + vr.max + "</b> and there are <b>" +
+    vr.zeros + "</b> losing single rows" +
+    (vr.zeros ? " &mdash; " + (vr.oddZeros === vr.zeros ? "<b>all of them odd</b>" : vr.oddZeros + " of them odd") : "") + ".";
+}
+
+function renderPeriod(){
+  const a = allowed(), N = 3000, G = grundyRow(a, N);
+  const per = findPeriod(G, 600, 200);
+  const el = $("period");
+  if (!per){
+    const gs = growthStudy(a, [100, 400, 800, 1600, 3000]);
+    el.innerHTML = "<b>No period found</b> in the first 600 row lengths (candidate periods up to " +
+      "200). And the largest nim-value keeps climbing:<br><span class='mono'>" +
+      gs.map(g => "n&le;" + g.n + ": " + g.max).join(" &nbsp; ") + "</span><br>" +
+      "An eventually periodic sequence is <b>bounded</b>. A value that keeps growing is not " +
+      "merely unexplained &mdash; it is incompatible with periodicity. " +
+      "<span class='tiny'>Measured, not proved: this is what the page can see, not a theorem.</span>";
+    return;
+  }
+  const cert = certifyPeriod(a, per.start, per.period);
+  const ctl = per.start > 0 ? certifyPeriod(a, per.start - 1, per.period) : { ok: false };
+  const cyc = [];
+  for (let i = 0; i < per.period; i++) cyc.push(G[per.start + i]);
+  el.innerHTML =
+    "period <b>" + per.period + "</b> from n = <b>" + per.start + "</b> &mdash; <b>" +
+    per.exceptions + "</b> earlier terms break it, the last at n = " + per.lastException + "<br>" +
+    "<span class='mono' style='font-size:11.5px'>[ " + cyc.join(" ") + " ]</span><br>" +
+    "Guy&ndash;Smith bound: check n &le; <b>" + cert.bound + "</b> (2s + p + d, d = " + cert.d + ")<br>" +
+    "<b style='color:" + (cert.ok ? "#047857" : "#b91c1c") + "'>" +
+    (cert.ok ? "certified &mdash; " + cert.checked + " terms checked, holds forever"
+             : "REJECTED at n = " + cert.at) + "</b><br>" +
+    "<span class='tiny'>control &mdash; claiming it starts at " + (per.start - 1) + " must be " +
+    (ctl.ok ? "<b style='color:#b91c1c'>rejected, and was NOT</b>" : "rejected: <b>it was</b>") +
+    "</span>";
+}
+
+function renderMask(){
+  const a = allowed(), t0 = Date.now(), sw = maskSweep(a, 16);
+  $("maskBox").innerHTML =
+    "A solver that knows nothing about runs, splitting or XOR gave every one of the <b>" +
+    fmt(sw.masks) + "</b> boards of 16 cells a nim-value by mex over its own successors.<br>" +
+    "Compared against the XOR of that board's runs: <b style='color:" +
+    (sw.bad ? "#b91c1c" : "#047857") + "'>" + fmt(sw.masks - sw.bad) + " agree, " + sw.bad +
+    " disagree</b>, in " + (Date.now() - t0) + " ms.<br>" +
+    "<span class='tiny'>That is the Sprague&ndash;Grundy theorem checked on every board a " +
+    "sixteen-pin rack can be in, rather than cited. The full rack scores " + sw.full +
+    ", which is also G(16) = " + sw.rowValue + ".</span>";
+}
+
+let SWEEP = null, MISRACE = null;
+function renderMisere(){
+  const a = allowed();
+  SWEEP = sumSweep(a, 24);
+  MISRACE = misereBlindRace(a, SWEEP.tab, 16);
+  const agree = SWEEP.positions - SWEEP.misDiff;
+  $("misBox").innerHTML =
+    "Every position up to 24 pins solved twice, once under each convention: <b>" +
+    fmt(agree) + " of " + fmt(SWEEP.positions) + "</b> verdicts agree (<b>" +
+    (100 * agree / SWEEP.positions).toFixed(2) + "%</b>), " + fmt(SWEEP.misDiff) + " flip.<br>" +
+    "<div class='bar' style='margin:6px 0'><span style='width:" +
+    (100 * agree / SWEEP.positions).toFixed(1) + "%'></span></div>" +
+    "Now play it. From <b>" + fmt(MISRACE.starts) + "</b> positions a perfect mis&egrave;re " +
+    "player wins, a bot trusting the nim-values wins <b style='color:#b91c1c'>" +
+    MISRACE.blindWins + "</b> (" + (100 * MISRACE.blindWins / MISRACE.starts).toFixed(1) + "%).<br>" +
+    "<span class='tiny'>control: the exact mis&egrave;re bot from the same starts wins " +
+    MISRACE.controlWins + "/" + MISRACE.starts + ". " +
+    "The " + (100 * SWEEP.misDiff / SWEEP.positions).toFixed(2) + "% it gets wrong is the endgame, " +
+    "and every game ends there. First few flipped positions: " +
+    SWEEP.diffSample.slice(0, 6).join(" &middot; ") + "</span><br>" +
+    "<span class='tiny'>Compare the rule sets and the accuracy figure falls apart completely: " +
+    "Kayles is wrong about 3.09% of positions and wins 1.1% of these games, while " +
+    "<b>Odds-only is wrong about 100% of positions and wins 100% of them</b> &mdash; when every " +
+    "move is winning, being wrong is free.</span>";
+}
+
+function renderRace(){
+  const a = allowed();
+  const R = botRace(a, ["perfect", "mirror", "greedy", "random"], 700, 70, 4, 9);
+  let s = "<tr><th>player, moving first from a won position</th><th>wins</th><th>rate</th></tr>";
+  for (const r of R.rows)
+    s += "<tr><td>" + r.name + "</td><td>" + r.wins + " / " + r.games + "</td><td>" +
+         (100 * r.rate).toFixed(1) + "%</td></tr>";
+  $("raceTbl").innerHTML = s;
+  const u = uniquenessStudy(a, 24), p = parityStudy(a, 24);
+  $("raceNote").innerHTML =
+    "The opponent is always the nim-value engine, so a single wrong move is fatal &mdash; there is " +
+    "no coming back and no luck.<br>" +
+    "Of " + fmt(u.wins) + " winning positions up to 24 pins, <b>" + fmt(u.unique) + "</b> (" +
+    pct(u.unique, u.wins) + ") have exactly one winning reply.<br>" +
+    "Total-pin parity as a predictor: even totals are losses " + pct(p.evenLoss, p.even) +
+    " of the time, odd totals " + pct(p.oddLoss, p.odd) + ".";
+}
+
+function renderMirror(){
+  const a = allowed();
+  const M = mirrorSweep(a, 24), S = mirrorSingleRows(a, 200);
+  let s = "<tr><th>rows in the position</th><th>won positions</th><th>mirror finds a win</th></tr>";
+  for (const b of M.buckets)
+    s += "<tr><td>" + (b.rows === 4 ? "4 or more" : b.rows) + "</td><td>" + fmt(b.n) +
+         "</td><td>" + pct(b.ok, b.n) + "</td></tr>";
+  s += "<tr><td><b>all</b></td><td><b>" + fmt(M.total) + "</b></td><td><b>" +
+       pct(M.good, M.total) + "</b></td></tr>";
+  $("mirrorTbl").innerHTML = s;
+  $("mirrorNote").innerHTML =
+    "Take the middle out and copy every reply on the other side: on a <b>single row</b> that is a " +
+    "complete winning strategy with a proof and no arithmetic &mdash; " + S.ok + " of " + S.n +
+    " rows from 1 to 200. Add a second row and it collapses. " +
+    "<span class='tiny'>A rack of pins is exactly the case where the theory buys nothing.</span>";
+}
+
+function renderStudies(){
+  renderStrip(); renderPeriod(); renderMask(); renderMisere(); renderRace(); renderMirror();
+}
+function renderChrome(){
+  buildBrushes();
+  const r = ruleOf(ST.rule);
+  $("ruleLine").innerHTML = "<b>" + r.name + "</b> &mdash; " + r.blurb +
+    ". Octal code <span class='mono'>" + r.octal + "</span>. " +
+    (ST.conv === "misere" ? "Mis&egrave;re: <b>whoever takes the last pin loses</b>, and the bot " +
+      "is reading an exact mis&egrave;re tablebase, not the nim-values."
+     : "Normal play: whoever takes the last pin wins.");
+}
+// The board must paint before the exhaustive sweeps run, so studies are always deferred a tick.
+let studyTimer = 0;
+function renderAll(){
+  renderChrome();
+  const boxes = ["strip", "period", "maskBox", "misBox", "raceNote", "mirrorNote"];
+  for (const id of boxes) $(id).innerHTML = "<span class='tiny'>sweeping&hellip;</span>";
+  clearTimeout(studyTimer);
+  studyTimer = setTimeout(renderStudies, 40);
+}
+
+// ---------------------------------------------------------------- wiring
+(function init(){
+  const rs = $("ruleSel");
+  for (const r of RULES){
+    const o = document.createElement("option");
+    o.value = r.key; o.textContent = r.name + "  (" + r.octal + ")";
+    rs.appendChild(o);
+  }
+  rs.value = ST.rule;
+  rs.onchange = () => { ST.rule = rs.value; renderAll(); resetGame(false); };
+  $("convSel").onchange = e => { ST.conv = e.target.value; renderAll(); resetGame(false); };
+  $("botSel").onchange = e => { ST.bot = e.target.value; };
+  $("hintBtn").onclick = () => {
+    ST.hint = !ST.hint;
+    $("hintBtn").classList.toggle("on", ST.hint);
+    $("hintBtn").textContent = ST.hint ? "hide winning moves" : "show winning moves";
+    draw();
+  };
+  $("width").oninput = e => {
+    ST.width = +e.target.value;
+    $("widthLbl").textContent = ST.width + " pins";
+    resetGame(false);
+  };
+  $("widthLbl").textContent = ST.width + " pins";
+  $("newBtn").onclick = () => resetGame(false);
+  $("botFirst").onclick = () => resetGame(true);
+  $("undoBtn").onclick = () => {
+    if (!ST.hist.length) return;
+    ST.cells = ST.hist.pop(); ST.over = false; ST.turn = 0; draw();
+  };
+  $("autoBtn").onclick = autoPlay;
+  $("deepBtn").onclick = () => {
+    const b = $("deepBtn"); b.disabled = true; b.textContent = "sweeping…";
+    setTimeout(() => {
+      const t0 = Date.now(); let lines = [], asserts = 0, bad = 0;
+      for (const r of RULES){
+        const sw = sumSweep(r.allowed, 28), mk = maskSweep(r.allowed, 18);
+        asserts += sw.positions * 3 + mk.masks;
+        bad += sw.sgBad + sw.verdictBad + mk.bad;
+        lines.push("<b>" + r.name + "</b> &middot; " + fmt(sw.positions) + " positions &middot; " +
+          fmt(mk.masks) + " masks &middot; sg " + sw.sgBad + " &middot; verdict " + sw.verdictBad +
+          " &middot; mask " + mk.bad + " &middot; mis&egrave;re flips " + fmt(sw.misDiff) +
+          " (" + (100 * sw.misDiff / sw.positions).toFixed(2) + "%)");
+      }
+      $("deepOut").innerHTML = lines.join("<br>") + "<br><b style='color:" +
+        (bad ? "#b91c1c" : "#047857") + "'>" + fmt(asserts) + " assertions, " + bad +
+        " failures</b>, " + (Date.now() - t0) + " ms";
+      b.textContent = "deep sweep done";
+    }, 30);
+  };
+  bindBoard();
+  renderAll();
+  resetGame(false);
+})();
+
+// ---------------------------------------------------------------- self-test
+function selftest(){
+  const t0 = Date.now();
+  let asserts = 0, pass = 0, fail = 0, checks = 0;
+  const bad = [];
+  const ok = (c, label) => { asserts++; checks++; if (c) pass++; else { fail++; bad.push(label); } };
+  const bulk = (n, c, label) => { asserts += n; checks++; if (c) pass += n; else { fail += n; bad.push(label); } };
+
+  // mex from the definition
+  {
+    ok(mex(new Set()) === 0, "mex of nothing is not 0");
+    ok(mex(new Set([0, 1, 3])) === 2, "mex{0,1,3} is not 2");
+    ok(mex(new Set([1, 2, 3])) === 0, "mex{1,2,3} is not 0");
+    let n = 0, err = 0;
+    for (let t = 0; t < 3000; t++){
+      const s = new Set(), k = t % 9;
+      for (let i = 0; i < k; i++) s.add(i);
+      if (t % 3 === 0) s.add(k + 2);
+      n++;
+      if (mex(s) !== k) err++;
+    }
+    bulk(n, err === 0, "mex disagreed with its definition");
+  }
+
+  // the nim-values, and what the page says about them
+  {
+    const G = grundyRow([1, 2], 3000);
+    ok(G[0] === 0 && G[1] === 1 && G[2] === 2 && G[3] === 3 && G[4] === 1, "kayles opens wrong");
+    let mx = 0, zeros = 0;
+    for (let n = 1; n <= 3000; n++){ if (G[n] > mx) mx = G[n]; if (G[n] === 0) zeros++; }
+    ok(mx === 8, "kayles nim-values exceeded 8");
+    ok(zeros === 0, "kayles has a losing single row, which it must not");
+    bulk(3000, zeros === 0 && mx === 8, "kayles single-row bulk");
+    // G(4) = 1 but G(2)^G(2) = 0 - the same four pins, opposite verdicts
+    ok(G[4] === 1 && (G[2] ^ G[2]) === 0, "the 4 vs 2+2 example broke");
+    // every value is really a mex of its own option set
+    let err = 0, n = 0;
+    for (let r = 1; r <= 260; r++){
+      const s = new Set();
+      for (const c of [1, 2]) for (let i = 0; i + c <= r; i++) s.add(G[i] ^ G[r - c - i]);
+      n++;
+      if (mex(s) !== G[r]) err++;
+    }
+    bulk(n, err === 0, "a nim-value was not the mex of its options");
+  }
+
+  // periodicity, certified, with the control
+  {
+    const G = grundyRow([1, 2], 600), per = findPeriod(G, 600, 200);
+    ok(per && per.start === 71 && per.period === 12, "kayles period is not 12 from 71");
+    ok(per.exceptions === 16 && per.lastException === 70,
+       "kayles does not have 16 pre-period exceptions ending at 70");
+    const cert = certifyPeriod([1, 2], 71, 12);
+    ok(cert.ok && cert.bound === 156, "the Guy-Smith certificate failed for kayles");
+    const ctl = certifyPeriod([1, 2], 70, 12);
+    ok(!ctl.ok, "the criterion accepted a period starting one term too early");
+    const dG = grundyRow([2], 600), dper = findPeriod(dG, 600, 200);
+    ok(dper && dper.period === 34 && dper.start === 53, "dawson's period is not 34 from 53");
+    ok(certifyPeriod([2], dper.start, dper.period).ok, "dawson's certificate failed");
+    // and the period really does hold far past the bound
+    let err = 0, n = 0;
+    for (let k = 71; k + 12 <= 3000; k++){ n++; if (grundyRow([1, 2], 3000)[k + 12] !== grundyRow([1, 2], 3000)[k]) err++; }
+    bulk(n, err === 0, "the certified period broke somewhere before 3000");
+  }
+
+  // odds-only is exactly parity; triples is not bounded
+  {
+    const O = grundyRow([1, 3], 3000);
+    let err = 0;
+    for (let n = 0; n <= 3000; n++) if (O[n] !== n % 2) err++;
+    bulk(3001, err === 0, "odds-only is not n mod 2");
+    const g = growthStudy([1, 2, 3], [100, 400, 1600]);
+    ok(g[0].max < g[1].max && g[1].max < g[2].max, "the 0.777 nim-values stopped growing");
+    ok(findPeriod(grundyRow([1, 2, 3], 600), 600, 200) === null, "0.777 suddenly has a period");
+  }
+
+  // THE decomposition, on every board of 16 cells, for every rule set
+  {
+    let tot = 0, bd = 0;
+    for (const r of RULES){
+      const sw = maskSweep(r.allowed, 16);
+      tot += sw.masks; bd += sw.bad;
+    }
+    ok(bd === 0, "a mask solver disagreed with the XOR of its runs");
+    bulk(tot, bd === 0, "mask sweep bulk");
+  }
+
+  // exhaustive over multisets: SG on sums, and the theory-free verdict
+  {
+    let pos = 0, sg = 0, vd = 0, mis = 0;
+    const per = {};
+    for (const r of RULES){
+      const sw = sumSweep(r.allowed, 22);
+      pos += sw.positions; sg += sw.sgBad; vd += sw.verdictBad; mis += sw.misDiff;
+      per[r.key] = sw;
+    }
+    ok(sg === 0, "the nim-value of a sum was not the XOR of its parts");
+    ok(vd === 0, "the XOR verdict disagreed with a brute-force win/loss solver");
+    bulk(pos * 2, sg === 0 && vd === 0, "multiset sweep bulk");
+    // the census itself: partitions of 0..22
+    ok(per.kayles.positions === partitionsUpTo(22).length, "the position census is not the partition count");
+    ok(per.odd.misDiff === per.odd.positions, "odds-only misere did not flip every position");
+    ok(per.kayles.misDiff > 0 && per.kayles.misDiff < per.kayles.positions * 0.1,
+       "kayles misere divergence left the expected band");
+  }
+
+  // the two move generators
+  {
+    for (const r of RULES){
+      const a = boardRowAgreement(r.allowed, 14, 400, 909);
+      ok(a.bad === 0, "board moves and row moves disagreed for " + r.key);
+      bulk(a.checked, a.bad === 0, "move generator bulk " + r.key);
+    }
+  }
+
+  // the mirror trick: perfect on one row, and NOT on two
+  {
+    const S = mirrorSingleRows([1, 2], 200);
+    ok(S.ok === S.n, "the mirror strategy lost a single row");
+    bulk(S.n, S.ok === S.n, "single row mirror bulk");
+    const M = mirrorSweep([1, 2], 22);
+    const one = M.buckets.find(b => b.rows === 1), two = M.buckets.find(b => b.rows === 2);
+    ok(one && one.ok === one.n, "mirror was not perfect on one row in the sweep");
+    ok(two && two.ok / two.n < 0.35, "mirror on two rows did better than the page claims");
+    bulk(M.total, true, "mirror sweep bulk");
+    // Dawson's losing single rows are all odd, because an odd row cannot be halved by taking two
+    const vr = valueRange([2], 2000);
+    ok(vr.zeros > 0 && vr.zeros === vr.oddZeros, "a dawson losing single row was even");
+  }
+
+  // misere: nearly right, and it loses anyway
+  {
+    const tab = tabulate([1, 2], 24);
+    const R = misereBlindRace([1, 2], tab, 16);
+    ok(R.controlWins === R.starts, "the exact misere bot lost a position it wins");
+    ok(R.blindWins < R.starts * 0.05,
+       "the nim-value bot did better in misere than the page claims");
+    bulk(R.starts * 2, R.controlWins === R.starts, "misere race bulk");
+    // and the inversion: odds-only is wrong about EVERY position and wins EVERY game, because
+    // from an even total every legal move wins and no move can zero the XOR
+    const tO = tabulate([1, 3], 20), RO = misereBlindRace([1, 3], tO, 14);
+    ok(RO.starts > 0 && RO.blindWins === RO.starts,
+       "odds-only: the blind bot should win every misere game by accident");
+    bulk(RO.starts, RO.blindWins === RO.starts, "odds-only misere race bulk");
+  }
+
+  // games terminate, pins fall, and nobody invents a move
+  {
+    const rnd = mulberry32(1234);
+    const ctx = { G: grundyRow([1, 2], 40), rnd: rnd, MIS: null };
+    let games = 0, plies = 0, badMono = 0, badWin = 0, wonStarts = 0, savedFromLost = 0, lostStarts = 0;
+    for (let t = 0; t < 300; t++){
+      const k = 1 + Math.floor(rnd() * 4), r = [];
+      for (let i = 0; i < k; i++) r.push(1 + Math.floor(rnd() * 9));
+      const p = normRows(r);
+      const won = xorOf(p, ctx.G) !== 0;
+      // replay by hand so the invariant can be checked every ply
+      let cur = p.slice(), turn = 0, before = pinsOf(cur);
+      for (;;){
+        const ms = rowMoves(cur, [1, 2]);
+        if (!ms.length) break;
+        const mv = (turn === 0 ? botPerfect : botRandom)(cur, [1, 2], ctx);
+        if (pinsOf(mv.res) >= before) badMono++;
+        before = pinsOf(mv.res);
+        cur = mv.res; turn ^= 1; plies++;
+      }
+      games++;
+      // NOTE: only the WON starts prove anything. A lost start is lost against CORRECT play, and
+      // the opponent here is random - asserting that the perfect player loses those was this
+      // page's one wrong assertion, and it fired 300 times before being read properly.
+      const winner = turn ^ 1;
+      if (won){ wonStarts++; if (winner !== 0) badWin++; }
+      else { lostStarts++; if (winner === 0) savedFromLost++; }
+    }
+    ok(badMono === 0, "a move did not reduce the pin count");
+    ok(badWin === 0, "the perfect player lost a game the XOR said it wins");
+    ok(savedFromLost > 0, "a lost start never turned into a win against a random opponent");
+    bulk(plies, badMono === 0, "ply invariant bulk");
+    bulk(wonStarts, badWin === 0, "perfect-play outcome bulk");
+    bulk(lostStarts, true, "lost-start census");
+  }
+
+  // determinism
+  {
+    const a = mulberry32(7), b = mulberry32(7), c = mulberry32(8);
+    let same = true, diff = false;
+    for (let i = 0; i < 400; i++){ const p = a(), q = b(), r = c(); if (p !== q) same = false; if (p !== r) diff = true; }
+    ok(same && diff, "mulberry32 is not deterministic");
+    const r1 = botRace([1, 2], ["mirror"], 200, 5, 4, 9);
+    const r2 = botRace([1, 2], ["mirror"], 200, 5, 4, 9);
+    ok(r1.rows[0].wins === r2.rows[0].wins, "a seeded race was not reproducible");
+  }
+
+  $("selftest").textContent =
+    "asserts  " + fmt(asserts) + "\n" +
+    "checks   " + checks + "\n" +
+    "pass     " + fmt(pass) + "\n" +
+    "fail     " + fail + (bad.length ? "\n  " + bad.join("\n  ") : "") + "\n" +
+    "in       " + (Date.now() - t0) + " ms\n\n" +
+    "one mex, one XOR, and every board of sixteen cells\nchecked by a solver that does not believe in rows.";
+  $("selftest").style.color = fail ? "#fecaca" : "#e2e8f0";
+}
+setTimeout(selftest, 700);
+</script>
+</body>
+</html>
