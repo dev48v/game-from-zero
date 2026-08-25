@@ -72,6 +72,7 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 68 — Bidding Tic-Tac-Toe](https://dev48.infy.uk/game/day68-bidding-tic-tac-toe.html) — `day68-bidding-tic-tac-toe.html`
 - [GameFromZero · Day 69 — Colonel Blotto](https://dev48.infy.uk/game/day69-colonel-blotto.html) — `day69-colonel-blotto.html`
 - [GameFromZero · Day 70 — Kayles](https://dev48.infy.uk/game/day70-kayles.html) — `day70-kayles.html`
+- [GameFromZero · Day 71 — Domino Tiling](https://dev48.infy.uk/game/day71-domino-tiling.html) — `day71-domino-tiling.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

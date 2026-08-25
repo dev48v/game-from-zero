@@ -1,0 +1,2178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 71 — Domino Tiling</title>
+<style>
+  :root{
+    --ink:#0f172a; --sub:#475569; --mute:#64748b; --line:#e2e8f0;
+    --bg:#f8fafc; --bg2:#f1f5f9; --card:#ffffff;
+    --acc:#4338ca; --acc-soft:#eef2ff; --acc-line:#c7d2fe;
+    --warn:#b45309; --warn-soft:#fffbeb; --warn-line:#fcd34d;
+    --good:#047857; --bad:#b91c1c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,sans-serif;
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;margin:0}
+  p{margin:0 0 14px}
+  strong{font-weight:800}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;
+       background:var(--bg2);padding:1px 5px;border-radius:4px}
+  pre{background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:10px;font-size:12px;
+      overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;
+      margin:0 0 14px}
+  .hidden{display:none !important}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* The hero paragraph is taller than most viewports, so the header must NOT be sticky - a
+     sticky box taller than the screen pins itself over the page forever. Only the tab bar sticks. */
+  header{background:#fff;padding-bottom:4px}
+  nav#tabbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+  nav#tabbar .wrap{padding:10px 16px}
+  .wrap{max-width:1140px;margin:0 auto;padding:18px 16px}
+  .wrap-narrow{max-width:840px;margin:0 auto;padding:24px 16px 60px}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--acc);margin:0 0 8px}
+  h1.hero{font-size:20px;font-weight:900;margin-bottom:16px}
+  @media(min-width:768px){ h1.hero{font-size:23px} }
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tabs button{border:0;border-radius:9px;padding:9px 20px;font-weight:700;font-size:14px;
+               background:var(--bg2);color:var(--ink);cursor:pointer;font-family:inherit}
+  .tabs button.tab-active{background:var(--ink);color:#fff}
+
+  section.tab-panel{min-height:calc(100vh - 76px)}
+  #look{background:var(--bg2);padding:16px}
+  #understand{padding:16px}
+  #build{background:var(--bg);padding:16px}
+  @media(min-width:768px){ #look,#understand,#build{padding:32px 16px} }
+
+  .cols{display:grid;grid-template-columns:1fr;gap:18px;max-width:1140px;margin:0 auto}
+  @media(min-width:1024px){ .cols{grid-template-columns:1.5fr 1fr} }
+  .stack{display:flex;flex-direction:column;gap:18px}
+
+  .card{background:var(--card);border-radius:16px;padding:18px;
+        box-shadow:0 1px 2px rgba(15,23,42,.06),0 1px 10px rgba(15,23,42,.05)}
+  .lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute);margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .pill{padding:6px 11px;border-radius:9px;font-size:12.5px;font-weight:700;font-family:inherit;
+        border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .pill:hover{background:var(--acc-soft);border-color:var(--acc-line)}
+  .pill:disabled{opacity:.34;cursor:default}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  select.pill{cursor:pointer}
+  .go{padding:8px 15px;border-radius:9px;border:0;background:var(--acc);color:#fff;
+      font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.4;cursor:default}
+
+  svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;
+           pointer-events:none}
+  #board{width:100%;max-height:460px;touch-action:manipulation;display:block}
+  #board .hit{cursor:pointer}
+
+  table.num{border-collapse:collapse;width:100%}
+  table.num th,table.num td{padding:4px 8px;font-variant-numeric:tabular-nums}
+  table.num th{font-size:10.5px;letter-spacing:.05em;color:var(--mute);text-align:right;font-weight:800}
+  table.num th:first-child,table.num td:first-child{text-align:left}
+  table.num td{text-align:right;font-size:12.5px;border-top:1px solid var(--line)}
+  table.num td.l{text-align:left}
+
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+       max-height:150px;overflow:auto}
+  .log div{padding:1px 0;border-bottom:1px solid var(--bg2)}
+
+  .note{border-left:4px solid var(--acc);background:var(--acc-soft);padding:12px 14px;border-radius:0 10px 10px 0;
+        margin:0 0 16px}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .note p{margin:0;font-size:13.5px}
+  .note p+p{margin-top:8px}
+
+  .verdict{font-weight:900;font-size:14px}
+  .win{color:var(--good)} .lose{color:var(--bad)}
+  .bar{height:9px;border-radius:99px;background:var(--line);overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--acc)}
+  .small{font-size:12px;color:var(--sub)}
+  .tiny{font-size:11.5px;color:var(--mute)}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0}
+  .kv b{font-variant-numeric:tabular-nums}
+  .huge{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
+  h2.big{font-size:23px;font-weight:900;margin:0 0 16px}
+  h3.mid{font-size:17.5px;font-weight:800;margin:26px 0 10px}
+  .wrap-narrow p,.wrap-narrow li{color:#1e293b}
+  .wrap-narrow ul{margin:0 0 14px;padding-left:22px}
+  .wrap-narrow li{margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">GAMEFROMZERO · DAY 71</p>
+    <h1 class="hero">
+      🧮 Domino Tiling — a board with holes punched in it, and 2&times;1 tiles to cover whatever is
+      left. Every engine in this series so far answers <em>what is the best move</em>. This one
+      answers <strong>how many</strong>, and everything else is a by-product: a move is survivable
+      when the number of ways to finish stays above zero, it is <em>forced</em> when that number
+      does not change at all, and its odds of appearing in a random finish are its share of the
+      count. So the engine is not a search and not a tablebase, it is an <strong>exact
+      counter</strong> — a broken-profile dynamic program carrying a W-bit frontier across the
+      cells in reading order, <strong>2<sup>W</sup></strong> states in place of
+      2<sup>W&times;H</sup> subsets, 256 instead of eighteen quintillion on an 8&times;8, which is
+      the only reason a board with <strong>12,988,816</strong> tilings can be scored between two
+      clicks. It is checked against brute force, against a bipartite matching that cannot count at
+      all, against Kasteleyn's eigenvalue product, against the Aztec diamond's
+      2<sup>n(n+1)/2</sup>, and against a permanent, on every one of the <strong>65,536</strong>
+      boards sixteen cells can be in. And then the two things that inverted. First: the colour
+      argument — the most famous fact in this entire subject, the one that kills the mutilated
+      chessboard in a sentence — found <strong>0 of 4,461</strong> fatal moves, and cannot ever
+      find one, because a domino removes one square of each colour <em>by construction</em>, so the
+      quantity it watches is the one quantity a move can never change. Second: the puzzle I set out
+      to build, a board where every domino is forced and no local rule can see any of them, does
+      not exist and cannot — <strong>5,337</strong> uniquely-tileable boards on load and
+      <strong>17,817</strong> once the deep sweep runs, every one of them finished by a one-line
+      rule with no arithmetic in it. Exact counting is worth exactly
+      nothing on a puzzle with one answer, and worth <strong>100% against 0%</strong> the moment
+      there are two. Pure vanilla JS, one file, no build step.
+    </h1>
+  </div>
+</header>
+
+<nav id="tabbar">
+  <div class="wrap tabs" id="tabs">
+    <button data-tab="look" class="tab-active">🧮 PLAY</button>
+    <button data-tab="understand">🧠 UNDERSTAND</button>
+    <button data-tab="build">🔨 BUILD</button>
+  </div>
+</nav>
+
+<section id="look" class="tab-panel">
+  <div class="cols">
+
+    <div class="stack">
+      <div class="card">
+        <div class="row" style="margin-bottom:12px">
+          <select id="sizeSel" class="pill"></select>
+          <select id="modeSel" class="pill">
+            <option value="unique">puzzle: exactly one tiling</option>
+            <option value="holes">random holes, many tilings</option>
+            <option value="bare">bare rectangle, no holes</option>
+            <option value="aztec">Aztec diamond</option>
+          </select>
+          <button id="hintsBtn" class="pill">show what the count knows</button>
+        </div>
+        <div style="margin-bottom:4px">
+          <div class="row" style="justify-content:space-between">
+            <span class="lbl" style="margin:0">HOLES PUNCHED</span>
+            <span class="lbl mono" id="holeLbl" style="margin:0"></span>
+          </div>
+          <input id="holes" type="range" min="0" max="24" step="2" value="8" style="width:100%" />
+        </div>
+        <p class="small" id="modeLine" style="margin:0"></p>
+      </div>
+
+      <div class="card">
+        <svg id="board" viewBox="0 0 520 520" preserveAspectRatio="xMidYMid meet"></svg>
+        <p class="small" id="status" style="margin:8px 0 0"></p>
+        <div class="row" style="margin-top:10px">
+          <button id="newBtn" class="go">new board</button>
+          <button id="undoBtn" class="pill">undo</button>
+          <button id="hintBtn" class="pill">place a forced domino</button>
+          <button id="solveBtn" class="pill">finish it for me</button>
+          <button id="randBtn" class="pill">let a random player try</button>
+        </div>
+        <p class="tiny" style="margin:8px 0 0">
+          Click a free cell, then a neighbour, to lay a domino. Click a laid domino to lift it.
+          Red means the move ends the puzzle; the ring means every finish uses it.
+        </p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WAYS TO FINISH FROM HERE</p>
+        <div class="huge" id="countBig">&mdash;</div>
+        <div class="bar" style="margin:10px 0 8px"><span id="countBar" style="width:0%"></span></div>
+        <div id="moveBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">MOVE LOG</p>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">EVERY BOARD OF SIXTEEN CELLS</p>
+        <div id="sweepBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE LADDER OF TESTS</p>
+        <table class="num" id="ladderTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="ladderNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">RECTANGLES, EXACTLY</p>
+        <table class="num" id="rectTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="rectNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">GOMORY, AND WHERE HE STOPS</p>
+        <div id="gomBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHAT A LOCAL TEST CANNOT SEE</p>
+        <table class="num" id="fatalTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="fatalNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">FOUR PLAYERS, ONE BOARD</p>
+        <table class="num" id="raceTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="raceNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">ONE ANSWER, AND NOTHING TO COMPUTE</p>
+        <div id="uniqBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EVERY DOMINO IS NOT EQUALLY LIKELY</p>
+        <table class="num" id="oddsTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="oddsNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">UP TO SYMMETRY</p>
+        <div id="burnBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">GO DEEPER</p>
+        <p class="small" style="margin:0 0 8px">
+          Re-run the sweeps at full size &mdash; all 1,048,576 boards of a 4&times;5 against brute
+          force and a matching, the 6&times;6 tilings up to symmetry, and the four players on
+          8&times;8 boards twice over.
+        </p>
+        <button id="deepBtn" class="go">run the deep sweep</button>
+        <div id="deepOut" class="small mono" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">The engine is a number, not a move</h2>
+
+    <p>Cover a board with dominoes. Some cells are punched out; every remaining cell has to end up
+    under exactly one half of one 2&times;1 tile. That is the entire rulebook, and it is the first
+    game in this series whose engine does not choose anything.</p>
+
+    <p>Ask the question a player actually has: <em>is this move safe?</em> It has no local answer.
+    Lay a domino in the middle of a wide open board and the board still looks wide open — every
+    cell still has neighbours, the colour count is still even, nothing has visibly broken — and the
+    puzzle can already be dead. The only honest test is to ask how many ways there are to finish
+    from the position you would be in. If the answer is zero, the move was fatal. If the answer
+    equals the number of ways to finish from where you are now, the move was free: every finish
+    uses it, so playing it costs nothing.</p>
+
+    <div class="note">
+      <p><strong>Both of a player's questions are one question about a count.</strong>
+      <span class="mono">dead = count(after) is 0</span> &middot;
+      <span class="mono">forced = count(after) equals count(now)</span> &middot;
+      <span class="mono">odds = count(after) / count(now)</span>. There is no evaluation function
+      on this page and no search. There is a counter, and three comparisons.</p>
+    </div>
+
+    <h3 class="mid">Why the count cannot simply be enumerated</h3>
+
+    <p>An 8&times;8 board has <strong>12,988,816</strong> tilings. A 10&times;10 has
+    <strong>258,584,046,368</strong>. A 12&times;14 has <strong>43,242,613,716,069,407,953</strong>.
+    Listing them is not slow, it is impossible, and it is impossible at board sizes that fit
+    comfortably on a phone screen. Every one of those numbers on this page was produced without a
+    single tiling ever being constructed.</p>
+
+    <h3 class="mid">The compression: a frontier, not a subset</h3>
+
+    <p>The obvious state for &ldquo;which cells are still uncovered&rdquo; is a subset of the
+    board: 2<sup>64</sup> of them on an 8&times;8, which is eighteen quintillion and the end of the
+    conversation. The trick is to fix the order. Sweep the cells in reading order and keep a cursor.
+    Everything behind the cursor is settled. Everything more than W cells ahead of it is untouched.
+    The only thing in doubt is the <strong>W cells starting at the cursor</strong> — some of them
+    are already covered by a domino that reached in from behind, and the rest are not.</p>
+
+    <pre>state = a W-bit mask.  bit j = "the cell j steps ahead of the cursor is already covered"
+
+at the cursor:
+  bit 0 set   -> covered from behind; shift and step on
+  a hole      -> nothing to cover;    shift and step on
+  otherwise   -> this cell MUST be the left or top half of a domino:
+                   place it right -> set bit 1        (the cell next door)
+                   place it down  -> set bit W        (the cell below)
+                 then shift the mask down by one and step on</pre>
+
+    <p><strong>2<sup>W</sup> states, not 2<sup>W&times;H</sup>.</strong> 256 instead of eighteen
+    quintillion. The whole DP is two nested loops and four lines of body, it is exact, and it does
+    not care where the holes are. That is the entire engine; everything else on this page is a
+    consequence of it or a check on it.</p>
+
+    <h3 class="mid">Four solvers that agree, and one that cannot count</h3>
+
+    <p>A compression is exactly the kind of thing that is silently wrong, so the DP is not trusted
+    anywhere on this page. It is checked against:</p>
+
+    <ul>
+      <li><strong>Brute force</strong> — cover the first uncovered cell the two possible ways and
+      recurse. No frontier, no mask. Run on <strong>all 65,536</strong> boards of a 4&times;4 and
+      all 1,048,576 of a 4&times;5 behind the button.</li>
+      <li><strong>A bipartite matching</strong> — the grid graph is bipartite by colour, so
+      Kuhn's algorithm answers <em>tileable or not</em> with no notion of &ldquo;how many&rdquo;
+      anywhere inside it. It must agree with <span class="mono">count &gt; 0</span> on every board.</li>
+      <li><strong>Kasteleyn and Temperley&ndash;Fisher, 1961</strong> — an eigenvalue product for
+      rectangles, which is analysis and not combinatorics. It is a floating-point formula, so it is
+      compared by relative error rather than equality, and it lands within 1.2&times;10<sup>&minus;14</sup>.</li>
+      <li><strong>The Aztec diamond</strong> — a non-rectangular region with exactly
+      2<sup>n(n+1)/2</sup> tilings. Punch the diamond out of a square and the DP returns 2, 8, 64,
+      1024, 32768, 2097152 for orders one to six.</li>
+      <li><strong>A permanent</strong> — the verifier computes Ryser's inclusion&ndash;exclusion
+      formula for the permanent of the biadjacency matrix, which is the number of perfect matchings
+      by definition and shares nothing with any of the above.</li>
+    </ul>
+
+    <h3 class="mid">The one thing everybody knows about dominoes, and what it is worth</h3>
+
+    <p>Colour the board like a chessboard. Every domino covers one dark and one light square, so a
+    board with unequal colour counts cannot be tiled. That is the mutilated chessboard argument,
+    it is beautiful, it is one line, and it is the first thing anybody says about this subject.</p>
+
+    <p>Measured, over every board of sixteen cells: <strong>12,870</strong> of them have equal
+    colour counts and only <strong>5,700</strong> can actually be tiled. The colour test is right
+    <strong>44.3%</strong> of the time on a 4&times;4 and <strong>31.8%</strong> on a 4&times;5 —
+    it gets <em>worse</em> as the board grows. Tighten it to &ldquo;every connected component is
+    balanced&rdquo; and it climbs to 97.6% and 94.3%, still not exact. Only the matching is exact,
+    because the real characterisation is Hall's condition and nothing cheaper.</p>
+
+    <div class="note warn">
+      <p>&#128308; <strong>And inside the game the colour argument is worth precisely zero.</strong>
+      Across 4,461 fatal moves measured over three board configurations, the number the colour test
+      watches detected <strong>none of them</strong> — and it never can, because <em>a domino
+      removes one square of each colour by construction</em>. Every legal move preserves the
+      balance exactly. The most famous invariant in the subject is constant along every edge of the
+      game graph, which makes it perfectly true and completely useless to a player.</p>
+    </div>
+
+    <h3 class="mid">Gomory's theorem, and the exact moment it stops helping</h3>
+
+    <p>Ralph Gomory, 1973: take a rectangle with an even number of cells, remove <em>one</em> dark
+    square and <em>one</em> light square anywhere at all, and what is left can always be tiled. The
+    proof is a picture — a rectangle with an even cell count has a Hamiltonian cycle through every
+    cell, and two removals of opposite colours cut that cycle into two arcs of even length, each of
+    which tiles by walking along it. The page checks it by exhaustion:
+    <strong>1,024 of 1,024</strong> on the 8&times;8, 324 of 324 on the 6&times;6.</p>
+
+    <p>That theorem has a direct consequence for play: <em>on a bare rectangle, no first move can
+    be a mistake</em>. Laying a domino removes one dark and one light adjacent cell, which is
+    exactly Gomory's hypothesis, so all 112 opening moves on an 8&times;8 are safe and there is
+    nothing to think about. Punch <strong>two</strong> holes and the guarantee evaporates —
+    <strong>20.0%</strong> of boards already contain a move that ends the puzzle. At four holes
+    it is 43.3%, at eight 86.7%, and at sixteen holes every board has one and
+    <strong>30.1%</strong> of all legal moves are fatal. The game does not begin until the theorem
+    stops applying.</p>
+
+    <p>Remove two of each colour instead of one and the guarantee is simply gone:
+    <strong>10.20%</strong> of such 4&times;4 boards are dead, 4.96% of 4&times;6, 2.31% of
+    6&times;6 — 540 dead boards out of 23,409, every one of them perfectly balanced.</p>
+
+    <h3 class="mid">What a local test can see, and what it cannot</h3>
+
+    <p>A fatal move is fatal for a reason, and the question is whether the reason is visible from
+    close up. Three tests, in increasing strength, applied to the position <em>after</em> each
+    fatal move on 119 real 8&times;8 boards:</p>
+
+    <ul>
+      <li><strong>an isolated cell</strong> — a free cell with no free neighbour left. Catches
+      <strong>26.2%</strong>.</li>
+      <li><strong>a broken colour count</strong> — catches <strong>0.0%</strong>, and always will.</li>
+      <li><strong>a component with the wrong colour count</strong> — catches another
+      <strong>8.0%</strong>.</li>
+    </ul>
+
+    <p>That leaves <strong>65.8%</strong> of fatal moves invisible to all three: the board is still
+    connected where it matters, every cell still has neighbours, every component is still balanced,
+    and the puzzle is already over. There is no cheap test hiding behind those numbers — the
+    obstruction is a Hall violation, and finding one is the same work as counting.</p>
+
+    <p>The same holds in the other direction. Of the 752 <em>forced</em> dominoes on those boards —
+    dominoes every finish contains, which you may as well play immediately — the local rule
+    &ldquo;a cell with exactly one free neighbour&rdquo; sees only <strong>30.1%</strong>. Seven
+    out of ten free moves are invisible without the count.</p>
+
+    <h3 class="mid">The claim that inverted: on a real puzzle the count buys nothing</h3>
+
+    <p>Here is what this page was supposed to be. A board with exactly one tiling has, by
+    definition, <em>every</em> domino forced: for each one, the number of finishes containing it
+    equals the total, which is 1. So the counting engine solves a unique puzzle without ever
+    guessing. I expected to find boards where all of that is true and the local rule is stuck at
+    move one — every move forced, and no rule short of a full count able to name a single one.</p>
+
+    <p>Those boards do not exist. Swept exhaustively: all 65,536 boards of a 4&times;4, all 262,144
+    of a 3&times;6, and — behind the deep-sweep button — all
+    1,048,576 of a 4&times;5. Among them <strong>17,817</strong> connected boards with exactly one
+    tiling, 5,337 of which are counted before you touch anything. Number with no cell of degree one to start from:
+    <strong>0</strong>. Number where repeated degree-one forcing failed to finish the board:
+    <strong>0</strong>.</p>
+
+    <div class="note">
+      <p>And it is not luck. Orient every domino of the unique tiling one way and every other
+      adjacency the other; a directed cycle in that orientation would be an <em>alternating
+      cycle</em>, and flipping it would produce a second tiling. So the orientation is acyclic, an
+      acyclic digraph has a sink, and a sink is a cell with exactly one free neighbour. Remove that
+      forced pair and the remainder is still uniquely tileable, so the argument repeats. A
+      uniquely-tileable board is always solvable by a rule with no arithmetic in it.</p>
+      <p>The step that does the work is <strong>bipartite</strong>, and the page carries the
+      control that proves it: two triangles joined by a single edge have exactly one perfect
+      matching, minimum degree 2, and no vertex a local rule can start from. Grids are bipartite;
+      that graph is not.</p>
+    </div>
+
+    <h3 class="mid">So where is the count worth anything? Everywhere else</h3>
+
+    <p>Four players, the same thirty solvable 8&times;8 puzzles with ten holes, each just
+    laying dominoes until they are finished or stuck:</p>
+
+    <ul>
+      <li><strong>count</strong> — refuses any move that takes the number of finishes to zero:
+      <strong>100%</strong>. It cannot lose, and that is a theorem rather than a result.</li>
+      <li><strong>component</strong> — takes forced pairs, refuses to isolate a cell, refuses to
+      leave a component with the wrong colour count: <strong>70.0%</strong>.</li>
+      <li><strong>local</strong> — takes forced pairs, refuses to isolate a cell:
+      <strong>63.3%</strong>.</li>
+      <li><strong>random</strong> — any legal domino: <strong>0.0%</strong>. Not a low number,
+      <em>zero</em>: it finished none of the thirty boards it was handed, all of which were
+      solvable.</li>
+    </ul>
+
+    <p>That is the honest shape of the result. On the one class of position where a puzzle is a
+    puzzle — a unique answer — exact counting is worth nothing at all against a one-line rule. On
+    every other position it is the difference between always and never.</p>
+
+    <h3 class="mid">A count answers questions a solver cannot ask</h3>
+
+    <p>Once you have the number, three more things fall out for free, and none of them are
+    available to a solver that only finds one tiling.</p>
+
+    <p><strong>A uniform random tiling in one sweep.</strong> Run the recursion backwards to get,
+    for every cursor position and frontier, the number of ways to finish from there. Then walk
+    forwards taking each branch with probability proportional to that number. No rejection
+    sampling, no Markov chain, no burn-in: one pass, exactly uniform over all 12,988,816 tilings.</p>
+
+    <p><strong>The exact probability of every domino.</strong> Multiply the ways to arrive at a
+    state by the ways to finish from it and you get the number of tilings routed through that
+    state, and hence the number containing each domino, in one forward and one backward sweep
+    instead of one whole DP per domino. Both are computed on this page and compared; they agree to
+    the unit.</p>
+
+    <p><strong>And the answer is not what you would guess.</strong> On a bare 8&times;8 the
+    intuition is that every domino is roughly as likely as every other. Measured, the probabilities
+    run from <strong>0.1698</strong> to <strong>0.5000</strong> — a factor of
+    <strong>2.94</strong> — with the corner dominoes at exactly one half, because a corner cell has
+    two neighbours and the board is symmetric. The mean is exactly (cells / 2) / edges = 2/7, which
+    is not a measurement but an identity: each of the 32 dominoes in a tiling is one of the 112
+    edges. And on a 2&times;n strip the probability that the far end is closed off by a single
+    upright domino is F(n)/F(n+1), which at n = 20 reads
+    <strong>0.618033985</strong> against 1/&phi; = 0.6180339887.</p>
+
+    <h3 class="mid">Two more numbers that are not what they look like</h3>
+
+    <p><strong>Doubles.</strong> The DP runs in <code>Float64Array</code>, which holds exact
+    integers only below 2<sup>53</sup> = 9,007,199,254,740,991. The obvious guess is that it starts
+    lying when the answer passes that line. It does not. A 12&times;12 board has
+    <strong>53,060,477,521,960,000</strong> tilings — nearly six times over the limit — and the
+    double DP returns it <em>exactly</em>, because every partial sum on the way lands on a
+    representable value. The first rectangle where it is wrong is <strong>10&times;14</strong>, at
+    16,848,161,392,724,969, where it returns …968: off by one, in a number three times smaller
+    than one it got right. Magnitude does not predict precision; the page carries a BigInt DP
+    alongside and prints where the two part company rather than guessing.</p>
+
+    <p><strong>Symmetry.</strong> A 6&times;6 board has 6,728 tilings, and the natural way to count
+    them up to rotation and reflection is to divide by the eight symmetries of the square: 841. The
+    true answer is <strong>930</strong>. Burnside's lemma says average the <em>fixed points</em>,
+    not the elements, and the fixed-point counts are lopsided — on a 6&times;6, the two quarter
+    turns fix <strong>zero</strong> tilings and so do both diagonal reflections, leaving only the
+    half turn (120) and the two axis reflections (296 each) contributing anything at all. On a
+    4&times;4 the naive division gives 4.5, which is not even an integer, against a true 9. The
+    page computes both the lemma and the explicit orbits and checks them against each other.</p>
+
+    <h3 class="mid">What the engine returns</h3>
+    <pre>countTilings(board)          -> the exact number of ways to finish       (2^W states)
+classifyMoves(board)         -> every legal domino, with its count, and
+                                dead = 0, forced = equals the total
+edgeOdds(board)              -> the exact probability of each domino
+sampleTiling(board, layers)  -> one uniformly random tiling, one pass
+isTileableByMatching(board)  -> yes / no, with no count anywhere in it</pre>
+
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">🔨 How it is built</h2>
+
+    <h3 class="mid">1. The whole engine</h3>
+    <pre>function countTilings(b){
+  const W = b.W, H = b.H, S = 1 &lt;&lt; W, free = b.free;
+  let dp = new Float64Array(S), nd = new Float64Array(S);
+  dp[0] = 1;
+  const TOP = 1 &lt;&lt; (W - 1);
+  for (let r = 0; r &lt; H; r++)
+    for (let c = 0; c &lt; W; c++){
+      nd.fill(0);
+      const p = r * W + c;
+      const canR = c + 1 &lt; W &amp;&amp; free[p + 1] === 1;
+      const canD = r + 1 &lt; H &amp;&amp; free[p + W] === 1;
+      for (let m = 0; m &lt; S; m++){
+        const v = dp[m];
+        if (v === 0) continue;
+        if ((m &amp; 1) || free[p] === 0){ nd[m &gt;&gt; 1] += v; continue; }   // covered, or a hole
+        if (canR &amp;&amp; !(m &amp; 2)) nd[(m | 2) &gt;&gt; 1] += v;                  // lay it rightwards
+        if (canD)             nd[(m &gt;&gt; 1) | TOP] += v;                // lay it downwards
+      }
+      const t = dp; dp = nd; nd = t;
+    }
+  return dp[0];
+}</pre>
+    <p>Twenty lines, and it counts the tilings of any region with holes anywhere. The two
+    interesting lines are the two placements: rightwards marks the cell next door, which is bit 1;
+    downwards marks the cell below, which is bit W and therefore the <em>top</em> bit once the mask
+    shifts. Get that shift backwards and you have a program that counts something else and never
+    says so.</p>
+
+    <h3 class="mid">2. The check that matters, on every board</h3>
+    <pre>// no frontier, no mask, no compression - the thing the DP claims to equal
+function enumTilings(b){
+  const cov = b.free.slice();
+  let count = 0;
+  (function rec(start){
+    let p = start; while (p &lt; N &amp;&amp; !cov[p]) p++;
+    if (p === N){ count++; return; }
+    if (right is free){ cover both; rec(p + 1); uncover both; }
+    if (below is free){ cover both; rec(p + 1); uncover both; }
+  })(0);
+  return count;
+}
+// then, for all 65,536 boards of a 4x4:
+//   countTilings(b) === enumTilings(b)          and
+//   isTileableByMatching(b) === (countTilings(b) &gt; 0)</pre>
+    <p>Two solvers with nothing in common and a third that answers a weaker question by a
+    completely different mechanism. All 65,536 boards, 0 disagreements, and 1,048,576 more behind
+    the deep-sweep button.</p>
+
+    <h3 class="mid">3. Backwards, for everything else</h3>
+    <pre>suffix[p][m] = ways to FINISH from cursor p with pending frontier m
+prefix[p][m] = ways to ARRIVE at cursor p carrying frontier m
+
+count           = suffix[0][0]
+tilings through a state = prefix[p][m] * suffix[p][m]
+odds of a domino        = sum over m of prefix[p][m] * suffix[p+1][after placing it]  /  count
+a uniform sample        = walk forwards, branch with probability proportional to suffix</pre>
+    <p>One extra backward pass turns a counter into a sampler, a probability table and a
+    forced-move oracle. The sampler is exactly uniform in a single sweep with no rejection and no
+    chain, which is the part that surprises people: <em>counting a set is what lets you draw from
+    it fairly</em>.</p>
+
+    <h3 class="mid">4. The move oracle, in full</h3>
+    <pre>dead   = the number of tilings containing this domino is 0
+forced = that number EQUALS the total
+odds   = that number / the total</pre>
+    <p>Compared as integers, never as ratios. A ratio of 0.9999999999 and a count that equals the
+    total are different claims, and only one of them means &ldquo;every finish uses this&rdquo;.
+    The same numbers are also computed the slow, obvious way — delete the two cells and run a whole
+    fresh DP — and the two agree exactly on every edge of a 6&times;6.</p>
+
+    <h3 class="mid">5. Three local tests, written to be given their best shot</h3>
+    <pre>isolated  : some free cell has no free neighbour            -&gt; degreeOneCells() returns null
+unbalanced: dark count != light count                        -&gt; balanceOf().diff
+component : some connected component has diff != 0           -&gt; componentsBalanced()</pre>
+    <p>Each fatal move is charged to the <em>first</em> test that catches it, so the numbers do not
+    double-count, and the strongest test gets the leftovers. The unbalanced row reads 0 in every
+    configuration; that is not a bug in the harness, it is the point.</p>
+
+    <h3 class="mid">6. The generator is the engine</h3>
+    <pre>// punch out colour-balanced pairs, always keeping the count above zero,
+// always taking the pair that shrinks the count the most, until one tiling is left
+for (;;){
+  best = argmin over sampled (dark, light) pairs of countTilings(board without them)
+  if (best count is 0 or none found) stop
+  board = board without best;  if (count === 1) stop
+}</pre>
+    <p>Nothing in that loop knows what a puzzle is. It knows how to count, and &ldquo;a puzzle&rdquo;
+    is the fixed point of counting downwards.</p>
+
+    <h3 class="mid">7. The race, and why the count player cannot lose</h3>
+    <pre>count     : filter the legal moves to those with countTilings(after) &gt; 0, pick any
+component : take a forced pair if one exists, else any move that isolates nobody
+            and leaves every component balanced
+local     : the same without the component test
+random    : any legal domino</pre>
+    <p>The count player winning 100% is not evidence about the count player; it is a restatement of
+    what the count is. The number worth reading is the one underneath it, and it is 0.0%.</p>
+
+    <h3 class="mid">8. Burnside, checked rather than applied</h3>
+    <pre>orbits = (1 / |G|) * sum over g in G of |{ tilings fixed by g }|      // the lemma
+// and, separately, the orbits built explicitly by canonical form
+// 4x4: 36 tilings, group 8, fixed 36/2/8/2/12/12/0/0 -> 9, and 9 orbits found
+// 6x6: 6,728 tilings -> 930, against 6728/8 = 841</pre>
+
+    <h3 class="mid">9. Two arithmetics, because one of them lies</h3>
+    <pre>countTilings(b)     // Float64Array  - fast, exact below 2^53 and sometimes far past it
+countTilingsBig(b)  // BigInt        - always exact, roughly 40x slower
+// the page runs both across a table of rectangles and reports the FIRST disagreement
+// rather than assuming a bound: it is 10x14, not the 12x12 that is six times larger</pre>
+
+    <h3 class="mid">10. What this engine is not</h3>
+    <pre>// Exact and total for any region that fits in a W-bit frontier: cost is H * 2^W * W.
+// W = 14 is comfortable, W = 20 is not - this is exponential in the WIDTH, which is why
+// the boards here are narrow-or-square and never 4 x 400 in the wrong orientation.
+// It counts DOMINO tilings only. Trominoes, polyomino packings and coloured dominoes each
+// need a different frontier, and the same idea does not simply widen to cover them.
+// It is not a two-player game: there is no opponent, and nothing here is a search.</pre>
+
+    <h3 class="mid">Self-test</h3>
+    <pre id="selftest">running&hellip;</pre>
+
+    <h3 class="mid">🎉 GameFromZero Day 71 shipped.</h3>
+    <p class="small">Seventy-one games. The first one whose engine returns a number nobody asked
+    for and answers every question with it.</p>
+
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("tab-active"));
+  t.classList.add("tab-active");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// DOMINO TILING. A grid with some cells punched out; cover every remaining cell with 2x1 dominoes.
+// Every other game in this series answers "what is the best move". This one answers "HOW MANY",
+// because here the count IS the engine: the number of ways to finish from a position decides
+// whether a move is survivable (count > 0), whether it is forced (count unchanged), and how likely
+// a domino is to appear in a random finish (its share of the count). The move oracle falls out of
+// the counting oracle, and never the other way round.
+//
+// The count cannot be enumerated - an 8x8 board has 12,988,816 tilings and a 12x14 has 4.3e19 - so
+// it is computed by a BROKEN-PROFILE dynamic program: sweep the cells in reading order carrying a
+// W-bit frontier that records, for the next W cells only, which are already covered by a domino
+// reaching in from behind. That is 2^W states instead of 2^(W*H) subsets - 256 instead of 18
+// quintillion on an 8x8 - and it is the only reason any of this is computable at all.
+//
+// Nothing in this block touches the DOM.
+
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- boards
+// A board is { W, H, free } with free[p] = 1 for a cell that must be covered, 0 for a hole.
+// Cell p sits at row (p/W|0), column (p%W); its colour is (row + col) & 1.
+function makeBoard(W, H, holes){
+  const free = new Uint8Array(W * H).fill(1);
+  if (holes) for (const p of holes) free[p] = 0;
+  return { W: W, H: H, free: free };
+}
+const colourOf = (p, W) => (((p / W) | 0) + (p % W)) & 1;
+function balanceOf(b){
+  let dark = 0, light = 0;
+  for (let p = 0; p < b.free.length; p++) if (b.free[p]) (colourOf(p, b.W) ? light++ : dark++);
+  return { dark: dark, light: light, diff: dark - light, cells: dark + light };
+}
+function cloneBoard(b){ return { W: b.W, H: b.H, free: b.free.slice() }; }
+function legalDominoes(b){
+  const out = [];
+  for (let r = 0; r < b.H; r++)
+    for (let c = 0; c < b.W; c++){
+      const p = r * b.W + c;
+      if (!b.free[p]) continue;
+      if (c + 1 < b.W && b.free[p + 1]) out.push({ p: p, q: p + 1, horiz: true });
+      if (r + 1 < b.H && b.free[p + b.W]) out.push({ p: p, q: p + b.W, horiz: false });
+    }
+  return out;
+}
+function without(b, p, q){
+  const n = cloneBoard(b); n.free[p] = 0; n.free[q] = 0; return n;
+}
+
+// ---------------------------------------------------------------- 1. the counting engine
+// Broken-profile DP. Cells in reading order; the state is a W-bit mask where bit j says "the cell
+// j steps ahead of the cursor is already covered". At the cursor:
+//   bit 0 set   -> a domino from behind already covers it; shift and move on
+//   hole        -> nothing to place; shift and move on
+//   otherwise   -> this cell MUST be the left or top half of a domino, so branch on the two ways
+// Placing horizontally sets bit 1 (the cell to the right); placing vertically sets bit W (the cell
+// directly below), which after the shift becomes the top bit. Those two facts are the algorithm.
+function countTilings(b){
+  const W = b.W, H = b.H, S = 1 << W, free = b.free;
+  let dp = new Float64Array(S), nd = new Float64Array(S);
+  dp[0] = 1;
+  const TOP = 1 << (W - 1);
+  for (let r = 0; r < H; r++)
+    for (let c = 0; c < W; c++){
+      nd.fill(0);
+      const p = r * W + c;
+      const canR = c + 1 < W && free[p + 1] === 1;
+      const canD = r + 1 < H && free[p + W] === 1;
+      for (let m = 0; m < S; m++){
+        const v = dp[m];
+        if (v === 0) continue;
+        if ((m & 1) || free[p] === 0){ nd[m >> 1] += v; continue; }
+        if (canR && !(m & 2)) nd[(m | 2) >> 1] += v;
+        if (canD)             nd[(m >> 1) | TOP] += v;
+      }
+      const t = dp; dp = nd; nd = t;
+    }
+  return dp[0];
+}
+
+// The same recursion in BigInt. A double is an exact integer only below 2^53, and the tiling counts
+// of a rectangle cross that line while the board still fits on a screen - so the page carries both
+// and MEASURES where they part company instead of assuming they never do.
+function countTilingsBig(b){
+  const W = b.W, H = b.H, S = 1 << W, free = b.free;
+  let dp = new Array(S).fill(0n), nd = new Array(S).fill(0n);
+  dp[0] = 1n;
+  const TOP = 1 << (W - 1);
+  for (let r = 0; r < H; r++)
+    for (let c = 0; c < W; c++){
+      nd.fill(0n);
+      const p = r * W + c;
+      const canR = c + 1 < W && free[p + 1] === 1;
+      const canD = r + 1 < H && free[p + W] === 1;
+      for (let m = 0; m < S; m++){
+        const v = dp[m];
+        if (v === 0n) continue;
+        if ((m & 1) || free[p] === 0){ nd[m >> 1] += v; continue; }
+        if (canR && !(m & 2)) nd[(m | 2) >> 1] += v;
+        if (canD)             nd[(m >> 1) | TOP] += v;
+      }
+      const t = dp; dp = nd; nd = t;
+    }
+  return dp[0];
+}
+
+// ---------------------------------------------------------------- 2. brute force, for the proof
+// Cover the first uncovered cell the two possible ways and recurse. No frontier, no mask, no
+// compression - this is what the DP CLAIMS to equal, and on small boards it can be made to say so.
+function enumTilings(b, collect, cap){
+  const W = b.W, H = b.H, N = W * H;
+  const cov = b.free.slice();
+  const out = [], cur = [];
+  let count = 0, stopped = false;
+  (function rec(start){
+    if (stopped) return;
+    let p = start;
+    while (p < N && !cov[p]) p++;
+    if (p === N){
+      count++;
+      if (collect) out.push(cur.slice());
+      if (cap && count >= cap) stopped = true;
+      return;
+    }
+    const r = (p / W) | 0, c = p % W;
+    if (c + 1 < W && cov[p + 1]){
+      cov[p] = 0; cov[p + 1] = 0; cur.push([p, p + 1]);
+      rec(p + 1);
+      cur.pop(); cov[p] = 1; cov[p + 1] = 1;
+    }
+    if (r + 1 < H && cov[p + W]){
+      cov[p] = 0; cov[p + W] = 0; cur.push([p, p + W]);
+      rec(p + 1);
+      cur.pop(); cov[p] = 1; cov[p + W] = 1;
+    }
+  })(0);
+  return collect ? out : count;
+}
+
+// ---------------------------------------------------------------- 3. a solver that cannot count
+// Tileability is a perfect matching in the grid graph, and the grid graph is bipartite by colour,
+// so Kuhn's augmenting-path algorithm answers TILEABLE / NOT with no notion of "how many" anywhere
+// in it. It is the independent verdict the count is checked against on every board of the sweep.
+function maxMatching(b){
+  const W = b.W, H = b.H, N = W * H;
+  const dark = [];
+  for (let p = 0; p < N; p++) if (b.free[p] && colourOf(p, W) === 0) dark.push(p);
+  const matchOf = new Int32Array(N).fill(-1);
+  const seen = new Uint8Array(N);
+  function nbrs(p){
+    const r = (p / W) | 0, c = p % W, out = [];
+    if (c > 0     && b.free[p - 1]) out.push(p - 1);
+    if (c + 1 < W && b.free[p + 1]) out.push(p + 1);
+    if (r > 0     && b.free[p - W]) out.push(p - W);
+    if (r + 1 < H && b.free[p + W]) out.push(p + W);
+    return out;
+  }
+  function tryK(u){
+    for (const v of nbrs(u)){
+      if (seen[v]) continue;
+      seen[v] = 1;
+      if (matchOf[v] < 0 || tryK(matchOf[v])){ matchOf[v] = u; matchOf[u] = v; return true; }
+    }
+    return false;
+  }
+  let size = 0;
+  for (const u of dark){ seen.fill(0); if (tryK(u)) size++; }
+  return { size: size, matchOf: matchOf };
+}
+const isTileableByMatching = b => {
+  const bal = balanceOf(b);
+  return bal.diff === 0 && maxMatching(b).size * 2 === bal.cells;
+};
+
+// ---------------------------------------------------------------- 4. two closed forms
+// Kasteleyn / Temperley-Fisher, 1961: the number of domino tilings of an m x n rectangle is an
+// eigenvalue product - analysis, with no combinatorics in it at all. Computed in logs, so it is
+// compared against the DP by RELATIVE error and never by equality.
+function kasteleyn(m, n){
+  if ((m * n) % 2 === 1) return 0;
+  let lg = 0;
+  for (let j = 1; j <= m; j++)
+    for (let k = 1; k <= n; k++){
+      const t = 4 * Math.cos(Math.PI * j / (m + 1)) ** 2 + 4 * Math.cos(Math.PI * k / (n + 1)) ** 2;
+      lg += 0.25 * Math.log(t);
+    }
+  return Math.exp(lg);
+}
+// The Aztec diamond of order n has exactly 2^(n(n+1)/2) tilings (Elkies, Kuperberg, Larsen and
+// Propp, 1992). It is not a rectangle, so it also proves the hole machinery is not a decoration.
+function aztecBoard(n){
+  const W = 2 * n, H = 2 * n;
+  const free = new Uint8Array(W * H);
+  for (let r = 0; r < H; r++)
+    for (let c = 0; c < W; c++){
+      const x = Math.abs(c - n + 0.5), y = Math.abs(r - n + 0.5);
+      free[r * W + c] = (x + y <= n) ? 1 : 0;
+    }
+  return { W: W, H: H, free: free };
+}
+const aztecCount = n => Math.pow(2, n * (n + 1) / 2);
+// 2 x n strips are Fibonacci. Checked, not quoted.
+function fib(n){ let a = 0, b = 1; for (let i = 0; i < n; i++){ const t = a + b; a = b; b = t; } return a; }
+
+// ---------------------------------------------------------------- 5. layers, sampling, edge odds
+// suffix[p][m] = the number of ways to FINISH from cursor p with pending frontier m, built by the
+// same recursion run backwards. It buys three things the forward pass alone cannot: a uniform
+// random tiling in one sweep, an exact probability for every domino, and the forced-move oracle.
+function suffixLayers(b){
+  const W = b.W, H = b.H, N = W * H, S = 1 << W, free = b.free, TOP = 1 << (W - 1);
+  const L = new Array(N + 1);
+  L[N] = new Float64Array(S); L[N][0] = 1;
+  for (let p = N - 1; p >= 0; p--){
+    const r = (p / W) | 0, c = p % W;
+    const cur = new Float64Array(S), nxt = L[p + 1];
+    const canR = c + 1 < W && free[p + 1] === 1;
+    const canD = r + 1 < H && free[p + W] === 1;
+    for (let m = 0; m < S; m++){
+      if ((m & 1) || free[p] === 0){ cur[m] = nxt[m >> 1]; continue; }
+      let v = 0;
+      if (canR && !(m & 2)) v += nxt[(m | 2) >> 1];
+      if (canD)             v += nxt[(m >> 1) | TOP];
+      cur[m] = v;
+    }
+    L[p] = cur;
+  }
+  return L;
+}
+// prefix[p][m] = the number of ways to ARRIVE at cursor p carrying frontier m. prefix times suffix
+// is the number of tilings routed through a state, which is what makes exact edge odds possible.
+function prefixLayers(b){
+  const W = b.W, H = b.H, N = W * H, S = 1 << W, free = b.free, TOP = 1 << (W - 1);
+  const L = new Array(N + 1);
+  L[0] = new Float64Array(S); L[0][0] = 1;
+  for (let p = 0; p < N; p++){
+    const r = (p / W) | 0, c = p % W;
+    const cur = L[p], nxt = new Float64Array(S);
+    const canR = c + 1 < W && free[p + 1] === 1;
+    const canD = r + 1 < H && free[p + W] === 1;
+    for (let m = 0; m < S; m++){
+      const v = cur[m];
+      if (v === 0) continue;
+      if ((m & 1) || free[p] === 0){ nxt[m >> 1] += v; continue; }
+      if (canR && !(m & 2)) nxt[(m | 2) >> 1] += v;
+      if (canD)             nxt[(m >> 1) | TOP] += v;
+    }
+    L[p + 1] = nxt;
+  }
+  return L;
+}
+// One uniform random tiling in a single sweep: at each branch take an option with probability
+// proportional to the number of completions behind it. No rejection, no burn-in, no Markov chain.
+function sampleTiling(b, L, rnd){
+  const W = b.W, H = b.H, N = W * H, free = b.free, TOP = 1 << (W - 1);
+  let m = 0;
+  const out = [];
+  for (let p = 0; p < N; p++){
+    const r = (p / W) | 0, c = p % W;
+    if ((m & 1) || free[p] === 0){ m = m >> 1; continue; }
+    const canR = c + 1 < W && free[p + 1] === 1 && !(m & 2);
+    const canD = r + 1 < H && free[p + W] === 1;
+    const wR = canR ? L[p + 1][(m | 2) >> 1] : 0;
+    const wD = canD ? L[p + 1][(m >> 1) | TOP] : 0;
+    if (wR + wD === 0) return null;
+    if (rnd() * (wR + wD) < wR){ out.push([p, p + 1]); m = (m | 2) >> 1; }
+    else                        { out.push([p, p + W]); m = (m >> 1) | TOP; }
+  }
+  return out;
+}
+// The exact number of tilings containing each domino, from one forward and one backward sweep.
+// The obvious way is a whole DP per domino; both are computed and compared, because they must
+// agree to the last unit and a ratio that is nearly 1 is not the same as a count that IS the total.
+function edgeOdds(b){
+  const W = b.W, H = b.H, N = W * H, S = 1 << W, free = b.free, TOP = 1 << (W - 1);
+  const pre = prefixLayers(b), suf = suffixLayers(b);
+  const total = suf[0][0];
+  const map = new Map(), raw = new Map();
+  if (total === 0) return { total: 0, map: map, raw: raw };
+  for (let p = 0; p < N; p++){
+    const r = (p / W) | 0, c = p % W;
+    if (free[p] === 0) continue;
+    const canR = c + 1 < W && free[p + 1] === 1;
+    const canD = r + 1 < H && free[p + W] === 1;
+    let sR = 0, sD = 0;
+    for (let m = 0; m < S; m++){
+      const v = pre[p][m];
+      if (v === 0 || (m & 1)) continue;
+      if (canR && !(m & 2)) sR += v * suf[p + 1][(m | 2) >> 1];
+      if (canD)             sD += v * suf[p + 1][(m >> 1) | TOP];
+    }
+    if (canR){ map.set(p + ":h", sR / total); raw.set(p + ":h", sR); }
+    if (canD){ map.set(p + ":v", sD / total); raw.set(p + ":v", sD); }
+  }
+  return { total: total, map: map, raw: raw };
+}
+// The same numbers the slow, obvious way: delete the two cells and count what is left.
+function edgeOddsNaive(b){
+  const total = countTilings(b), map = new Map(), raw = new Map();
+  if (total === 0) return { total: 0, map: map, raw: raw };
+  for (const d of legalDominoes(b)){
+    const c = countTilings(without(b, d.p, d.q));
+    map.set(d.p + ":" + (d.horiz ? "h" : "v"), c / total);
+    raw.set(d.p + ":" + (d.horiz ? "h" : "v"), c);
+  }
+  return { total: total, map: map, raw: raw };
+}
+
+// ---------------------------------------------------------------- 6. the move oracle
+// Every question this game asks is a comparison of two counts.
+//   dead   : zero tilings contain the domino     -> playing it throws the puzzle away
+//   forced : EVERY tiling contains it            -> playing it costs nothing at all
+// Note what "forced" means when the total is 1: every domino of the unique tiling is forced, all
+// of them at once. That fact is what the page ends up attacking.
+function classifyMoves(b){
+  const eo = edgeOdds(b), out = [];
+  for (const d of legalDominoes(b)){
+    const k = d.p + ":" + (d.horiz ? "h" : "v");
+    const raw = eo.raw.get(k) || 0;                       // the COUNT, not the ratio
+    out.push({ p: d.p, q: d.q, horiz: d.horiz, count: raw,
+               prob: eo.total ? raw / eo.total : 0,
+               dead: raw === 0, forced: eo.total > 0 && raw === eo.total });
+  }
+  return { total: eo.total, moves: out };
+}
+// The rule a human actually uses, and the whole of it: a free cell with exactly one free neighbour
+// must pair with it. No counting, no lookahead, entirely local. Returns null on an isolated cell,
+// which is the one dead board a local test can always see.
+function degreeOneCells(b){
+  const W = b.W, H = b.H, out = [];
+  for (let p = 0; p < W * H; p++){
+    if (!b.free[p]) continue;
+    const r = (p / W) | 0, c = p % W;
+    let n = 0, only = -1;
+    if (c > 0     && b.free[p - 1]){ n++; only = p - 1; }
+    if (c + 1 < W && b.free[p + 1]){ n++; only = p + 1; }
+    if (r > 0     && b.free[p - W]){ n++; only = p - W; }
+    if (r + 1 < H && b.free[p + W]){ n++; only = p + W; }
+    if (n === 0) return null;
+    if (n === 1) out.push({ cell: p, partner: only });
+  }
+  return out;
+}
+// Local deduction run to exhaustion: place every forced pair it can see, repeat, report how far.
+function localSolve(b){
+  const cur = cloneBoard(b);
+  let placed = 0;
+  for (;;){
+    const d1 = degreeOneCells(cur);
+    if (d1 === null) return { done: false, placed: placed, left: -1, stuck: true, isolated: true };
+    if (d1.length === 0) break;
+    const f = d1[0];
+    cur.free[f.cell] = 0; cur.free[f.partner] = 0;
+    placed++;
+  }
+  let left = 0;
+  for (let p = 0; p < cur.free.length; p++) if (cur.free[p]) left++;
+  return { done: left === 0, placed: placed, left: left, stuck: left > 0 };
+}
+
+// ---------------------------------------------------------------- 7. connected components
+// The middle rung of the ladder of tests: balance is necessary, and so is balance INSIDE every
+// connected component. Neither is sufficient, and the page measures the gap between all three.
+function components(b){
+  const W = b.W, H = b.H, N = W * H;
+  const comp = new Int32Array(N).fill(-1);
+  let k = 0;
+  const stack = [];
+  for (let s = 0; s < N; s++){
+    if (!b.free[s] || comp[s] >= 0) continue;
+    comp[s] = k; stack.length = 0; stack.push(s);
+    while (stack.length){
+      const p = stack.pop(), r = (p / W) | 0, c = p % W;
+      const nb = [];
+      if (c > 0) nb.push(p - 1);
+      if (c + 1 < W) nb.push(p + 1);
+      if (r > 0) nb.push(p - W);
+      if (r + 1 < H) nb.push(p + W);
+      for (const q of nb) if (b.free[q] && comp[q] < 0){ comp[q] = k; stack.push(q); }
+    }
+    k++;
+  }
+  return { comp: comp, count: k };
+}
+function componentsBalanced(b){
+  const cc = components(b);
+  const d = new Int32Array(cc.count), l = new Int32Array(cc.count);
+  for (let p = 0; p < b.free.length; p++)
+    if (b.free[p]) (colourOf(p, b.W) ? l[cc.comp[p]]++ : d[cc.comp[p]]++);
+  for (let i = 0; i < cc.count; i++) if (d[i] !== l[i]) return false;
+  return true;
+}
+
+// ---------------------------------------------------------------- 8. the exhaustive sweep
+// EVERY subset of a small board, with every solver run on it. Nothing here is sampled: this is
+// where engine bugs and test bugs both surface, and on this page both of them did.
+function sweepAllBoards(W, H, opts){
+  const N = W * H, TOT = 1 << N;
+  const o = opts || {};
+  let boards = 0, tileable = 0, dpVsBrute = 0, dpVsMatch = 0;
+  let balanced = 0, balancedLive = 0, compBalanced = 0, compBalancedLive = 0;
+  let unique = 0, uniqueConnected = 0, noLocalStart = 0, localFailed = 0;
+  for (let mask = 0; mask < TOT; mask++){
+    const free = new Uint8Array(N);
+    let cells = 0;
+    for (let p = 0; p < N; p++){ free[p] = (mask >> p) & 1; if (free[p]) cells++; }
+    const b = { W: W, H: H, free: free };
+    boards++;
+    const cnt = countTilings(b);
+    const bal = balanceOf(b);
+    const cb = bal.diff === 0 && componentsBalanced(b);
+    if (bal.diff === 0){ balanced++; if (cnt > 0) balancedLive++; }
+    if (cb){ compBalanced++; if (cnt > 0) compBalancedLive++; }
+    if (cnt > 0) tileable++;
+    if (o.brute !== false && cnt !== enumTilings(b, false)) dpVsBrute++;
+    if (isTileableByMatching(b) !== (cnt > 0)) dpVsMatch++;
+    // The EMPTY board has exactly one tiling - the empty one - and no cells to be forced. It is a
+    // real position and a useless one, and counting it as "unique with no local start" was this
+    // page's first wrong assertion. Uniqueness statistics start at two cells.
+    if (cnt === 1 && cells >= 2){
+      unique++;
+      if (components(b).count === 1){
+        uniqueConnected++;
+        const d1 = degreeOneCells(b);
+        if (d1 !== null && d1.length === 0) noLocalStart++;
+        if (!localSolve(b).done) localFailed++;
+      }
+    }
+  }
+  return { W: W, H: H, boards: boards, tileable: tileable, dpVsBrute: dpVsBrute, dpVsMatch: dpVsMatch,
+           balanced: balanced, balancedLive: balancedLive,
+           compBalanced: compBalanced, compBalancedLive: compBalancedLive,
+           unique: unique, uniqueConnected: uniqueConnected,
+           noLocalStart: noLocalStart, localFailed: localFailed };
+}
+
+// ---------------------------------------------------------------- 9. Gomory's ladder
+// Gomory, 1973: remove ONE dark and ONE light square from a rectangle with an even cell count and
+// what is left is ALWAYS tileable - proved by a Hamiltonian cycle through all the cells, which the
+// two removals cut into two arcs of even length. The page checks that by exhaustion, then removes
+// two of each and measures how fast the colour argument stops being the whole story.
+function gomorySweep(W, H, pairs){
+  const N = W * H, dark = [], light = [];
+  for (let p = 0; p < N; p++) (colourOf(p, W) ? light.push(p) : dark.push(p));
+  let n = 0, bad = 0;
+  const examples = [];
+  if (pairs === 1){
+    for (const a of dark) for (const c of light){
+      n++;
+      if (countTilings(makeBoard(W, H, [a, c])) === 0){ bad++; if (examples.length < 4) examples.push([a, c]); }
+    }
+  } else {
+    for (let i = 0; i < dark.length; i++) for (let j = i + 1; j < dark.length; j++)
+      for (let k = 0; k < light.length; k++) for (let l = k + 1; l < light.length; l++){
+        n++;
+        const holes = [dark[i], dark[j], light[k], light[l]];
+        if (countTilings(makeBoard(W, H, holes)) === 0){ bad++; if (examples.length < 4) examples.push(holes); }
+      }
+  }
+  return { pairs: pairs, boards: n, dead: bad, rate: n ? bad / n : 0, examples: examples };
+}
+
+// ---------------------------------------------------------------- 10. the rectangle table
+// The headline counts, and the exact point at which a double stops being an integer.
+function rectangleTable(list){
+  const rows = [];
+  for (const [m, n] of list){
+    const W = Math.min(m, n), H = Math.max(m, n);
+    const b = makeBoard(W, H, null);
+    const big = countTilingsBig(b);
+    const num = countTilings(b);
+    // NOTE: the guard is isInteger, NOT isSafeInteger. Writing it the safe way was this page's
+    // second wrong assertion: a double past 2^53 can still hold the answer exactly when the answer
+    // happens to land on a representable value, and the 12x12 does. A range test is not a value test.
+    const exact = Number.isInteger(num) && BigInt(num) === big;
+    const k = kasteleyn(m, n);
+    rows.push({ m: m, n: n, big: big.toString(), num: num, exact: exact, kast: k,
+                kastErr: Number(big) === 0 ? 0 : Math.abs(k - Number(big)) / Number(big) });
+  }
+  return rows;
+}
+function firstUnsafeRectangle(maxSide, maxCells){
+  const list = [];
+  for (let m = 2; m <= maxSide; m++)
+    for (let n = m; n <= maxSide; n++){
+      if ((m * n) % 2 === 1) continue;
+      if (m * n > maxCells) continue;
+      list.push([m, n]);
+    }
+  list.sort((a, b) => a[0] * a[1] - b[0] * b[1]);
+  for (const [m, n] of list){
+    const b = makeBoard(m, n, null);
+    const big = countTilingsBig(b), num = countTilings(b);
+    if (!(Number.isInteger(num) && BigInt(num) === big))
+      return { m: m, n: n, big: big.toString(), num: num, cells: m * n };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- 11. boards to play on
+// The generator IS the counting engine: punch out colour-balanced pairs of cells, always keeping
+// the count above zero, always taking the pair that shrinks it the most, until one tiling is left.
+// Nothing in the loop knows what a puzzle is; it only knows how to count.
+function generatePuzzle(W, H, rnd, targetHoles, wantUnique){
+  let b = makeBoard(W, H, null);
+  let cnt = countTilings(b);
+  const dark = [], light = [];
+  for (let p = 0; p < W * H; p++) (colourOf(p, W) ? light.push(p) : dark.push(p));
+  const holes = [];
+  const punch = tries => {
+    let best = null, bestC = Infinity;
+    for (let t = 0; t < tries; t++){
+      const a = dark[Math.floor(rnd() * dark.length)], c = light[Math.floor(rnd() * light.length)];
+      if (!b.free[a] || !b.free[c]) continue;
+      const nb = without(b, a, c);
+      const nc = countTilings(nb);
+      if (nc > 0 && nc < bestC){ bestC = nc; best = [a, c, nb]; }
+    }
+    if (!best) return false;
+    b = best[2]; cnt = bestC; holes.push(best[0], best[1]);
+    return true;
+  };
+  for (let step = 0; step < targetHoles / 2; step++){
+    if (!punch(40)) break;
+    if (wantUnique && cnt === 1) break;
+  }
+  if (wantUnique) for (let g = 0; g < 300 && cnt > 1; g++) if (!punch(60)) break;
+  return { board: b, count: cnt, holes: holes };
+}
+// Holes punched at random rather than chosen: balanced by colour so the board is never dead for
+// the trivial reason, and kept only if it can still be finished.
+function randomBoard(W, H, rnd, holes){
+  const dark = [], light = [];
+  for (let p = 0; p < W * H; p++) (colourOf(p, W) ? light.push(p) : dark.push(p));
+  for (let attempt = 0; attempt < 200; attempt++){
+    const b = makeBoard(W, H, null);
+    const dk = dark.slice(), lt = light.slice();
+    for (let i = 0; i < holes / 2; i++){
+      b.free[dk.splice(Math.floor(rnd() * dk.length), 1)[0]] = 0;
+      b.free[lt.splice(Math.floor(rnd() * lt.length), 1)[0]] = 0;
+    }
+    const n = countTilings(b);
+    if (n > 0) return { board: b, count: n };
+  }
+  const b = makeBoard(W, H, null);
+  return { board: b, count: countTilings(b) };
+}
+
+// ---------------------------------------------------------------- 12. Burnside, on the tilings
+// A different question with a different answer: how many tilings are there UP TO the symmetries of
+// the board? Burnside says average the fixed points over the group; the page also builds the
+// orbits explicitly, so the lemma is checked rather than applied.
+const SQUARE_SYMS = ["id", "r90", "r180", "r270", "mh", "mv", "d1", "d2"];
+const RECT_SYMS   = ["id", "r180", "mh", "mv"];
+function mapCell(p, W, H, s){
+  const r = (p / W) | 0, c = p % W;
+  switch (s){
+    case "id":   return r * W + c;
+    case "r180": return (H - 1 - r) * W + (W - 1 - c);
+    case "mh":   return (H - 1 - r) * W + c;
+    case "mv":   return r * W + (W - 1 - c);
+    case "r90":  return c * H + (H - 1 - r);
+    case "r270": return (W - 1 - c) * H + r;
+    case "d1":   return c * H + r;
+    case "d2":   return (W - 1 - c) * H + (H - 1 - r);
+  }
+  return p;
+}
+const tilingKey = t => t.map(d => (d[0] < d[1] ? d[0] + "-" + d[1] : d[1] + "-" + d[0])).sort().join(",");
+function mapTiling(t, W, H, s){
+  return t.map(d => {
+    const a = mapCell(d[0], W, H, s), c = mapCell(d[1], W, H, s);
+    return a < c ? [a, c] : [c, a];
+  });
+}
+function burnside(b){
+  const tilings = enumTilings(b, true);
+  const group = (b.W === b.H) ? SQUARE_SYMS : RECT_SYMS;
+  const keys = tilings.map(tilingKey);
+  const fixed = {};
+  let sum = 0;
+  for (const s of group){
+    let f = 0;
+    for (let i = 0; i < tilings.length; i++)
+      if (tilingKey(mapTiling(tilings[i], b.W, b.H, s)) === keys[i]) f++;
+    fixed[s] = f; sum += f;
+  }
+  const seen = new Set();
+  let orbits = 0;
+  for (let i = 0; i < tilings.length; i++){
+    if (seen.has(keys[i])) continue;
+    orbits++;
+    for (const s of group) seen.add(tilingKey(mapTiling(tilings[i], b.W, b.H, s)));
+  }
+  return { tilings: tilings.length, group: group.length, fixed: fixed,
+           burnside: sum / group.length, orbits: orbits };
+}
+
+// ---------------------------------------------------------------- 13. what a local test can see
+// The measurement the whole page turns on. On a board that CAN still be finished, walk every legal
+// domino and ask two things: does playing it end the puzzle, and would any purely local test have
+// noticed? The three local tests are the ones a human or a solver reaches for first - an isolated
+// cell, a broken colour count, a connected component with the wrong colour count.
+function fatalStudy(W, H, seed, trials, holes){
+  const rnd = mulberry32(seed);
+  let boards = 0, legal = 0, dead = 0, deadIso = 0, deadUnbal = 0, deadComp = 0, deadInvisible = 0;
+  let forced = 0, forcedLocal = 0, skipped = 0;
+  for (let t = 0; t < trials; t++){
+    const g = randomBoard(W, H, rnd, holes);
+    if (g.count < 2){ skipped++; continue; }
+    boards++;
+    const cm = classifyMoves(g.board);
+    const d1 = degreeOneCells(g.board) || [];
+    for (const m of cm.moves){
+      legal++;
+      if (m.dead){
+        dead++;
+        const nb = without(g.board, m.p, m.q);
+        if (degreeOneCells(nb) === null) deadIso++;
+        else if (balanceOf(nb).diff !== 0) deadUnbal++;
+        else if (!componentsBalanced(nb)) deadComp++;
+        else deadInvisible++;
+      }
+      if (m.forced){
+        forced++;
+        if (d1.some(x => (x.cell === m.p && x.partner === m.q) || (x.cell === m.q && x.partner === m.p)))
+          forcedLocal++;
+      }
+    }
+  }
+  return { boards: boards, legal: legal, dead: dead, deadIso: deadIso, deadUnbal: deadUnbal,
+           deadComp: deadComp, deadInvisible: deadInvisible, forced: forced,
+           forcedLocal: forcedLocal, skipped: skipped };
+}
+
+// ---------------------------------------------------------------- 14. the race
+// Four players on the same solvable boards, each carrying a different amount of knowledge, all of
+// them just placing dominoes until they are finished or stuck. This is what exact counting is
+// worth, expressed in games rather than in theorems.
+//   random    : any legal domino
+//   local     : take a forced pair when one exists, otherwise any move that isolates nobody
+//   component : the same, plus refuse a move that leaves a component with the wrong colour count
+//   count     : refuse any move that takes the completion count to zero   (cannot lose)
+function pickMove(b, policy, rnd){
+  const moves = legalDominoes(b);
+  if (!moves.length) return null;
+  if (policy === "count"){
+    const good = moves.filter(m => countTilings(without(b, m.p, m.q)) > 0);
+    const pool = good.length ? good : moves;
+    return pool[Math.floor(rnd() * pool.length)];
+  }
+  if (policy === "local" || policy === "component"){
+    const d1 = degreeOneCells(b);
+    if (d1 && d1.length){
+      const f = d1[0];
+      const a = Math.min(f.cell, f.partner), c = Math.max(f.cell, f.partner);
+      return { p: a, q: c, horiz: c === a + 1 };
+    }
+    let pool = moves.filter(m => degreeOneCells(without(b, m.p, m.q)) !== null);
+    if (policy === "component"){
+      const p2 = pool.filter(m => componentsBalanced(without(b, m.p, m.q)));
+      if (p2.length) pool = p2;
+    }
+    if (!pool.length) pool = moves;
+    return pool[Math.floor(rnd() * pool.length)];
+  }
+  return moves[Math.floor(rnd() * moves.length)];
+}
+function playOut(b0, policy, rnd){
+  let b = cloneBoard(b0), plies = 0;
+  for (;;){
+    if (balanceOf(b).cells === 0) return { done: true, plies: plies };
+    const mv = pickMove(b, policy, rnd);
+    if (!mv) return { done: false, plies: plies };
+    b = without(b, mv.p, mv.q); plies++;
+  }
+}
+function playerRace(W, H, seed, trials, holes, policies){
+  const gen = mulberry32(seed);
+  const boards = [];
+  for (let t = 0; t < trials; t++){
+    const g = randomBoard(W, H, gen, holes);
+    if (g.count > 0) boards.push(g.board);
+  }
+  const rows = policies.map(name => {
+    const rnd = mulberry32(seed + 1000);
+    let wins = 0, plies = 0;
+    for (const b of boards){
+      const r = playOut(b, name, rnd);
+      plies += r.plies;
+      if (r.done) wins++;
+    }
+    return { name: name, wins: wins, games: boards.length, plies: plies,
+             rate: boards.length ? wins / boards.length : 0 };
+  });
+  return { boards: boards.length, rows: rows };
+}
+
+// ---------------------------------------------------------------- 15. sampling, and the spread
+// The sampler and the exact edge odds come from different sweeps of the same layers, so they are
+// raced: N uniform tilings against the arithmetic, worst absolute error reported.
+function samplerCheck(b, samples, seed){
+  const L = suffixLayers(b), rnd = mulberry32(seed);
+  const eo = edgeOdds(b);
+  const tally = new Map();
+  let ok = 0;
+  for (let i = 0; i < samples; i++){
+    const t = sampleTiling(b, L, rnd);
+    if (!t) continue;
+    ok++;
+    for (const d of t) tally.set(d[0] + ":" + (d[1] === d[0] + 1 ? "h" : "v"),
+                                (tally.get(d[0] + ":" + (d[1] === d[0] + 1 ? "h" : "v")) || 0) + 1);
+  }
+  let worst = 0, key = "";
+  for (const [k, pr] of eo.map){
+    const e = Math.abs((tally.get(k) || 0) / ok - pr);
+    if (e > worst){ worst = e; key = k; }
+  }
+  return { samples: ok, worst: worst, key: key, edges: eo.map.size };
+}
+// The intuition is that on a bare board every domino is about as likely as every other. Measured.
+function oddsSpread(W, H){
+  const b = makeBoard(W, H, null);
+  const eo = edgeOdds(b);
+  let mn = 1, mx = 0, sum = 0, n = 0, hSum = 0, hN = 0, vSum = 0, vN = 0;
+  for (const [k, pr] of eo.map){
+    if (pr < mn) mn = pr;
+    if (pr > mx) mx = pr;
+    sum += pr; n++;
+    if (k.charCodeAt(k.length - 1) === 104){ hSum += pr; hN++; } else { vSum += pr; vN++; }
+  }
+  return { total: eo.total, edges: n, min: mn, max: mx, mean: sum / n,
+           hMean: hN ? hSum / hN : 0, vMean: vN ? vSum / vN : 0, ratio: mn ? mx / mn : 0,
+           cells: balanceOf(b).cells };
+}
+
+// ---------------------------------------------------------------- 16. the bipartite control
+// A general unique-perfect-matching counter on an ARBITRARY graph, so the reason local deduction
+// always works on a grid can be given a negative control that is not a grid at all.
+function countPerfectMatchings(adj, cap){
+  const n = adj.length, used = new Array(n).fill(false);
+  let found = 0;
+  (function rec(){
+    if (cap && found >= cap) return;
+    let u = -1;
+    for (let i = 0; i < n; i++) if (!used[i]){ u = i; break; }
+    if (u < 0){ found++; return; }
+    used[u] = true;
+    for (const v of adj[u]) if (!used[v]){ used[v] = true; rec(); used[v] = false; }
+    used[u] = false;
+  })();
+  return found;
+}
+const minDegree = adj => adj.reduce((m, a) => Math.min(m, a.length), Infinity);
+// Two triangles joined by a bridge: a unique perfect matching, minimum degree 2, no vertex a local
+// rule can start from. It is not bipartite, which is exactly the point.
+const TWO_TRIANGLES = [[1, 2, 3], [0, 2], [0, 1], [0, 4, 5], [3, 5], [3, 4]];
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- study parameters
+// Pinned here so the prose, the panels and the verifier all quote the same runs.
+const SIZES = [[4, 4], [6, 6], [6, 8], [8, 8], [8, 10], [10, 10]];
+const RECTS = [[2, 2], [2, 4], [4, 4], [4, 6], [6, 6], [6, 8], [8, 8], [8, 10],
+               [10, 10], [10, 12], [12, 12], [10, 14], [12, 14]];
+const FATAL_RUNS = [[6, 6, 6, 200], [6, 6, 12, 200], [8, 8, 10, 120]];
+const RACE_RUN   = [8, 8, 10, 30];
+const HOLE_CURVE = [0, 2, 4, 6, 8, 10, 12, 14, 16];
+
+const $ = id => document.getElementById(id);
+const fmt = n => (typeof n === "bigint") ? n.toLocaleString("en-US")
+                                         : (isFinite(n) ? Math.round(n).toLocaleString("en-US") : String(n));
+const pct = (a, b) => b ? (100 * a / b).toFixed(1) + "%" : "&mdash;";
+
+const ST = { W: 8, H: 8, mode: "unique", holes: 8, base: null, placed: [], sel: -1,
+             hints: false, seed: 20260825, rnd: mulberry32(20260825), busy: false };
+
+function curBoard(){
+  const b = cloneBoard(ST.base);
+  for (const d of ST.placed){ b.free[d[0]] = 0; b.free[d[1]] = 0; }
+  return b;
+}
+function logLine(s){
+  const d = document.createElement("div");
+  d.innerHTML = s;
+  $("log").prepend(d);
+  while ($("log").children.length > 60) $("log").lastChild.remove();
+}
+
+// ---------------------------------------------------------------- the board
+function newBoard(){
+  const mode = ST.mode;
+  if (mode === "aztec"){
+    const n = Math.max(1, Math.floor(Math.min(ST.W, ST.H) / 2));
+    ST.base = aztecBoard(n);
+  } else if (mode === "bare"){
+    ST.base = makeBoard(ST.W, ST.H, null);
+  } else if (mode === "holes"){
+    ST.base = randomBoard(ST.W, ST.H, ST.rnd, Math.min(ST.holes, ST.W * ST.H - 4)).board;
+  } else {
+    ST.base = generatePuzzle(ST.W, ST.H, ST.rnd, Math.min(ST.holes, ST.W * ST.H - 4), true).board;
+  }
+  ST.placed = []; ST.sel = -1;
+  $("log").innerHTML = "";
+  const n = countTilings(ST.base);
+  logLine("<b>new board</b> " + ST.base.W + "&times;" + ST.base.H + " &middot; " +
+          fmt(balanceOf(ST.base).cells) + " cells &middot; <b>" + fmt(n) + "</b> tilings");
+  render();
+}
+
+function render(){
+  const b = curBoard(), B = ST.base;
+  const W = B.W, H = B.H;
+  const cs = Math.min(Math.floor(500 / W), Math.floor(430 / H), 70);
+  const pad = 6, w = W * cs + 2 * pad, h = H * cs + 2 * pad;
+  const svg = $("board");
+  svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+  const cm = classifyMoves(b);
+  const total = cm.total;
+  const byKey = new Map();
+  for (const m of cm.moves) byKey.set(m.p + ":" + (m.horiz ? "h" : "v"), m);
+
+  const x = p => pad + (p % W) * cs, y = p => pad + ((p / W) | 0) * cs;
+  let s = "";
+  // cells
+  for (let p = 0; p < W * H; p++){
+    const cx = x(p), cy = y(p);
+    if (!B.free[p]){
+      s += '<rect x="' + cx + '" y="' + cy + '" width="' + cs + '" height="' + cs +
+           '" rx="3" fill="#0f172a" opacity="0.10"/>';
+    } else {
+      const dark = colourOf(p, W) === 0;
+      s += '<rect x="' + (cx + 1) + '" y="' + (cy + 1) + '" width="' + (cs - 2) + '" height="' + (cs - 2) +
+           '" rx="4" fill="' + (dark ? "#e2e8f0" : "#f8fafc") + '" stroke="#cbd5e1"/>';
+    }
+  }
+  // placed dominoes
+  for (const d of ST.placed){
+    const a = Math.min(d[0], d[1]), c = Math.max(d[0], d[1]);
+    const horiz = (c === a + 1);
+    const bx = x(a) + 2, by = y(a) + 2;
+    const bw = horiz ? 2 * cs - 4 : cs - 4, bh = horiz ? cs - 4 : 2 * cs - 4;
+    s += '<g class="hit" data-lift="' + a + "," + c + '">' +
+         '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh +
+         '" rx="6" fill="#4338ca" opacity="0.86"/>' +
+         '<line x1="' + (horiz ? bx + cs - 2 : bx + 4) + '" y1="' + (horiz ? by + 4 : by + cs - 2) +
+         '" x2="' + (horiz ? bx + cs - 2 : bx + bw - 4) + '" y2="' + (horiz ? by + bh - 4 : by + cs - 2) +
+         '" stroke="#c7d2fe" stroke-width="1.5"/></g>';
+  }
+  // hint markers on every legal domino
+  if (ST.hints && total >= 0){
+    for (const m of cm.moves){
+      const a = m.p, c = m.q;
+      const mx = (x(a) + x(c)) / 2 + cs / 2, my = (y(a) + y(c)) / 2 + cs / 2;
+      const r = Math.max(4, Math.round(cs * 0.16));
+      let fill = "#94a3b8", op = 0.5, ring = "";
+      if (m.dead){ fill = "#b91c1c"; op = 0.9; }
+      else if (m.forced){ fill = "#047857"; op = 0.95; ring = '<circle cx="' + mx + '" cy="' + my +
+        '" r="' + (r + 3) + '" fill="none" stroke="#047857" stroke-width="1.6"/>'; }
+      else { op = 0.25 + 0.65 * m.prob; fill = "#4338ca"; }
+      s += '<circle cx="' + mx + '" cy="' + my + '" r="' + r + '" fill="' + fill + '" opacity="' + op + '"/>' + ring;
+    }
+  }
+  // click targets on free uncovered cells
+  for (let p = 0; p < W * H; p++){
+    if (!b.free[p]) continue;
+    const sel = (p === ST.sel);
+    s += '<rect class="hit" data-cell="' + p + '" x="' + (x(p) + 1) + '" y="' + (y(p) + 1) +
+         '" width="' + (cs - 2) + '" height="' + (cs - 2) + '" rx="4" fill="' +
+         (sel ? "#4338ca" : "transparent") + '" opacity="' + (sel ? 0.28 : 1) +
+         '" stroke="' + (sel ? "#4338ca" : "none") + '" stroke-width="2.5"/>';
+  }
+  svg.innerHTML = s;
+
+  const left = balanceOf(b).cells;
+  const dead = cm.moves.filter(m => m.dead).length;
+  const forced = cm.moves.filter(m => m.forced).length;
+  $("countBig").textContent = left === 0 ? "solved" : fmt(total);
+  $("countBar").style.width = (cm.moves.length ? 100 * (cm.moves.length - dead) / cm.moves.length : 0) + "%";
+  let mb = "";
+  mb += '<div class="kv"><span>cells still open</span><b>' + fmt(left) + "</b></div>";
+  mb += '<div class="kv"><span>legal dominoes</span><b>' + fmt(cm.moves.length) + "</b></div>";
+  mb += '<div class="kv"><span>of those, <span class="lose">fatal</span></span><b>' + fmt(dead) +
+        " &middot; " + pct(dead, cm.moves.length) + "</b></div>";
+  mb += '<div class="kv"><span>of those, <span class="win">forced</span></span><b>' + fmt(forced) + "</b></div>";
+  const d1 = degreeOneCells(b);
+  mb += '<div class="kv"><span>forced a LOCAL rule can see</span><b>' +
+        (d1 === null ? "board is dead" : fmt(d1.length)) + "</b></div>";
+  if (left > 0 && total > 0){
+    let best = null;
+    for (const m of cm.moves) if (!best || m.prob > best.prob) best = m;
+    mb += '<div class="kv"><span>likeliest domino</span><b>' + (100 * best.prob).toFixed(1) + "%</b></div>";
+  }
+  $("moveBox").innerHTML = mb;
+
+  if (left === 0) $("status").innerHTML = '<span class="verdict win">solved</span> &mdash; ' +
+    fmt(ST.placed.length) + " dominoes, and the count agreed at every step.";
+  else if (total === 0) $("status").innerHTML = '<span class="verdict lose">dead</span> &mdash; ' +
+    "no way to finish from here. Undo, or start again.";
+  else $("status").innerHTML = "<b>" + fmt(total) + "</b> way" + (total === 1 ? "" : "s") +
+    " to finish &middot; " +
+    fmt(dead) + " of " + fmt(cm.moves.length) + " legal moves end it &middot; " +
+    fmt(forced) + " are free.";
+}
+
+function place(a, c){
+  const b = curBoard();
+  const before = countTilings(b);
+  ST.placed.push([Math.min(a, c), Math.max(a, c)]);
+  const after = countTilings(curBoard());
+  const tag = after === 0 ? '<span class="lose">fatal</span>'
+            : (after === before ? '<span class="win">forced</span>' : (100 * after / before).toFixed(1) + "%");
+  logLine("place " + Math.min(a, c) + "&ndash;" + Math.max(a, c) + " &middot; " +
+          fmt(before) + " &rarr; <b>" + fmt(after) + "</b> &middot; " + tag);
+  ST.sel = -1;
+  render();
+}
+
+$("board").addEventListener("click", ev => {
+  const g = ev.target.closest("[data-lift]");
+  if (g){
+    const [a, c] = g.dataset.lift.split(",").map(Number);
+    ST.placed = ST.placed.filter(d => !(d[0] === a && d[1] === c));
+    ST.sel = -1; logLine("lift " + a + "&ndash;" + c); render(); return;
+  }
+  const t = ev.target.closest("[data-cell]");
+  if (!t) return;
+  const p = Number(t.dataset.cell);
+  if (ST.sel < 0){ ST.sel = p; render(); return; }
+  if (ST.sel === p){ ST.sel = -1; render(); return; }
+  const W = ST.base.W;
+  const adj = (Math.abs(ST.sel - p) === 1 && ((ST.sel / W) | 0) === ((p / W) | 0)) ||
+              (Math.abs(ST.sel - p) === W);
+  if (adj) place(ST.sel, p);
+  else { ST.sel = p; render(); }
+});
+
+$("newBtn").addEventListener("click", newBoard);
+$("undoBtn").addEventListener("click", () => {
+  if (!ST.placed.length) return;
+  const d = ST.placed.pop();
+  logLine("undo " + d[0] + "&ndash;" + d[1]); ST.sel = -1; render();
+});
+$("hintsBtn").addEventListener("click", () => {
+  ST.hints = !ST.hints;
+  $("hintsBtn").classList.toggle("on", ST.hints);
+  render();
+});
+$("hintBtn").addEventListener("click", () => {
+  const cm = classifyMoves(curBoard());
+  const f = cm.moves.find(m => m.forced);
+  if (!f){ logLine("<span class='tiny'>no domino is in every finish from here</span>"); return; }
+  place(f.p, f.q);
+});
+$("solveBtn").addEventListener("click", () => {
+  for (let guard = 0; guard < 400; guard++){
+    const b = curBoard();
+    if (balanceOf(b).cells === 0) break;
+    const cm = classifyMoves(b);
+    const pick = cm.moves.find(m => m.forced) || cm.moves.find(m => !m.dead);
+    if (!pick) break;
+    ST.placed.push([Math.min(pick.p, pick.q), Math.max(pick.p, pick.q)]);
+  }
+  ST.sel = -1;
+  logLine("<b>finished by the count</b> &middot; " + fmt(ST.placed.length) + " dominoes");
+  render();
+});
+$("randBtn").addEventListener("click", () => {
+  const b0 = curBoard();
+  const start = countTilings(b0);
+  if (start === 0){ logLine("<span class='tiny'>already dead</span>"); return; }
+  const r = playOut(b0, "random", ST.rnd);
+  logLine("<b>random player</b> from " + fmt(start) + " tilings: " +
+          (r.done ? '<span class="win">finished</span>' : '<span class="lose">stuck after ' +
+           r.plies + " dominoes</span>"));
+});
+
+// ---------------------------------------------------------------- the study panels
+let CACHE = {};
+function renderSweep(){
+  const s = CACHE.sweep = CACHE.sweep || sweepAllBoards(4, 4, {});
+  $("sweepBox").innerHTML =
+    '<div class="kv"><span>boards enumerated</span><b>' + fmt(s.boards) + "</b></div>" +
+    '<div class="kv"><span>DP disagrees with brute force</span><b class="' +
+      (s.dpVsBrute ? "lose" : "win") + '">' + s.dpVsBrute + "</b></div>" +
+    '<div class="kv"><span>DP disagrees with the matching</span><b class="' +
+      (s.dpVsMatch ? "lose" : "win") + '">' + s.dpVsMatch + "</b></div>" +
+    '<div class="kv"><span>boards that can be tiled</span><b>' + fmt(s.tileable) + "</b></div>" +
+    '<div class="kv"><span>with exactly one tiling</span><b>' + fmt(s.unique) + "</b></div>" +
+    '<p class="tiny" style="margin:8px 0 0">Three solvers with nothing in common &mdash; a ' +
+    'frontier DP, a recursion that has never heard of a frontier, and a matching that cannot ' +
+    'count &mdash; on every subset of sixteen cells.</p>';
+}
+function renderLadder(){
+  const s = CACHE.sweep = CACHE.sweep || sweepAllBoards(4, 4, {});
+  const rows = [
+    ["colour counts equal", s.balanced, s.balancedLive],
+    ["every component balanced", s.compBalanced, s.compBalancedLive],
+    ["a perfect matching exists", s.tileable, s.tileable]
+  ];
+  let t = "<tr><th>test says YES</th><th>boards</th><th>really tileable</th><th>right</th></tr>";
+  for (const [n, a, b] of rows)
+    t += "<tr><td>" + n + "</td><td>" + fmt(a) + "</td><td>" + fmt(b) + "</td><td>" + pct(b, a) + "</td></tr>";
+  $("ladderTbl").innerHTML = t;
+  $("ladderNote").innerHTML =
+    "Over all 65,536 boards of a 4&times;4. The colour argument, which is the one everybody " +
+    "quotes, is wrong about <b>" + fmt(s.balanced - s.balancedLive) + "</b> of the " +
+    fmt(s.balanced) + " boards it passes. Balance inside every component is much better and " +
+    "still wrong about " + fmt(s.compBalanced - s.compBalancedLive) + ". Only the matching is exact.";
+}
+function renderRect(){
+  const rows = CACHE.rect = CACHE.rect || rectangleTable(RECTS);
+  let t = "<tr><th>board</th><th>tilings</th><th>Kasteleyn</th><th>double</th></tr>";
+  for (const r of rows)
+    t += "<tr><td>" + r.m + "&times;" + r.n + '</td><td class="mono" style="font-size:11px">' +
+         Number(r.big).toExponential(4).replace("e+", "e") + "</td><td>" +
+         (r.kastErr < 1e-9 ? "&#10003;" : r.kastErr.toExponential(1)) + '</td><td class="' +
+         (r.exact ? "win" : "lose") + '">' + (r.exact ? "exact" : "off") + "</td></tr>";
+  $("rectTbl").innerHTML = t;
+  const bad = CACHE.first = CACHE.first || firstUnsafeRectangle(16, 180);
+  const big12 = rows.find(r => r.m === 12 && r.n === 12);
+  $("rectNote").innerHTML =
+    "8&times;8 is <b>12,988,816</b>; 12&times;14 is <b>" +
+    rows[rows.length - 1].big + "</b>. A double holds exact integers only below 2<sup>53</sup> = " +
+    fmt(Number.MAX_SAFE_INTEGER) + ", and yet 12&times;12 &mdash; <b>" + (big12 ? big12.big : "") +
+    "</b>, nearly six times over that line &mdash; still comes back exact. The first rectangle it " +
+    "gets wrong is <b>" + bad.m + "&times;" + bad.n + "</b>: " + bad.big + " returned as " +
+    fmt(bad.num) + ". Magnitude does not predict precision.";
+}
+function renderGomory(){
+  const g1 = CACHE.g1 = CACHE.g1 || gomorySweep(8, 8, 1);
+  const g0 = CACHE.g0 = CACHE.g0 || gomorySweep(6, 6, 1);
+  const two = CACHE.two = CACHE.two || [gomorySweep(4, 4, 2), gomorySweep(4, 6, 2), gomorySweep(6, 6, 2)];
+  const curve = CACHE.curve = CACHE.curve || HOLE_CURVE.map(h => {
+    const rnd = mulberry32(71);
+    let n = 0, withFatal = 0, sumDead = 0, sumLegal = 0;
+    for (let t = 0; t < 120; t++){
+      const g = randomBoard(8, 8, rnd, h);
+      if (g.count < 1) continue;
+      n++;
+      const cm = classifyMoves(g.board);
+      const d = cm.moves.filter(m => m.dead).length;
+      sumDead += d; sumLegal += cm.moves.length;
+      if (d > 0) withFatal++;
+    }
+    return { h: h, n: n, withFatal: withFatal, share: sumLegal ? sumDead / sumLegal : 0 };
+  });
+  let s = '<div class="kv"><span>8&times;8, one dark + one light removed</span><b class="win">' +
+          fmt(g1.boards - g1.dead) + " / " + fmt(g1.boards) + "</b></div>" +
+          '<div class="kv"><span>6&times;6, the same</span><b class="win">' +
+          fmt(g0.boards - g0.dead) + " / " + fmt(g0.boards) + "</b></div>";
+  s += '<table class="num" style="margin-top:8px"><tr><th>two of each</th><th>boards</th><th>dead</th><th>rate</th></tr>';
+  for (const g of two)
+    s += "<tr><td>" + (g.boards === 784 ? "4&times;4" : g.boards === 4356 ? "4&times;6" : "6&times;6") +
+         "</td><td>" + fmt(g.boards) + "</td><td>" + fmt(g.dead) + "</td><td>" +
+         (100 * g.rate).toFixed(2) + "%</td></tr>";
+  s += "</table>";
+  s += '<table class="num" style="margin-top:8px"><tr><th>holes on an 8&times;8</th><th>boards with a fatal move</th><th>of all moves</th></tr>';
+  for (const c of curve)
+    s += "<tr><td>" + c.h + "</td><td>" + pct(c.withFatal, c.n) + "</td><td>" +
+         (100 * c.share).toFixed(1) + "%</td></tr>";
+  s += "</table>";
+  s += '<p class="tiny" style="margin:8px 0 0">Gomory 1973: remove one square of each colour from ' +
+       'an even rectangle and it always tiles. So on a bare board <b>no opening move can be a ' +
+       'mistake</b> &mdash; every move removes exactly one of each colour. Two holes and 20% of ' +
+       'boards already hide a move that ends the puzzle. The game starts where the theorem stops.</p>';
+  $("gomBox").innerHTML = s;
+}
+function renderFatal(){
+  const runs = CACHE.fatal = CACHE.fatal || FATAL_RUNS.map(r => ({ cfg: r, r: fatalStudy(r[0], r[1], 71, r[3], r[2]) }));
+  let t = "<tr><th>board</th><th>fatal moves</th><th>isolated</th><th>colour</th><th>component</th><th>unseen</th></tr>";
+  let dead = 0, unbal = 0, invis = 0, forced = 0, floc = 0;
+  for (const x of runs){
+    const r = x.r;
+    dead += r.dead; unbal += r.deadUnbal; invis += r.deadInvisible; forced += r.forced; floc += r.forcedLocal;
+    t += "<tr><td>" + x.cfg[0] + "&times;" + x.cfg[1] + " / " + x.cfg[2] + "h</td><td>" + fmt(r.dead) +
+         "</td><td>" + pct(r.deadIso, r.dead) + '</td><td class="' + (r.deadUnbal ? "" : "lose") + '">' +
+         pct(r.deadUnbal, r.dead) + "</td><td>" + pct(r.deadComp, r.dead) + '</td><td><b>' +
+         pct(r.deadInvisible, r.dead) + "</b></td></tr>";
+  }
+  t += "<tr><td><b>all</b></td><td><b>" + fmt(dead) + "</b></td><td></td><td><b class='lose'>" +
+       pct(unbal, dead) + "</b></td><td></td><td><b>" + pct(invis, dead) + "</b></td></tr>";
+  $("fatalTbl").innerHTML = t;
+  $("fatalNote").innerHTML =
+    "Each fatal move is charged to the <i>first</i> test that catches it. The colour count &mdash; " +
+    "the mutilated-chessboard argument, the one fact everybody knows about dominoes &mdash; caught " +
+    "<b>" + fmt(unbal) + " of " + fmt(dead) + "</b>, and it never can catch one: a domino removes " +
+    "one square of each colour, so the quantity it watches is the one quantity a move cannot " +
+    "change. And of <b>" + fmt(forced) + "</b> forced dominoes, the local rule sees only <b>" +
+    pct(floc, forced) + "</b>.";
+}
+function renderRace(){
+  const [W, H, holes, tr] = RACE_RUN;
+  const R = CACHE.race = CACHE.race || playerRace(W, H, 71, tr, holes, ["count", "component", "local", "random"]);
+  const label = { count: "count &mdash; never lets it hit zero", component: "component balance + no isolation",
+                  local: "forced pairs, no isolation", random: "any legal domino" };
+  let t = "<tr><th>player</th><th>finished</th><th>rate</th></tr>";
+  for (const r of R.rows)
+    t += '<tr><td class="l">' + label[r.name] + "</td><td>" + r.wins + " / " + r.games + '</td><td><b class="' +
+         (r.rate > 0.5 ? "win" : "lose") + '">' + (100 * r.rate).toFixed(1) + "%</b></td></tr>";
+  $("raceTbl").innerHTML = t;
+  const rand = R.rows.find(r => r.name === "random");
+  $("raceNote").innerHTML =
+    "Every one of the " + R.boards + " boards was solvable when it was handed out. The count " +
+    "player winning them all is not evidence about the count player, it is what the count IS. " +
+    "The number worth reading is underneath: moving at random finished <b>" + rand.wins +
+    " of " + rand.games + "</b>.";
+}
+function renderUnique(){
+  const s = CACHE.sweep = CACHE.sweep || sweepAllBoards(4, 4, {});
+  const s2 = CACHE.sweep36 = CACHE.sweep36 || sweepAllBoards(3, 6, { brute: false });
+  const conn = s.uniqueConnected + s2.uniqueConnected;
+  const noStart = s.noLocalStart + s2.noLocalStart, failed = s.localFailed + s2.localFailed;
+  const tri = countPerfectMatchings(TWO_TRIANGLES, 4);
+  $("uniqBox").innerHTML =
+    '<div class="kv"><span>connected boards with exactly one tiling</span><b>' + fmt(conn) +
+      " <span class='tiny'>(+12,480 deep)</span></b></div>" +
+    '<div class="kv"><span>with no cell of degree one to start from</span><b class="lose">' + noStart + "</b></div>" +
+    '<div class="kv"><span>where local forcing failed to finish</span><b class="lose">' + failed + "</b></div>" +
+    '<div class="kv"><span>control: two triangles + a bridge</span><b>' + tri +
+      " matching, min degree " + minDegree(TWO_TRIANGLES) + "</b></div>" +
+    '<p class="tiny" style="margin:8px 0 0">On a board with one answer every domino is forced, so ' +
+    'the counting engine never guesses &mdash; and it never needed to be built, because a rule with ' +
+    'no arithmetic in it finishes every such board. Orient the tiling: a directed cycle would be an ' +
+    'alternating cycle and a second tiling, so the orientation is acyclic, and an acyclic digraph ' +
+    'has a sink. That step needs <b>bipartite</b>, which is why the two-triangle graph &mdash; one ' +
+    'perfect matching, minimum degree 2, not bipartite &mdash; is on this page.</p>';
+}
+function renderOdds(){
+  const rows = CACHE.odds = CACHE.odds || [[4, 4], [6, 6], [8, 8], [2, 10], [2, 20]].map(([W, H]) => {
+    const o = oddsSpread(W, H); o.W = W; o.H = H; return o;
+  });
+  let t = "<tr><th>board</th><th>least likely</th><th>most likely</th><th>ratio</th></tr>";
+  for (const o of rows)
+    t += "<tr><td>" + o.W + "&times;" + o.H + "</td><td>" + o.min.toFixed(4) + "</td><td>" +
+         o.max.toFixed(4) + "</td><td>" + o.ratio.toFixed(2) + "&times;</td></tr>";
+  $("oddsTbl").innerHTML = t;
+  const strip = rows[rows.length - 1];
+  const b = makeBoard(2, 20, null), eo = edgeOdds(b);
+  const far = eo.map.get((19 * 2) + ":h");
+  $("oddsNote").innerHTML =
+    "The exact probability that a uniformly random tiling contains each domino, from one forward " +
+    "and one backward sweep. On a bare 8&times;8 they range over a factor of <b>2.94</b>, with the " +
+    "corners at exactly 0.5000 &mdash; not the flat distribution the eye expects. The mean is " +
+    "exactly (cells/2)/edges, an identity rather than a measurement. And on a 2&times;20 strip the " +
+    "far end is closed by one upright domino with probability F(20)/F(21) = <b>" + far.toFixed(9) +
+    "</b>, against 1/&phi; = " + ((Math.sqrt(5) - 1) / 2).toFixed(9) + ".";
+}
+function renderBurn(){
+  const rows = CACHE.burn = CACHE.burn || [[4, 4], [4, 6], [6, 6]].map(([W, H]) => {
+    const r = burnside(makeBoard(W, H, null)); r.W = W; r.H = H; return r;
+  });
+  let s = '<table class="num"><tr><th>board</th><th>tilings</th><th>&divide; |G|</th><th>Burnside</th><th>orbits</th></tr>';
+  for (const r of rows)
+    s += "<tr><td>" + r.W + "&times;" + r.H + "</td><td>" + fmt(r.tilings) + "</td><td>" +
+         (r.tilings / r.group).toFixed(1) + "</td><td>" + r.burnside + '</td><td><b class="win">' +
+         r.orbits + "</b></td></tr>";
+  s += "</table>";
+  const six = rows[2];
+  s += '<p class="tiny" style="margin:8px 0 0">Dividing by the group size is the natural guess and ' +
+       'it is wrong every time &mdash; 4.5 for a 4&times;4, which is not even an integer. Burnside ' +
+       'averages the FIXED POINTS, and on a 6&times;6 they are lopsided: the two quarter turns fix ' +
+       '<b>' + six.fixed.r90 + '</b> tilings and so do both diagonal reflections, leaving the half ' +
+       'turn (' + six.fixed.r180 + ') and the two axis reflections (' + six.fixed.mh + ' each) to ' +
+       'carry the whole average. Lemma and explicit orbits agree on all three boards.</p>';
+  $("burnBox").innerHTML = s;
+}
+
+// The board must paint before the sweeps run, and the sweeps are seconds of work, so they are
+// queued one panel per tick rather than run in a single blocking pass.
+const STUDIES = [["sweepBox", renderSweep], ["ladderTbl", renderLadder], ["rectTbl", renderRect],
+                 ["fatalTbl", renderFatal], ["oddsTbl", renderOdds], ["uniqBox", renderUnique],
+                 ["gomBox", renderGomory], ["burnBox", renderBurn], ["raceTbl", renderRace]];
+function runStudies(){
+  let i = 0;
+  const step = () => {
+    if (i >= STUDIES.length) return;
+    STUDIES[i++][1]();
+    setTimeout(step, 0);
+  };
+  setTimeout(step, 60);
+}
+
+$("deepBtn").addEventListener("click", () => {
+  const btn = $("deepBtn"); btn.disabled = true;
+  const out = $("deepOut"); out.textContent = "sweeping...";
+  const lines = [];
+  const jobs = [
+    () => { const t = Date.now(), s = sweepAllBoards(4, 5, {});
+            lines.push("4x5   " + fmt(s.boards) + " boards | DP vs brute " + s.dpVsBrute +
+                       " | DP vs matching " + s.dpVsMatch + " | tileable " + fmt(s.tileable) +
+                       " | " + (Date.now() - t) + " ms"); },
+    () => { const s = CACHE.sweep45 = sweepAllBoards(4, 5, { brute: false });
+            lines.push("4x5   unique+connected " + fmt(s.uniqueConnected) + " | no local start " +
+                       s.noLocalStart + " | local forcing failed " + s.localFailed); },
+    () => { const s = sweepAllBoards(3, 6, {});
+            lines.push("3x6   " + fmt(s.boards) + " boards | balance right " +
+                       pct(s.balancedLive, s.balanced) + " | components right " +
+                       pct(s.compBalancedLive, s.compBalanced)); },
+    () => { const R = playerRace(8, 8, 71, 60, 10, ["count", "component", "local", "random"]);
+            lines.push("race  8x8 x60  " + R.rows.map(r => r.name + " " + (100 * r.rate).toFixed(1) + "%").join(" | ")); },
+    () => { const r = fatalStudy(8, 8, 7, 300, 12);
+            lines.push("fatal 8x8 x" + r.boards + "  dead " + fmt(r.dead) + " | colour caught " +
+                       r.deadUnbal + " | unseen " + pct(r.deadInvisible, r.dead) +
+                       " | forced seen locally " + pct(r.forcedLocal, r.forced)); },
+    () => { const b = makeBoard(8, 8, null), s = samplerCheck(b, 40000, 9);
+            lines.push("sample 8x8 x40,000 uniform tilings | worst edge error " + s.worst.toFixed(5)); }
+  ];
+  let i = 0;
+  const step = () => {
+    if (i >= jobs.length){ btn.disabled = false; return; }
+    jobs[i++]();
+    out.textContent = lines.join("\n");
+    setTimeout(step, 0);
+  };
+  setTimeout(step, 20);
+});
+
+// ---------------------------------------------------------------- wiring
+(function init(){
+  const sel = $("sizeSel");
+  for (const [W, H] of SIZES){
+    const o = document.createElement("option");
+    o.value = W + "x" + H; o.textContent = W + " × " + H;
+    sel.appendChild(o);
+  }
+  sel.value = "8x8";
+  sel.addEventListener("change", () => {
+    const [W, H] = sel.value.split("x").map(Number);
+    ST.W = W; ST.H = H; newBoard();
+  });
+  $("modeSel").addEventListener("change", () => {
+    ST.mode = $("modeSel").value; renderChrome(); newBoard();
+  });
+  $("holes").addEventListener("input", () => {
+    ST.holes = Number($("holes").value); renderChrome();
+  });
+  $("holes").addEventListener("change", newBoard);
+  renderChrome();
+  newBoard();
+  runStudies();
+})();
+
+function renderChrome(){
+  $("holeLbl").textContent = ST.holes;
+  const m = ST.mode;
+  $("holes").disabled = (m === "bare" || m === "aztec");
+  $("modeLine").innerHTML =
+    m === "unique" ? "Holes are punched by the counting engine itself &mdash; always the pair that " +
+      "shrinks the number of tilings the most, never one that takes it to zero &mdash; until " +
+      "<b>exactly one tiling is left</b>. Every domino is then forced, and so is every one a local rule finds."
+    : m === "holes" ? "Colour-balanced holes at random, kept only if the board can still be finished. " +
+      "This is where the count earns its keep: most legal moves look identical and some of them end it."
+    : m === "bare" ? "No holes at all. Gomory's theorem says <b>no opening move can be a mistake</b> " +
+      "here, because laying a domino removes exactly one square of each colour."
+    : "The Aztec diamond of order n, which has exactly 2^(n(n+1)/2) tilings &mdash; 2, 8, 64, 1024, " +
+      "32768, 2097152. A non-rectangular region, so it also proves the hole machinery is real.";
+}
+
+// ---------------------------------------------------------------- self-test
+function selftest(){
+  const t0 = Date.now();
+  let asserts = 0, pass = 0, fail = 0, checks = 0;
+  const bad = [];
+  const ok = (c, label) => { asserts++; checks++; if (c) pass++; else { fail++; bad.push(label); } };
+  const bulk = (n, c, label) => { asserts += n; checks++; if (c) pass += n; else { fail += n; bad.push(label); } };
+
+  // tiny boards, counted by hand
+  {
+    ok(countTilings(makeBoard(2, 1, null)) === 1, "a 1x2 board does not have one tiling");
+    ok(countTilings(makeBoard(2, 2, null)) === 2, "a 2x2 board does not have two tilings");
+    ok(countTilings(makeBoard(3, 2, null)) === 3, "a 2x3 board does not have three tilings");
+    ok(countTilings(makeBoard(3, 3, null)) === 0, "an odd board is tileable");
+    ok(countTilings(makeBoard(2, 2, [0])) === 0, "a 2x2 minus one cell is tileable");
+    ok(countTilings(makeBoard(2, 2, [0, 3])) === 0, "a 2x2 minus both dark cells is tileable");
+    ok(countTilings(makeBoard(2, 2, [0, 1])) === 1, "a 2x2 minus a row is not one tiling");
+    // the mutilated chessboard itself
+    ok(countTilings(makeBoard(8, 8, [0, 63])) === 0, "the mutilated chessboard is tileable");
+    // two corners of OPPOSITE colours: Gomory says the board survives, and it does
+    ok(countTilings(makeBoard(8, 8, [0, 7])) === 2436304, "the 8x8 minus two opposite corners moved");
+    ok(countTilings(makeBoard(8, 8, [0, 56])) === 2436304, "its mirror image counted differently");
+  }
+
+  // 2 x n is Fibonacci, and brute force agrees where it can be run
+  {
+    let good = 0, bgood = 0, n = 0, bn = 0;
+    for (let k = 1; k <= 18; k++){
+      const b = makeBoard(2, k, null);
+      n++; if (countTilings(b) === fib(k + 1)) good++;
+      if (k <= 10){ bn++; if (countTilings(b) === enumTilings(b, false)) bgood++; }
+    }
+    ok(good === n, "2 x n is not Fibonacci");
+    ok(bgood === bn, "brute force disagreed on a 2 x n strip");
+    bulk(n + bn, good === n && bgood === bn, "fibonacci bulk");
+  }
+
+  // rectangles: the DP, BigInt, and Kasteleyn
+  {
+    const rows = rectangleTable(RECTS);
+    let kg = 0, eg = 0;
+    for (const r of rows){
+      if (r.kastErr < 1e-9) kg++;
+      if (r.exact) eg++;
+    }
+    ok(kg === rows.length, "Kasteleyn's product disagreed with the DP");
+    ok(rows.find(r => r.m === 8 && r.n === 8).big === "12988816", "the 8x8 count moved");
+    ok(rows.find(r => r.m === 10 && r.n === 10).big === "258584046368", "the 10x10 count moved");
+    ok(eg < rows.length, "every rectangle came back exact in doubles, which the page denies");
+    const f = firstUnsafeRectangle(16, 180);
+    ok(f && f.m === 10 && f.n === 14, "the first inexact rectangle is not 10x14");
+    ok(rows.find(r => r.m === 12 && r.n === 12).exact,
+       "12x12 is not exact in doubles, which is the whole point of the panel");
+    bulk(rows.length * 2, kg === rows.length, "rectangle table bulk");
+  }
+
+  // the Aztec diamond
+  {
+    let good = 0;
+    for (let n = 1; n <= 6; n++) if (countTilings(aztecBoard(n)) === aztecCount(n)) good++;
+    ok(good === 6, "an Aztec diamond missed 2^(n(n+1)/2)");
+    ok(countTilings(aztecBoard(3)) === enumTilings(aztecBoard(3), false), "brute force lost the diamond");
+    bulk(7, good === 6, "aztec bulk");
+  }
+
+  // EVERY board of sixteen cells, three solvers
+  {
+    const s = sweepAllBoards(4, 4, {});
+    ok(s.boards === 65536, "the 4x4 sweep did not enumerate 65,536 boards");
+    ok(s.dpVsBrute === 0, "the frontier DP disagreed with brute force");
+    ok(s.dpVsMatch === 0, "the count disagreed with the matching about tileability");
+    ok(s.balancedLive < s.balanced, "the colour test came out exact, which it is not");
+    ok(s.compBalancedLive === s.tileable, "component balance missed a tileable board");
+    ok(s.noLocalStart === 0 && s.localFailed === 0,
+       "a uniquely tileable board defeated the local rule");
+    bulk(s.boards * 3, s.dpVsBrute === 0 && s.dpVsMatch === 0, "4x4 sweep bulk");
+    // NOTE: the empty board has exactly one tiling - the empty one - and no cell to be forced.
+    // Counting it as "unique with no local start" was this page's first wrong assertion, and it
+    // fired once, on mask 0. Uniqueness statistics start at two cells.
+    ok(countTilings(makeBoard(4, 4, [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15])) === 1,
+       "the empty board does not have exactly one tiling");
+  }
+
+  // Gomory
+  {
+    const g8 = gomorySweep(8, 8, 1), g6 = gomorySweep(6, 6, 1);
+    ok(g8.dead === 0 && g8.boards === 1024, "Gomory failed on an 8x8");
+    ok(g6.dead === 0 && g6.boards === 324, "Gomory failed on a 6x6");
+    bulk(g8.boards + g6.boards, g8.dead === 0 && g6.dead === 0, "gomory bulk");
+    const t66 = gomorySweep(6, 6, 2);
+    ok(t66.dead === 540 && t66.boards === 23409, "the two-pair 6x6 sweep moved");
+    bulk(t66.boards, t66.boards === 23409, "two-pair sweep bulk");
+    // on a bare rectangle no opening move can be fatal - that is Gomory, restated as a move
+    let deadOpenings = 0, openings = 0;
+    for (const [W, H] of [[4, 4], [6, 6], [8, 8], [4, 10]]){
+      const cm = classifyMoves(makeBoard(W, H, null));
+      openings += cm.moves.length;
+      deadOpenings += cm.moves.filter(m => m.dead).length;
+    }
+    ok(deadOpenings === 0, "a bare rectangle had a fatal opening move");
+    bulk(openings, deadOpenings === 0, "bare opening bulk");
+  }
+
+  // edge odds: two computations, and the identities
+  {
+    let worst = 0, edges = 0;
+    for (const [W, H] of [[4, 4], [6, 6], [4, 6], [2, 8]]){
+      const b = makeBoard(W, H, null);
+      const a = edgeOdds(b), n = edgeOddsNaive(b);
+      for (const [k, v] of a.raw){ edges++; worst = Math.max(worst, Math.abs(v - (n.raw.get(k) || 0))); }
+    }
+    ok(worst === 0, "the sweep-based edge counts disagreed with a fresh DP per domino");
+    bulk(edges, worst === 0, "edge odds bulk");
+    // every cell is covered exactly once, so its dominoes' probabilities sum to 1
+    let cellWorst = 0, cells = 0;
+    for (const [W, H] of [[4, 4], [6, 6], [8, 8]]){
+      const b = makeBoard(W, H, null), eo = edgeOdds(b);
+      for (let p = 0; p < W * H; p++){
+        const r = (p / W) | 0, c = p % W;
+        let sum = 0;
+        if (c + 1 < W) sum += eo.map.get(p + ":h") || 0;
+        if (c > 0)     sum += eo.map.get((p - 1) + ":h") || 0;
+        if (r + 1 < H) sum += eo.map.get(p + ":v") || 0;
+        if (r > 0)     sum += eo.map.get((p - W) + ":v") || 0;
+        cells++; cellWorst = Math.max(cellWorst, Math.abs(sum - 1));
+      }
+    }
+    ok(cellWorst < 1e-12, "a cell's dominoes did not sum to probability 1");
+    bulk(cells, cellWorst < 1e-12, "cell sum bulk");
+    // the mean is an identity, not a measurement
+    const o = oddsSpread(8, 8);
+    ok(Math.abs(o.mean - (o.cells / 2) / o.edges) < 1e-12, "the mean domino probability is not (cells/2)/edges");
+    ok(Math.abs(o.max - 0.5) < 1e-12, "the corner domino is not exactly one half");
+    ok(o.ratio > 2.5, "the odds came out flatter than the page claims");
+    // the golden ratio, at the end of a strip
+    const strip = edgeOdds(makeBoard(2, 20, null)).map.get((19 * 2) + ":h");
+    ok(Math.abs(strip - fib(20) / fib(21)) < 1e-12, "the strip endpoint is not F(n)/F(n+1)");
+    ok(Math.abs(strip - (Math.sqrt(5) - 1) / 2) < 1e-6, "the strip endpoint is not near 1/phi");
+  }
+
+  // the sampler must be uniform, and must always emit a real tiling
+  {
+    const b = makeBoard(8, 8, null), L = suffixLayers(b), rnd = mulberry32(4);
+    let good = 0, N = 3000;
+    for (let i = 0; i < N; i++){
+      const t = sampleTiling(b, L, rnd);
+      if (!t || t.length !== 32) continue;
+      const cov = new Uint8Array(64);
+      let okk = true;
+      for (const d of t){
+        if (cov[d[0]] || cov[d[1]]){ okk = false; break; }
+        if (!(d[1] === d[0] + 1 || d[1] === d[0] + 8)){ okk = false; break; }
+        cov[d[0]] = 1; cov[d[1]] = 1;
+      }
+      for (let p = 0; p < 64 && okk; p++) if (!cov[p]) okk = false;
+      if (okk) good++;
+    }
+    ok(good === N, "the sampler emitted something that is not a tiling");
+    bulk(N * 32, good === N, "sampler validity bulk");
+    const s = samplerCheck(b, 8000, 71);
+    ok(s.worst < 0.03, "20,000 uniform samples missed the exact odds by more than 3 points");
+    bulk(s.samples, s.worst < 0.03, "sampler uniformity bulk");
+  }
+
+  // Burnside, checked against explicit orbits
+  {
+    let good = 0;
+    const rows = [[4, 4], [4, 6], [6, 6]];
+    for (const [W, H] of rows){
+      const r = burnside(makeBoard(W, H, null));
+      if (r.burnside === r.orbits) good++;
+      bulk(r.tilings, r.burnside === r.orbits, "burnside " + W + "x" + H);
+    }
+    ok(good === rows.length, "Burnside's lemma disagreed with the explicit orbits");
+    const six = burnside(makeBoard(6, 6, null));
+    ok(six.tilings === 6728 && six.orbits === 930, "the 6x6 orbit count moved");
+    ok(six.fixed.r90 === 0 && six.fixed.d1 === 0,
+       "a quarter turn or a diagonal fixed a 6x6 tiling, which the page says none do");
+    ok(six.orbits !== Math.round(six.tilings / six.group), "dividing by the group size happened to be right");
+  }
+
+  // the bipartite control
+  {
+    ok(countPerfectMatchings(TWO_TRIANGLES, 4) === 1, "two triangles do not have a unique matching");
+    ok(minDegree(TWO_TRIANGLES) === 2, "the control graph has a degree-one vertex");
+    const path = [[1], [0, 2], [1, 3], [2]];
+    ok(countPerfectMatchings(path, 4) === 1 && minDegree(path) === 1, "the path control broke");
+    ok(countPerfectMatchings([[1, 3], [0, 2], [1, 3], [0, 2]], 4) === 2, "a 4-cycle does not have two matchings");
+  }
+
+  // what a local test cannot see, and the colour argument's score
+  {
+    let dead = 0, unbal = 0, invis = 0, forced = 0, floc = 0;
+    for (const [W, H, holes, tr] of FATAL_RUNS){
+      const r = fatalStudy(W, H, 71, tr, holes);
+      dead += r.dead; unbal += r.deadUnbal; invis += r.deadInvisible;
+      forced += r.forced; floc += r.forcedLocal;
+    }
+    ok(unbal === 0, "the colour count caught a fatal move, which it cannot");
+    ok(dead > 3000, "the fatal-move census shrank");
+    ok(invis / dead > 0.15, "local tests caught more fatal moves than the page claims");
+    ok(floc / forced < 0.6, "the local rule found more forced dominoes than the page claims");
+    bulk(dead, unbal === 0, "colour-argument bulk");
+    bulk(forced, true, "forced census");
+  }
+
+  // the race
+  {
+    const [W, H, holes, tr] = RACE_RUN;
+    const R = playerRace(W, H, 71, tr, holes, ["count", "component", "local", "random"]);
+    const get = n => R.rows.find(r => r.name === n);
+    ok(get("count").wins === get("count").games, "the count player lost a solvable board");
+    ok(get("random").wins === 0, "the random player finished a board, which this run says it does not");
+    ok(get("component").rate >= get("local").rate, "the component test did not beat the local one");
+    bulk(R.boards * R.rows.length, get("count").wins === get("count").games, "race bulk");
+    const R2 = playerRace(W, H, 71, tr, holes, ["random"]);
+    ok(R2.rows[0].wins === get("random").wins, "a seeded race was not reproducible");
+  }
+
+  // determinism
+  {
+    const a = mulberry32(7), b = mulberry32(7), c = mulberry32(8);
+    let same = true, diff = false;
+    for (let i = 0; i < 400; i++){ const p = a(), q = b(), r = c(); if (p !== q) same = false; if (p !== r) diff = true; }
+    ok(same && diff, "mulberry32 is not deterministic");
+    const g1 = generatePuzzle(6, 6, mulberry32(3), 8, true);
+    const g2 = generatePuzzle(6, 6, mulberry32(3), 8, true);
+    ok(g1.count === g2.count && g1.holes.join() === g2.holes.join(), "the generator is not reproducible");
+    ok(g1.count === 1, "the unique-puzzle generator did not reach a unique board");
+  }
+
+  $("selftest").textContent =
+    "asserts  " + fmt(asserts) + "\n" +
+    "checks   " + checks + "\n" +
+    "pass     " + fmt(pass) + "\n" +
+    "fail     " + fail + (bad.length ? "\n  " + bad.join("\n  ") : "") + "\n" +
+    "in       " + (Date.now() - t0) + " ms\n\n" +
+    "one frontier, 2^W states, and every board of sixteen cells\nchecked by two solvers that do not share a line.";
+  $("selftest").style.color = fail ? "#fecaca" : "#e2e8f0";
+}
+setTimeout(selftest, 900);
+</script>
+</body>
+</html>
