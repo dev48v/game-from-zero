@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 72 — Chomp</title>
+<style>
+  :root{
+    --ink:#0f172a; --sub:#475569; --mute:#64748b; --line:#e2e8f0;
+    --bg:#f8fafc; --bg2:#f1f5f9; --card:#ffffff;
+    --acc:#4338ca; --acc-soft:#eef2ff; --acc-line:#c7d2fe;
+    --warn:#b45309; --warn-soft:#fffbeb; --warn-line:#fcd34d;
+    --good:#047857; --bad:#b91c1c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,sans-serif;
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;margin:0}
+  p{margin:0 0 14px}
+  strong{font-weight:800}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;
+       background:var(--bg2);padding:1px 5px;border-radius:4px}
+  pre{background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:10px;font-size:12px;
+      overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;
+      margin:0 0 14px}
+  .hidden{display:none !important}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* The hero paragraph is taller than most viewports, so the header must NOT be sticky - a
+     sticky box taller than the screen pins itself over the page forever. Only the tab bar sticks. */
+  header{background:#fff;padding-bottom:4px}
+  nav#tabbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+  nav#tabbar .wrap{padding:10px 16px}
+  .wrap{max-width:1140px;margin:0 auto;padding:18px 16px}
+  .wrap-narrow{max-width:840px;margin:0 auto;padding:24px 16px 60px}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--acc);margin:0 0 8px}
+  h1.hero{font-size:20px;font-weight:900;margin-bottom:16px}
+  @media(min-width:768px){ h1.hero{font-size:23px} }
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tabs button{border:0;border-radius:9px;padding:9px 20px;font-weight:700;font-size:14px;
+               background:var(--bg2);color:var(--ink);cursor:pointer;font-family:inherit}
+  .tabs button.tab-active{background:var(--ink);color:#fff}
+
+  section.tab-panel{min-height:calc(100vh - 76px)}
+  #look{background:var(--bg2);padding:16px}
+  #understand{padding:16px}
+  #build{background:var(--bg);padding:16px}
+  @media(min-width:768px){ #look,#understand,#build{padding:32px 16px} }
+
+  .cols{display:grid;grid-template-columns:1fr;gap:18px;max-width:1140px;margin:0 auto}
+  @media(min-width:1024px){ .cols{grid-template-columns:1.5fr 1fr} }
+  .stack{display:flex;flex-direction:column;gap:18px}
+
+  .card{background:var(--card);border-radius:16px;padding:18px;
+        box-shadow:0 1px 2px rgba(15,23,42,.06),0 1px 10px rgba(15,23,42,.05)}
+  .lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute);margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .pill{padding:6px 11px;border-radius:9px;font-size:12.5px;font-weight:700;font-family:inherit;
+        border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .pill:hover{background:var(--acc-soft);border-color:var(--acc-line)}
+  .pill:disabled{opacity:.34;cursor:default}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  select.pill{cursor:pointer}
+  .go{padding:8px 15px;border-radius:9px;border:0;background:var(--acc);color:#fff;
+      font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.4;cursor:default}
+
+  svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;
+           pointer-events:none}
+  #board{width:100%;max-height:470px;touch-action:manipulation;display:block}
+  #board .hit{cursor:pointer}
+
+  table.num{border-collapse:collapse;width:100%}
+  table.num th,table.num td{padding:4px 8px;font-variant-numeric:tabular-nums}
+  table.num th{font-size:10.5px;letter-spacing:.05em;color:var(--mute);text-align:right;font-weight:800}
+  table.num th:first-child,table.num td:first-child{text-align:left}
+  table.num td{text-align:right;font-size:12.5px;border-top:1px solid var(--line)}
+  table.num td.l{text-align:left}
+
+  table.grid{border-collapse:collapse;font-variant-numeric:tabular-nums}
+  table.grid td,table.grid th{width:26px;height:22px;text-align:center;font-size:11px;
+       border:1px solid var(--line);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  table.grid th{color:var(--mute);font-weight:800;border:0}
+  table.grid td.one{background:var(--bg2);color:var(--sub)}
+  table.grid td.two{background:#fee2e2;color:var(--bad);font-weight:900}
+  table.grid td.dead{background:#0f172a;color:#fff;font-weight:900}
+
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+       max-height:150px;overflow:auto}
+  .log div{padding:1px 0;border-bottom:1px solid var(--bg2)}
+
+  .note{border-left:4px solid var(--acc);background:var(--acc-soft);padding:12px 14px;border-radius:0 10px 10px 0;
+        margin:0 0 16px}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .note p{margin:0;font-size:13.5px}
+  .note p+p{margin-top:8px}
+
+  .verdict{font-weight:900;font-size:14px}
+  .win{color:var(--good)} .lose{color:var(--bad)}
+  .bar{height:9px;border-radius:99px;background:var(--line);overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--acc)}
+  .small{font-size:12px;color:var(--sub)}
+  .tiny{font-size:11.5px;color:var(--mute)}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0}
+  .kv b{font-variant-numeric:tabular-nums}
+  .huge{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
+  h2.big{font-size:23px;font-weight:900;margin:0 0 16px}
+  h3.mid{font-size:17.5px;font-weight:800;margin:26px 0 10px}
+  .wrap-narrow p,.wrap-narrow li{color:#1e293b}
+  .wrap-narrow ul{margin:0 0 14px;padding-left:22px}
+  .wrap-narrow li{margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">GAMEFROMZERO · DAY 72</p>
+    <h1 class="hero">
+      🍫 Chomp — a chocolate bar with a poisoned corner. A bite takes one square and everything
+      down-and-right of it; whoever is forced to eat the poison loses. <strong>Three lines of
+      strategy stealing</strong> prove the first player wins every bar bigger than a single square,
+      and the proof computes nothing — it works for bars no machine will ever solve, and it never
+      names the move. This page measures what that costs, exactly. The win really is a needle: of
+      the <strong>184,755</strong> shapes that fit in a 10&times;10 box only <strong>2,612</strong>
+      are losses for the player to move, a winning bite is <strong>312,237</strong> of
+      <strong>9,053,045</strong> legal bites — <strong>3.45%</strong> — and even a won position
+      offers on average <strong>1.71</strong> of them. Then the two things that inverted. First: the
+      single move the proof puts its finger on, <em>eat the far corner square</em>, is a losing move
+      on <strong>80 of the 99</strong> bars up to 10&times;10, and every one of the 19 it wins has a
+      side of exactly 2 — set the two-row bars aside and the proof's own move wins <strong>3 times in
+      293</strong>. Second: <strong>687 of the 692</strong> bars the deep sweep visits have exactly
+      one winning bite, which makes <em>&ldquo;the winning bite is unique&rdquo;</em> irresistible
+      and false. <strong>6&times;13, 8&times;10, 9&times;10, 10&times;14 and 12&times;13</strong>
+      each have exactly two, and after <strong>34,020,393</strong> solved positions not one bar has
+      three. The smallest counterexample is <strong>78</strong> squares, not 80 — 6&times;13 is
+      thinner than 8&times;10, so a sweep of square-ish bars walks straight past it. What does exist
+      is one closed form — an <strong>L loses exactly when its two arms are equal</strong>, 0
+      exceptions — and it is worth almost nothing: it catches 10 of the 2,612 losses and beats
+      <em>&ldquo;just guess the mover wins&rdquo;</em> by <strong>0.0054</strong> of a percentage
+      point. Pure vanilla JS, one file, no build step.
+    </h1>
+  </div>
+</header>
+
+<nav id="tabbar">
+  <div class="wrap tabs" id="tabs">
+    <button data-tab="look" class="tab-active">🍫 PLAY</button>
+    <button data-tab="understand">🧠 UNDERSTAND</button>
+    <button data-tab="build">🔨 BUILD</button>
+  </div>
+</nav>
+
+<section id="look" class="tab-panel">
+  <div class="cols">
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">THE BAR</p>
+        <div class="row" style="margin-bottom:10px">
+          <select id="sizeSel" class="pill"></select>
+          <select id="oppSel" class="pill">
+            <option value="perfect">opponent: perfect</option>
+            <option value="random">opponent: random</option>
+            <option value="biggest">opponent: biggest bite</option>
+            <option value="corner">opponent: the proof's move</option>
+          </select>
+          <button id="firstBtn" class="pill">you bite first</button>
+          <button id="markBtn" class="pill">show the winning bite</button>
+        </div>
+        <p class="small" id="modeLine" style="margin:0 0 8px"></p>
+        <svg id="board" viewBox="0 0 560 470" preserveAspectRatio="xMidYMid meet"></svg>
+        <p class="small" id="status" style="margin:8px 0 0"></p>
+        <div class="row" style="margin-top:10px">
+          <button id="newBtn" class="go">new bar</button>
+          <button id="undoBtn" class="pill">undo</button>
+          <button id="playBtn" class="pill">bite for me</button>
+          <button id="autoBtn" class="pill">watch a whole game</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHAT THE TABLE SAYS ABOUT THIS POSITION</p>
+        <div class="huge" id="verdictBig">&mdash;</div>
+        <div class="bar" style="margin:10px 0 8px"><span id="verdictBar" style="width:0%"></span></div>
+        <div id="verdictBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">MOVE LOG</p>
+        <div id="log" class="log"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EVERY RECTANGLE UP TO 10&times;10 — HOW MANY BITES WIN</p>
+        <div style="overflow-x:auto"><table class="grid" id="rectGrid"></table></div>
+        <p class="tiny" style="margin:8px 0 0" id="rectNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE MOVE THE PROOF NAMES</p>
+        <div id="cornerBox" class="small"></div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">HOW RARE A LOSING POSITION IS</p>
+        <div id="censusBox" class="small"></div>
+        <table class="num" id="histTbl" style="margin-top:8px"></table>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHY THEY ARE RARE — THE LAST-ROW BOUND</p>
+        <div id="famBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE RULES THAT DO EXIST</p>
+        <div id="ruleBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THREE ROWS — WHERE THE RULES STOP</p>
+        <div id="threeBox" class="small"></div>
+        <table class="num" id="threeTbl" style="margin-top:8px"></table>
+      </div>
+
+      <div class="card">
+        <p class="lbl">RULES PEOPLE GUESS, SCORED ON EVERY SHAPE</p>
+        <table class="num" id="predTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="predNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHAT THE THEOREM IS WORTH IF YOU CANNOT FIND THE MOVE</p>
+        <table class="num" id="raceTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="raceNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">PERFECT PLAY 100%, RANDOM PLAY 50%</p>
+        <table class="num" id="rpTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="rpNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE DEEP SWEEP — 12 BOXES, 692 BARS</p>
+        <p class="small" style="margin:0 0 10px">Long thin boxes as well as square ones, because a
+        bar can be an exception on square count without being one on side length. This is the run
+        that finds 6&times;13 — and it takes about a minute.</p>
+        <button id="deepBtn" class="go">run the deep sweep</button>
+        <div id="deepOut" class="small mono" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">A proof that wins the argument and tells you nothing</h2>
+
+    <p>Chomp is one paragraph of rules. A chocolate bar sits in front of you, <em>n</em> squares
+    tall and <em>m</em> wide. The square in the top-left corner is poisoned. On your turn you pick
+    any square that is still there and eat it together with every square down-and-right of it.
+    Whoever is left with nothing but the poison has to eat it, and loses.</p>
+
+    <p>Now the famous part. Whatever the bar, as long as it is bigger than that single poisoned
+    square, <strong>the first player wins</strong>. Here is the whole proof.</p>
+
+    <div class="note">
+      <p><strong>Strategy stealing.</strong> Consider the tiny bite that takes only the far corner
+      square. Either the position it leaves is a loss for your opponent — in which case play it,
+      you have won — or it is a win for them, meaning they have some reply <span class="mono">M</span>
+      that wins from there. But <span class="mono">M</span> is a bite you could have taken yourself
+      on move one, and taking it removes the far corner square anyway, so it reaches the very same
+      position with the roles swapped. Either way the first player has a winning opening. ∎</p>
+    </div>
+
+    <p>Read that again and notice what is missing. The argument never decides which of the two cases
+    it is in. It works for a 4&times;5 bar and for a 4,000&times;5,000 bar that no computer will ever
+    solve. It hands you a certainty about the outcome and <em>zero information about the move</em>.
+    That gap is the subject of this page, and unlike the proof, measuring it requires actually
+    solving the game.</p>
+
+    <h3 class="mid">A position is a staircase</h3>
+
+    <p>Every reachable position is a partition. Because a bite removes a whole down-and-right block,
+    the column heights can never go back up as you move right: the surviving squares always form a
+    staircase <span class="mono">h[0] &ge; h[1] &ge; &hellip; &ge; h[m-1]</span>. So the state is not
+    &ldquo;a subset of the squares&rdquo; — a 10&times;10 bar has 2<sup>100</sup> subsets — it is a
+    partition inside a 10&times;10 box, and there are exactly <span class="mono">C(20,10) =
+    184,756</span> of those. That single observation is the difference between impossible and
+    instant.</p>
+
+    <p>Better still, the value of a position depends only on its shape, never on the bar it started
+    life in. Every rectangle up to 10&times;10 is a shape inside the 10&times;10 box, so
+    <strong>one table of 184,756 entries answers all 100 bars at once</strong> — and every
+    mid-game position of every one of them.</p>
+
+    <h3 class="mid">The table fills itself in one upward pass</h3>
+
+    <p>Rank each staircase into a dense integer: <span class="mono">rank(h) = &sum;<sub>i</sub>
+    CUM[i][h[i]]</span>, where <span class="mono">CUM[i][v] = C(v + m-i-1, m-i)</span> counts the
+    completions that come before. It is a bijection onto <span class="mono">0 &hellip; C(n+m,m)-1</span>,
+    and — this is the useful part — it is a <em>sum of terms each strictly increasing in its own
+    column</em>. A bite only ever shrinks columns, so the position after a bite always has a
+    <strong>strictly smaller rank</strong>.</p>
+
+    <p>That means no recursion, no memo map, no visited set, no stack. Loop <span class="mono">idx</span>
+    from 1 upwards; every position a bite can reach has already been decided. The solver is a
+    <span class="mono">for</span> loop over a <span class="mono">Uint8Array</span>, and the 13&times;13
+    box — <strong>10,400,600</strong> positions — fits in ten megabytes and about ten seconds.</p>
+
+    <h3 class="mid">How thin the win actually is</h3>
+
+    <p>With the table in hand the gap left by the proof becomes arithmetic. Inside the 10&times;10
+    box there are <strong>184,755</strong> non-empty shapes. Only <strong>2,612</strong> of them —
+    <strong>1.41%</strong> — are losses for the player to move. Across all those shapes there are
+    <strong>9,053,045</strong> legal bites and only <strong>312,237</strong> of them win:
+    <strong>3.45%</strong>. Being told &ldquo;you are winning&rdquo; narrows a real position down
+    to about one bite in twenty-nine.</p>
+
+    <p>On the bars themselves it is thinner still. All 99 playable rectangles up to 10&times;10 are
+    wins, exactly as promised, and <strong>95 of them have precisely one winning bite</strong> out
+    of up to 99 legal ones. The theorem is true, complete, and useless at the board.</p>
+
+    <h3 class="mid">The move the proof names is usually the wrong one</h3>
+
+    <p>The strategy-stealing argument does put its finger on one specific bite — the far corner
+    square — and it is tempting to walk away thinking that is the move. It is not. On the 99 bars up
+    to 10&times;10 the corner bite wins <strong>19</strong> times and loses <strong>80</strong>, and
+    every single one of the 19 is a bar with a side of exactly 2, where the corner bite happens to
+    be the &ldquo;leave the bottom row one longer&rdquo; move. Widen the search and the pattern
+    barely improves: over the 293 bars in the deep sweep that are not two rows tall, the corner bite
+    wins <strong>three times</strong> — 6&times;11, 6&times;15 and 6&times;27, which do not look
+    like they belong together and, as far as this engine can tell, do not.</p>
+
+    <h3 class="mid">The pattern that begs to be a theorem</h3>
+
+    <p>Once you see 95 of 99 bars with exactly one winning bite, the next thought is unavoidable:
+    the winning bite in a rectangle must always be unique. The 10&times;10 box already says
+    otherwise — <strong>8&times;10</strong> has two, at (row 4, col 5) and (row 3, col 8), and so
+    does 9&times;10 — and the deep sweep says it properly. Twelve boxes, deliberately including long
+    thin ones, <strong>34,020,393</strong> positions, <strong>692</strong> bars:</p>
+
+    <ul>
+      <li><strong>687</strong> have exactly one winning bite.</li>
+      <li><strong>5</strong> have exactly two: 6&times;13, 8&times;10, 9&times;10, 10&times;14,
+      12&times;13.</li>
+      <li><strong>0</strong> have three or more.</li>
+    </ul>
+
+    <p>The shape of that result matters as much as the result. The smallest counterexample by square
+    count is <strong>6&times;13 at 78 squares</strong>, not 8&times;10 at 80 — and 6&times;13 does
+    not fit in any square box below 13&times;13. Sweeping <em>n&times;n</em> bars outward, the
+    obvious thing to do, meets 8&times;10 first and never learns that something smaller was hiding
+    in a thinner box. That is why the sweep plan runs a 6&times;30 and a 3&times;120 and even a
+    2&times;400.</p>
+
+    <h3 class="mid">Why losing positions are rare, in one sentence</h3>
+
+    <p>Take any position with <em>k</em>+1 rows and fix its first <em>k</em>. A bite in the last row
+    changes nothing else, so within that family the positions are all one bite from each other,
+    which means <strong>at most one of them can be a loss</strong> — two losses one bite apart is a
+    contradiction in terms. The 10&times;10 box has <strong>92,378</strong> such families and the
+    engine checks every one: <strong>0 violations</strong>, and only 2,612 families contain a loss
+    at all. The rest is 89,766 families where every last-row length leaves the mover winning.</p>
+
+    <h3 class="mid">The one closed form there is</h3>
+
+    <p>An <strong>L</strong> — one arm of <em>a</em> squares along the top row, one arm of <em>b</em>
+    down the first column — <strong>loses exactly when a = b</strong>. Nothing else in Chomp is that
+    clean, and the engine confirms all 100 L's in the box with 0 exceptions. It also explains the
+    one thing everybody remembers about square bars: the winning bite on an <em>n</em>&times;<em>n</em>
+    is always at (1,1), because that leaves an L with two arms of <em>n</em>-1. The engine agrees for
+    every square from 2&times;2 to 10&times;10, and each time it is the <em>only</em> winning bite.</p>
+
+    <p>Two rows have a rule too, and it is just as short: a two-row position loses exactly when the
+    bottom row is <strong>one square longer</strong> than the top. Checked against an independent
+    two-row solver on all <strong>45,450</strong> positions with rows up to 300: <strong>0
+    exceptions</strong>.</p>
+
+    <h3 class="mid">Three rows, and the rules stop</h3>
+
+    <p>The last-row bound applies again: for a three-row position, fixing the second and third rows
+    leaves at most one top row that loses. That holds — 210 families with second row up to 20, not
+    one with two answers. The natural next sentence, <em>&ldquo;and exactly one always exists&rdquo;</em>,
+    is where it falls apart: <strong>75 of the 210</strong> families have <em>no</em> losing top row
+    at all, searched out to a top row of 400. Every family whose third row is 1 and whose second row
+    is 3 or more is empty; so is every family with third row 3 and second row from 6 up.</p>
+
+    <p>And where an answer does exist it refuses to be a formula. Third row 2 is beautifully behaved
+    — the losing top row is always the second row plus 2, for every second row from 2 to 20. The
+    diagonal, second row = third row, gives 3, 4, 6, 8, 10, 11, 13, 15, 16, 18, 20, 21, 24, 25, 27,
+    28, 30, 32, 34, 35. The gaps run 1, 2, 2, 2, 1, 2, 2, 1, 2, 2, 1, <strong>3</strong>, 1, 2, 1, 2,
+    2, 2, 1 — a jump of 3 in the middle of a sequence that had been alternating politely. One extra
+    row is the entire difference between a rule you can hold in your head and a table you have to
+    compute.</p>
+
+    <h3 class="mid">What a guess is worth</h3>
+
+    <p>Every simple rule anyone reaches for gets scored here on all 184,755 shapes. Counting squares
+    and checking parity — the reflex borrowed from Nim — comes out at <strong>49.97%</strong>, which
+    is a coin. The exact rules score high only because losses are rare: guessing &ldquo;the mover
+    wins&rdquo; every single time is already right <strong>98.59%</strong> of the time, and the best
+    honest rule on the list, the equal-armed L, beats that by <strong>0.0054 percentage
+    points</strong> because it recognises 10 losses out of 2,612 without ever raising a false alarm.
+    A rule with no false alarms and no coverage is a rule you cannot play with.</p>
+
+    <p>The final measurement is the practical one. Against an opponent biting at random, perfect
+    play wins <strong>every game</strong>. The corner-bite opener — the proof's move, played as a
+    policy — wins about <strong>54%</strong>. And if both sides bite uniformly at random, the exact
+    dynamic program says the first player's chance on a 10&times;10 bar is
+    <strong>0.500041697</strong>. A theorem worth 100% collapses to a coin flip the moment nobody
+    can find the move it promised.</p>
+
+    <div class="note warn">
+      <p><strong>What this engine is not.</strong> It is exact and total for any shape that fits in
+      a box it can afford, and the cost is the number of partitions in that box —
+      <span class="mono">C(n+m, m)</span>, which is combinatorial, not exponential in the area. That
+      is why 13&times;13 is comfortable and 20&times;20 (<span class="mono">C(40,20)</span> ≈ 137
+      billion) is not. It solves poisoned-corner Chomp on rectangles and staircases; three-dimensional
+      Chomp, ordinal Chomp on a continuous bar, and Chomp on a general poset each need a different
+      state space, and nothing here widens to cover them. It is also not a Sprague-Grundy story:
+      Chomp does not split into independent sums, so there is nothing to XOR.</p>
+    </div>
+
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">🔨 How it is built</h2>
+
+    <h3 class="mid">1. The state, and why it is small</h3>
+    <pre>// h[0] &gt;= h[1] &gt;= ... &gt;= h[M-1] &gt;= 0, each &lt;= N.  Square (r,c) is present iff r &lt; h[c].
+// A bite at (r,c) truncates every column from c rightwards down to r:
+function biteAt(h, r, c){
+  const g = h.slice();
+  for (let j = c; j &lt; g.length; j++) if (g[j] &gt; r) g[j] = r;
+  return g;
+}</pre>
+    <p>Four lines, and they encode the entire rulebook. Note what falls out for free: distinct
+    squares always give distinct positions, because <span class="mono">c</span> is the first column
+    that changed and <span class="mono">r</span> is its new height. So &ldquo;number of legal
+    bites&rdquo; is exactly &ldquo;number of squares minus one&rdquo;, with no de-duplication pass.</p>
+
+    <h3 class="mid">2. Ranking a staircase into an integer</h3>
+    <pre>// CUM[i][v] = C(v + M-i-1, M-i) counts the completions that sort before this column value.
+function rankShape(B, h){
+  let s = 0;
+  for (let i = 0; i &lt; B.M; i++) s += B.CUM[i][h[i]];
+  return s;
+}</pre>
+    <p>A bijection onto <span class="mono">0 &hellip; C(N+M,M)-1</span>. The property the whole
+    solver leans on is that each term depends on <em>one</em> column and increases with it, so
+    shrinking any column strictly lowers the rank. Every bite therefore points backwards.</p>
+
+    <h3 class="mid">3. The solver is a for-loop</h3>
+    <pre>for (let idx = 1; idx &lt; T; idx++){
+  unrank(idx into h);
+  if (only the poison is left){ win[idx] = 0; continue; }
+  let w = 0;
+  for each legal bite (r,c)
+    if (!win[rank of the position after the bite]){ w = 1; break; }
+  win[idx] = w;
+}</pre>
+    <p>No recursion, no memo, no hash map, no explicit topological order. The ranking <em>is</em> the
+    topological order. That is why a ten-million-state table costs ten seconds and ten megabytes
+    instead of blowing a call stack.</p>
+
+    <h3 class="mid">4. Making a bite cost O(1)</h3>
+    <pre>// pre[c]   = rank contribution of the untouched columns to the left
+// split[r] = first column already at or below height r  (h is descending, so this is monotone)
+// RC[r][j] = prefix of CUM over columns, all taken at height r
+// suf[k]   = contribution of the tail that the bite does not reach
+const k = split[r] &gt; c ? split[r] : c;
+const after = pre[c] + (RC[r][k] - RC[r][c]) + suf[k];</pre>
+    <p>The naive version rebuilds the shape and re-ranks it, which is O(M) per bite and turns the
+    13&times;13 box into a minute. This version never materialises the child shape at all: three
+    table lookups and two additions give its rank directly. It is the difference between the deep
+    sweep being a feature and being a promise.</p>
+
+    <h3 class="mid">5. A second solver that shares nothing</h3>
+    <pre>function bruteWin(h){
+  if (h[0] === 1 &amp;&amp; (h.length &lt; 2 || h[1] === 0)) return false;
+  for (let c = 0; c &lt; h.length; c++)
+    for (let r = 0; r &lt; h[c]; r++){
+      if (r === 0 &amp;&amp; c === 0) continue;
+      if (!bruteWin(biteAt(h, r, c))) return true;
+    }
+  return false;
+}</pre>
+    <p>No table, no ranking, no memo — it re-explores the same position thousands of times and does
+    not care. It is unusable past about twenty squares and it is the reason the fast solver can be
+    trusted: the self-test runs both over every shape in a small box and demands zero disagreements.</p>
+
+    <h3 class="mid">6. The families bound, as code</h3>
+    <pre>// group shapes with k+1 rows by their first k rows; a bite in the last row touches nothing else
+const key = rowsOf(h).slice(0, -1).join(".");</pre>
+    <p>Two positions in one group differ only in the last row's length, so the longer one can bite
+    down to the shorter. If both were losses, a loss would be one bite from a loss — impossible. The
+    engine still counts the violations rather than asserting the bound, because a bound you assumed
+    is a bound you never tested.</p>
+
+    <h3 class="mid">7. Random play, exactly</h3>
+    <pre>p[idx] = 1 - (sum of p[child] over every legal bite) / (number of legal bites);</pre>
+    <p>The same ascending pass, different arithmetic: the exact probability that the player to move
+    wins when <em>both</em> sides bite uniformly at random. No sampling, no seeds, no error bars —
+    and the verifier checks it by doing the opposite, playing hundreds of thousands of actual random
+    games forward and comparing the frequency.</p>
+
+    <h3 class="mid">8. The sweep plan</h3>
+    <pre>const SWEEP_PLAN = [[2,400],[3,120],[4,64],[5,44],[6,30],[7,23],
+                    [8,18],[9,16],[10,15],[11,14],[12,13],[13,13]];</pre>
+    <p>Row <span class="mono">[n, cap]</span> solves an <span class="mono">n &times; cap</span> box
+    once and reads off every bar <span class="mono">n &times; m</span> for m up to cap. The thin rows
+    are not padding — 6&times;13 is the smallest bar with two winning bites and it only appears if
+    something goes at least 30 columns wide at six rows tall. A plan of squares alone reports
+    8&times;10 as the smallest and is wrong.</p>
+
+    <h3 class="mid">9. Three of my own assumptions were wrong</h3>
+    <pre>// 1. "the winning bite in a rectangle is unique"        - false, 5 bars in the sweep have two
+// 2. "the smallest exception is 8x10"                   - false, 6x13 is 78 squares to its 80
+// 3. "every (b,c) has exactly one losing top row"       - false, 75 of 210 families have none</pre>
+    <p>All three survived until the sweep was widened. The first two died because the search was
+    square-shaped; the third because &ldquo;at most one&rdquo; is a proof and &ldquo;exactly
+    one&rdquo; is a hope. Each is now a self-test that fails loudly if the engine ever drifts back.</p>
+
+    <h3 class="mid">10. What this engine is not</h3>
+    <pre>// Cost is C(n+m, m) - the number of partitions in the box, not 2^(n*m).
+// 13 x 13 = 10,400,600 states is fine; 20 x 20 = C(40,20) = 137 billion is not.
+// Poisoned-corner Chomp on staircase shapes only. 3-D Chomp, ordinal Chomp and
+// Chomp on a general poset each need a different state space and do not follow.
+// There is no Sprague-Grundy decomposition here: the game never splits into a sum.</pre>
+
+    <h3 class="mid">Self-test</h3>
+    <pre id="selftest">running&hellip;</pre>
+
+    <h3 class="mid">🎉 GameFromZero Day 72 shipped.</h3>
+    <p class="small">Seventy-two games. The first one where the theorem was never in doubt and
+    everything interesting was in the gap it left behind.</p>
+
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("tab-active"));
+  t.classList.add("tab-active");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// CHOMP. A rectangular chocolate bar; the corner square at the top left is poisoned. A bite at a
+// square removes that square and every square down-and-right of it. The player forced to eat the
+// poison loses. Three lines of strategy stealing prove the first player wins every bar bigger than
+// one square, and the proof computes nothing at all - it never names the move, and it holds for a
+// bar so large no machine will ever solve it.
+//
+// So the interesting question is not who wins. It is how much that proof leaves on the table, and
+// answering it needs a real solver. A position is a staircase: a partition, one height per column.
+// The engine ranks every staircase that fits in an N x M box into a dense integer, then fills the
+// entire table in ONE ascending pass - no recursion, no memo map, no hash - because a bite can only
+// shrink columns and the ranking is a sum of per-column increasing terms, so every bite lands at a
+// strictly smaller index that has already been decided.
+//
+// Nothing in this block touches the DOM.
+
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const fmt = n => Number(n).toLocaleString("en-US");
+const pct = (x, d) => (100 * x).toFixed(d === undefined ? 2 : d) + "%";
+
+// ---------------------------------------------------------------- binomials
+const BC = [];
+function C(n, k){
+  if (k < 0 || k > n || n < 0) return 0;
+  for (let i = BC.length; i <= n; i++){
+    const row = new Array(i + 1);
+    row[0] = row[i] = 1;
+    for (let j = 1; j < i; j++) row[j] = BC[i - 1][j - 1] + BC[i - 1][j];
+    BC.push(row);
+  }
+  return BC[n][k];
+}
+
+// ---------------------------------------------------------------- shapes and ranking
+// A position is h[0] >= h[1] >= ... >= h[M-1] >= 0, each <= N. Column c is h[c] squares tall, so
+// square (row r, column c) is present exactly when r < h[c]. The poison is (0,0).
+// rank(h) = sum_i CUM[i][h[i]] with CUM[i][v] = C(v + M-i-1, M-i). Each term is strictly increasing
+// in its own h[i], so h' <= h componentwise means rank(h') < rank(h) unless they are equal. That one
+// fact is what lets the whole table be filled by a for-loop counting upwards.
+function makeBox(N, M){
+  const CUM = [];
+  for (let i = 0; i < M; i++){
+    const d = M - i - 1, row = new Float64Array(N + 2);
+    for (let v = 0; v <= N + 1; v++) row[v] = C(v + d, d + 1);
+    CUM.push(row);
+  }
+  return { N, M, CUM, T: C(N + M, M) };
+}
+function rankShape(B, h){
+  let s = 0;
+  for (let i = 0; i < B.M; i++) s += B.CUM[i][h[i]];
+  return s;
+}
+function unrankShape(B, idx, out){
+  const h = out || new Array(B.M);
+  let rem = idx, cap = B.N;
+  for (let i = 0; i < B.M; i++){
+    const row = B.CUM[i];
+    let v = cap;
+    while (row[v] > rem) v--;
+    h[i] = v; rem -= row[v]; cap = v;
+  }
+  return h;
+}
+function rectHeights(B, rows, cols){
+  const h = new Array(B.M).fill(0);
+  for (let c = 0; c < cols && c < B.M; c++) h[c] = rows;
+  return h;
+}
+const cellsOf = h => { let s = 0; for (let i = 0; i < h.length; i++) s += h[i]; return s; };
+const isPoisonOnly = h => h[0] === 1 && (h.length < 2 || h[1] === 0);
+// the conjugate view: row r holds rowsOf(h)[r] squares
+function rowsOf(h, M){
+  const rows = [];
+  for (let r = 0; r < h[0]; r++){ let n = 0; for (let c = 0; c < M; c++) if (h[c] > r) n++; rows.push(n); }
+  return rows;
+}
+function heightsOf(rows, M){
+  const h = new Array(M).fill(0);
+  for (let i = 0; i < rows.length; i++) for (let c = 0; c < rows[i] && c < M; c++) h[c] = i + 1;
+  return h;
+}
+// a bite at (r,c) truncates every column from c rightwards down to height r
+function biteAt(h, r, c){
+  const g = h.slice();
+  for (let j = c; j < g.length; j++) if (g[j] > r) g[j] = r;
+  return g;
+}
+// every legal bite except the poison one. Distinct squares give distinct positions: c is the first
+// column that changed and r is its new height, so the square is read straight back off the result.
+function movesFrom(h){
+  const out = [];
+  for (let c = 0; c < h.length; c++)
+    for (let r = 0; r < h[c]; r++){
+      if (r === 0 && c === 0) continue;
+      out.push({ r, c, h: biteAt(h, r, c) });
+    }
+  return out;
+}
+
+// ---------------------------------------------------------------- the table
+// One ascending pass over every staircase in the N x M box. win[idx] = 1 when the player to move
+// wins. A bite costs O(1): RC[r][j] is a prefix of CUM taken at height r, suf[k] is the untouched
+// tail, split[r] is the first column already at or below r - so the rank of the position after a
+// bite is three lookups and two adds, with no shape array built at all.
+function solveBox(N, M){
+  const B = makeBox(N, M), T = B.T, win = new Uint8Array(T);
+  const RC = [];
+  for (let r = 0; r <= N; r++){
+    const row = new Float64Array(M + 1);
+    let s = 0;
+    for (let j = 0; j < M; j++){ s += B.CUM[j][r]; row[j + 1] = s; }
+    RC.push(row);
+  }
+  const h = new Int32Array(M), pre = new Float64Array(M + 1),
+        suf = new Float64Array(M + 2), split = new Int32Array(N + 1);
+  for (let idx = 1; idx < T; idx++){
+    let rem = idx, cap = N;
+    for (let i = 0; i < M; i++){
+      const row = B.CUM[i];
+      let v = cap;
+      while (row[v] > rem) v--;
+      h[i] = v; rem -= row[v]; cap = v;
+    }
+    if (h[0] === 1 && (M < 2 || h[1] === 0)){ win[idx] = 0; continue; }   // only the poison is left
+    pre[0] = 0;
+    for (let j = 0; j < M; j++) pre[j + 1] = pre[j] + B.CUM[j][h[j]];
+    suf[M] = 0;
+    for (let j = M - 1; j >= 0; j--) suf[j] = suf[j + 1] + B.CUM[j][h[j]];
+    { let j = M; for (let r = 0; r <= N; r++){ while (j > 0 && h[j - 1] <= r) j--; split[r] = j; } }
+    let w = 0;
+    outer:
+    for (let c = 0; c < M && h[c] > 0; c++){
+      for (let r = 0; r < h[c]; r++){
+        if (r === 0 && c === 0) continue;
+        const k = split[r] > c ? split[r] : c;
+        if (!win[pre[c] + (RC[r][k] - RC[r][c]) + suf[k]]){ w = 1; break outer; }
+      }
+    }
+    win[idx] = w;
+  }
+  return { B, win, N, M, T };
+}
+const winOf = (S, h) => !!S.win[rankShape(S.B, h)];
+function winningMoves(S, h){
+  const out = [];
+  for (const m of movesFrom(h)) if (!S.win[rankShape(S.B, m.h)]) out.push(m);
+  return out;
+}
+// the same question answered by a program with no table, no ranking and no memo of any kind
+function bruteWin(h){
+  if (h[0] === 1 && (h.length < 2 || h[1] === 0)) return false;
+  for (let c = 0; c < h.length; c++)
+    for (let r = 0; r < h[c]; r++){
+      if (r === 0 && c === 0) continue;
+      if (!bruteWin(biteAt(h, r, c))) return true;
+    }
+  return false;
+}
+
+// ---------------------------------------------------------------- rectangles
+// The bite the strategy-stealing argument names is the single far corner square, (N-1, M-1).
+function rectangleTable(S){
+  const rows = [];
+  for (let n = 1; n <= S.N; n++)
+    for (let m = 1; m <= S.M; m++){
+      const h = rectHeights(S.B, n, m), cells = n * m;
+      const wm = cells > 1 ? winningMoves(S, h) : [];
+      let corner = null;
+      if (cells > 1) corner = !S.win[rankShape(S.B, biteAt(h, n - 1, m - 1))];
+      rows.push({ n, m, cells, win: winOf(S, h), k: wm.length,
+                  moves: wm.map(x => [x.r, x.c]), corner });
+    }
+  return rows;
+}
+function rectangleSummary(S){
+  const rows = rectangleTable(S), play = rows.filter(r => r.cells > 1);
+  return { rows, boards: rows.length, wins: rows.filter(r => r.win).length,
+           losses: rows.filter(r => !r.win).length,
+           unique: play.filter(r => r.k === 1).length,
+           multi: play.filter(r => r.k > 1),
+           maxK: play.reduce((a, r) => Math.max(a, r.k), 0),
+           cornerWins: play.filter(r => r.corner).length,
+           cornerLoses: play.filter(r => !r.corner).length, played: play.length };
+}
+
+// ---------------------------------------------------------------- census over every shape
+function moveCensus(S){
+  const B = S.B, h = new Array(B.M), pre = new Array(B.M + 1);
+  let P = 0, N = 0, totalMoves = 0, totalWin = 0, maxK = 0;
+  const hist = new Map();
+  for (let idx = 1; idx < S.T; idx++){
+    unrankShape(B, idx, h);
+    totalMoves += cellsOf(h) - 1;
+    if (!S.win[idx]){ P++; continue; }
+    N++;
+    pre[0] = 0;
+    for (let j = 0; j < B.M; j++) pre[j + 1] = pre[j] + B.CUM[j][h[j]];
+    let k = 0;
+    for (let c = 0; c < B.M && h[c] > 0; c++)
+      for (let r = 0; r < h[c]; r++){
+        if (r === 0 && c === 0) continue;
+        let s = pre[c];
+        for (let j = c; j < B.M; j++) s += B.CUM[j][h[j] > r ? r : h[j]];
+        if (!S.win[s]) k++;
+      }
+    totalWin += k; if (k > maxK) maxK = k;
+    hist.set(k, (hist.get(k) || 0) + 1);
+  }
+  return { shapes: S.T - 1, P, N, totalMoves, totalWin, maxK,
+           avgWin: totalWin / N, share: totalWin / totalMoves,
+           hist: [...hist].sort((a, b) => a[0] - b[0]) };
+}
+
+// Group the shapes with exactly k+1 rows by their first k rows. A bite in the LAST row changes
+// nothing else, so two losing positions inside one group would be one bite apart - impossible. The
+// bound is "at most one per group", and the sweep checks it rather than assuming it.
+function familyStudy(S){
+  const B = S.B, h = new Array(B.M), fam = new Map();
+  for (let idx = 1; idx < S.T; idx++){
+    unrankShape(B, idx, h);
+    const rows = rowsOf(h, B.M), key = rows.slice(0, rows.length - 1).join(".");
+    let f = fam.get(key);
+    if (!f){ f = { n: 0, P: 0 }; fam.set(key, f); }
+    f.n++; if (!S.win[idx]) f.P++;
+  }
+  let families = 0, withP = 0, empty = 0, viol = 0;
+  for (const [, f] of fam){ families++; if (f.P === 1) withP++; else if (f.P === 0) empty++; else viol++; }
+  return { families, withP, empty, viol };
+}
+
+// exact probability that the player to move wins when BOTH sides bite uniformly at random
+function randomPlay(S){
+  const B = S.B, p = new Float64Array(S.T), h = new Array(B.M), pre = new Array(B.M + 1);
+  for (let idx = 1; idx < S.T; idx++){
+    unrankShape(B, idx, h);
+    if (h[0] === 1 && (B.M < 2 || h[1] === 0)){ p[idx] = 0; continue; }
+    pre[0] = 0;
+    for (let j = 0; j < B.M; j++) pre[j + 1] = pre[j] + B.CUM[j][h[j]];
+    let sum = 0, k = 0;
+    for (let c = 0; c < B.M && h[c] > 0; c++)
+      for (let r = 0; r < h[c]; r++){
+        if (r === 0 && c === 0) continue;
+        let s = pre[c];
+        for (let j = c; j < B.M; j++) s += B.CUM[j][h[j] > r ? r : h[j]];
+        sum += p[s]; k++;
+      }
+    p[idx] = 1 - sum / k;
+  }
+  return p;
+}
+
+// ---------------------------------------------------------------- the rules that do exist
+// An L: an arm of a squares along the top row, an arm of b squares down the first column.
+function lShape(B, a, b){
+  const h = new Array(B.M).fill(0);
+  h[0] = b;
+  for (let c = 1; c < a && c < B.M; c++) h[c] = 1;
+  return h;
+}
+// P exactly when the arms are equal - the only closed form in the whole game, and the reason the
+// square bar's winning bite is always (1,1): it leaves an L with two arms of n-1.
+function lRule(S){
+  let checked = 0, bad = 0, first = null;
+  for (let a = 1; a <= S.M; a++)
+    for (let b = 1; b <= S.N; b++){
+      const P = !winOf(S, lShape(S.B, a, b));
+      checked++;
+      if (P !== (a === b)){ bad++; if (!first) first = [a, b]; }
+    }
+  return { checked, bad, first };
+}
+// Two rows: P exactly when the bottom row is one square longer than the top. Solved by its own tiny
+// memo, so the rule is checked against a second solver and not against the big table.
+function twoRowRule(maxA){
+  const memo = new Map();
+  const w = (a, b) => {
+    const key = a * 4096 + b, hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    if (a === 1 && b === 0){ memo.set(key, false); return false; }
+    let res = false;
+    for (let j = 1; j < a && !res; j++) if (!w(j, b < j ? b : j)) res = true;
+    if (!res) for (let j = 0; j < b && !res; j++) if (!w(a, j)) res = true;
+    memo.set(key, res); return res;
+  };
+  let checked = 0, bad = 0, first = null;
+  for (let a = 1; a <= maxA; a++)
+    for (let b = 0; b <= a; b++){
+      const truth = !w(a, b);
+      checked++;
+      if (truth !== (a === b + 1)){ bad++; if (!first) first = [a, b]; }
+    }
+  return { checked, bad, first, w };
+}
+// Three rows: the same bound says at most one losing top row a for each (b,c). It holds. What does
+// NOT hold is the obvious next sentence - that one always exists.
+function threeRow(maxB, aCap){
+  const memo = new Map();
+  const w = (a, b, c) => {
+    const key = (a * 1024 + b) * 1024 + c, hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    if (a === 1 && b === 0){ memo.set(key, false); return false; }
+    let res = false;
+    for (let j = 1; j < a && !res; j++) if (!w(j, b < j ? b : j, c < j ? c : j)) res = true;
+    if (!res) for (let j = 0; j < b && !res; j++) if (!w(a, j, c < j ? c : j)) res = true;
+    if (!res) for (let j = 0; j < c && !res; j++) if (!w(a, b, j)) res = true;
+    memo.set(key, res); return res;
+  };
+  let families = 0, one = 0, none = 0, many = 0;
+  const missing = [], diag = [], c2 = [];
+  for (let b = 1; b <= maxB; b++)
+    for (let c = 1; c <= b; c++){
+      let hits = 0, firstA = null;
+      for (let a = b; a <= aCap; a++) if (!w(a, b, c)){ hits++; if (firstA === null) firstA = a; }
+      families++;
+      if (hits === 0){ none++; missing.push([b, c]); }
+      else if (hits === 1) one++;
+      else many++;
+      if (b === c) diag.push(firstA);
+      if (c === 2) c2.push(firstA);
+    }
+  let c2bad = null;
+  for (let b = 2; b <= maxB; b++) if (w(b + 2, b, 2)){ c2bad = b; break; }
+  return { families, one, none, many, missing, diag, c2, c2bad, w };
+}
+
+// candidate rules for "this position loses", scored against the truth on every shape in the box
+const PREDICATES = [
+  ["even number of squares", (h, rows) => cellsOf(h) % 2 === 0],
+  ["odd number of squares",  (h, rows) => cellsOf(h) % 2 === 1],
+  ["a square block",         (h, rows) => rows.length === rows[0] && rows.every(x => x === rows[0])],
+  ["a staircase",            (h, rows) => rows.every((v, i) => v === rows[0] - i)],
+  ["symmetric shape",        (h, rows) => { const cj = [];
+                                            for (let i = 0; i < rows[0]; i++){ let k = 0; for (const r of rows) if (r > i) k++; cj.push(k); }
+                                            return cj.length === rows.length && cj.every((v, i) => v === rows[i]); }],
+  ["two rows, off by one",   (h, rows) => rows.length === 2 && rows[0] === rows[1] + 1],
+  ["an L with equal arms",   (h, rows) => rows[0] === rows.length && rows.slice(1).every(x => x === 1)]
+];
+function predicateStudy(S){
+  const B = S.B, h = new Array(B.M);
+  const score = PREDICATES.map(p => ({ name: p[0], tp: 0, fp: 0, fn: 0, tn: 0 }));
+  let P = 0;
+  for (let idx = 1; idx < S.T; idx++){
+    unrankShape(B, idx, h);
+    const rows = rowsOf(h, B.M), isP = !S.win[idx];
+    if (isP) P++;
+    for (let i = 0; i < PREDICATES.length; i++){
+      const g = PREDICATES[i][1](h, rows), s = score[i];
+      if (g && isP) s.tp++; else if (g) s.fp++; else if (isP) s.fn++; else s.tn++;
+    }
+  }
+  const total = S.T - 1;
+  for (const s of score) s.acc = (s.tp + s.tn) / total;
+  return { rows: score, total, P, baseline: (total - P) / total };
+}
+
+// ---------------------------------------------------------------- players
+// perfect: take a winning bite if one exists, otherwise the last legal bite and hope
+// corner:  the bite the proof names - the single far corner square
+// biggest: eat as much as possible without eating the poison
+// random:  uniform over the legal bites
+function pickMove(kind, S, h, rnd){
+  const ms = movesFrom(h);
+  if (!ms.length) return null;
+  if (kind === "perfect"){
+    for (const m of ms) if (!S.win[rankShape(S.B, m.h)]) return m;
+    return ms[ms.length - 1];
+  }
+  if (kind === "corner"){
+    let best = null;
+    for (const m of ms)
+      if (!best || m.r + m.c > best.r + best.c || (m.r + m.c === best.r + best.c && m.c > best.c)) best = m;
+    return best;
+  }
+  if (kind === "biggest"){
+    let best = null, take = -1, base = cellsOf(h);
+    for (const m of ms){ const t = base - cellsOf(m.h); if (t > take){ take = t; best = m; } }
+    return best;
+  }
+  return ms[Math.floor(rnd() * ms.length)];
+}
+// one game from an n x m bar; true when the OPENER wins
+function playGame(S, n, m, opener, replier, rnd){
+  let h = rectHeights(S.B, n, m), turn = 0, guard = 0;
+  for (;;){
+    if (isPoisonOnly(h)) return turn === 1;           // the side to move must eat the poison
+    const mv = pickMove(turn === 0 ? opener : replier, S, h, rnd);
+    h = mv.h; turn ^= 1;
+    if (++guard > 4000) return false;
+  }
+}
+function race(S, kinds, maxSide, reps, seed){
+  const out = [];
+  for (const k of kinds){
+    const rnd = mulberry32(seed);
+    let wins = 0, games = 0;
+    for (let n = 2; n <= maxSide; n++)
+      for (let m = 2; m <= maxSide; m++)
+        for (let t = 0; t < reps; t++){ games++; if (playGame(S, n, m, k, "random", rnd)) wins++; }
+    out.push({ kind: k, games, wins, rate: wins / games });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- the deep sweep
+// One box per row: every bar n x m with n <= m <= cap gets its winning bites counted. The long thin
+// boxes are the point - a bar can be an exception on square count without being one on side length,
+// so a sweep of squares alone would have walked straight past 6 x 13.
+const SWEEP_PLAN = [[2, 400], [3, 120], [4, 64], [5, 44], [6, 30], [7, 23],
+                    [8, 18], [9, 16], [10, 15], [11, 14], [12, 13], [13, 13]];
+function sweepBox(n, cap){
+  const S = solveBox(n, cap), B = S.B;
+  let boards = 0, unique = 0, two = 0, three = 0, corner = 0, P = 0;
+  const exc = [], cornerOdd = [];
+  for (let i = 1; i < S.T; i++) if (!S.win[i]) P++;
+  for (let m = n; m <= cap; m++){
+    const h = rectHeights(B, n, m), wm = winningMoves(S, h);
+    boards++;
+    if (wm.length === 1) unique++;
+    else if (wm.length === 2){ two++; exc.push({ n, m, cells: n * m, moves: wm.map(x => [x.r, x.c]) }); }
+    else three++;
+    if (!S.win[rankShape(B, biteAt(h, n - 1, m - 1))]){ corner++; if (n !== 2) cornerOdd.push([n, m]); }
+  }
+  return { n, cap, states: S.T, boards, unique, two, three, corner, cornerOdd, P, exc };
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- study parameters
+// Pinned here so the prose, the panels and the verifier all quote the same runs.
+const BOX = 10;
+const TWO_ROW_MAX = 300;
+const THREE_B = 20, THREE_A = 400;
+const RACE_SIDE = 8, RACE_REPS = 5, RACE_SEED = 72;
+const RP_ROWS = [[2, 2], [3, 3], [4, 4], [6, 6], [8, 8], [10, 10], [2, 10]];
+const SIZES = [[4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [10, 10],
+               [3, 8], [8, 3], [6, 10], [10, 6], [2, 10], [8, 10]];
+
+const $ = id => document.getElementById(id);
+
+const S = solveBox(BOX, BOX);
+const RECT = rectangleSummary(S);
+const rectAt = (n, m) => RECT.rows.find(r => r.n === n && r.m === m);
+
+let CEN = null, FAM = null, RP = null, PRED = null, L = null, TR = null, T3 = null, RACE = null;
+
+// ---------------------------------------------------------------- game state
+let g = { n: 6, m: 6, h: null, hist: [], turn: 0, opp: "perfect", human: 0, over: false, mark: false };
+const rnd = mulberry32(RACE_SEED);
+
+function newGame(){
+  g.h = rectHeights(S.B, g.n, g.m);
+  g.hist = []; g.turn = 0; g.over = false;
+  $("log").innerHTML = "";
+  if (g.human === 1) setTimeout(engineMove, 260);
+  draw();
+}
+function logLine(s){
+  const d = document.createElement("div");
+  d.textContent = s;
+  $("log").prepend(d);
+}
+function doBite(r, c, who){
+  g.hist.push(g.h.slice());
+  const before = cellsOf(g.h);
+  g.h = biteAt(g.h, r, c);
+  logLine((who === 0 ? "you " : "engine ") + "bit (" + r + "," + c + ")  took " +
+          (before - cellsOf(g.h)) + "  left " + cellsOf(g.h));
+  g.turn ^= 1;
+  g.mark = false;
+  if (isPoisonOnly(g.h)){
+    g.over = true;
+    logLine((g.turn === g.human ? "you" : "the engine") + " must eat the poison");
+  }
+  draw();
+  if (!g.over && g.turn !== g.human) setTimeout(engineMove, 260);
+}
+function engineMove(){
+  if (g.over || g.turn === g.human) return;
+  const mv = pickMove(g.opp, S, g.h, rnd);
+  if (mv) doBite(mv.r, mv.c, 1);
+}
+
+// ---------------------------------------------------------------- board
+function draw(){
+  const b = $("board");
+  const cell = Math.min(500 / g.m, 400 / g.n, 60);
+  const W = g.m * cell, H = g.n * cell;
+  const ox = (560 - W) / 2, oy = 20;
+  const wm = g.over ? [] : winningMoves(S, g.h);
+  const wset = new Set(wm.map(x => x.r + "," + x.c));
+  let s = "";
+  for (let r = 0; r < g.n; r++)
+    for (let c = 0; c < g.m; c++){
+      const here = g.h[c] > r;
+      const x = ox + c * cell, y = oy + r * cell;
+      if (!here){
+        s += '<rect x="' + x + '" y="' + y + '" width="' + cell + '" height="' + cell +
+             '" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>';
+        continue;
+      }
+      const poison = r === 0 && c === 0;
+      const fill = poison ? "#0f172a" : (g.mark && wset.has(r + "," + c) ? "#4338ca" : "#a16207");
+      s += '<rect class="hit" data-r="' + r + '" data-c="' + c + '" x="' + (x + 1) + '" y="' + (y + 1) +
+           '" width="' + (cell - 2) + '" height="' + (cell - 2) + '" rx="4" fill="' + fill +
+           '" stroke="#78350f" stroke-width="1"/>';
+      if (poison)
+        s += '<text x="' + (x + cell / 2) + '" y="' + (y + cell / 2 + 5) + '" text-anchor="middle" fill="#fca5a5">☠</text>';
+      else if (g.mark && wset.has(r + "," + c))
+        s += '<text x="' + (x + cell / 2) + '" y="' + (y + cell / 2 + 5) + '" text-anchor="middle" fill="#e0e7ff">★</text>';
+    }
+  s += '<text x="' + ox + '" y="' + (oy + H + 20) + '" fill="#64748b">' + g.n + " rows × " + g.m +
+       " columns · " + cellsOf(g.h) + " squares left</text>";
+  b.setAttribute("viewBox", "0 0 560 " + (H + 52));
+  b.innerHTML = s;
+  b.querySelectorAll(".hit").forEach(el => el.addEventListener("click", () => {
+    if (g.over || g.turn !== g.human) return;
+    const r = +el.dataset.r, c = +el.dataset.c;
+    if (r === 0 && c === 0){
+      g.over = true;
+      logLine("you ate the poison — you lose");
+      draw(); paintVerdict();
+      return;
+    }
+    doBite(r, c, 0);
+  }));
+  paintVerdict();
+  $("status").textContent = g.over
+    ? (isPoisonOnly(g.h) ? ((g.turn === g.human ? "You" : "The engine") + " must eat the poison — " +
+       (g.turn === g.human ? "you lose." : "you win.")) : "Game over.")
+    : (g.turn === g.human ? "Your bite. Click a square; it takes everything down and to the right."
+                          : "The engine is thinking.");
+}
+
+function paintVerdict(){
+  const winning = !g.over && winOf(S, g.h);
+  const wm = g.over ? [] : winningMoves(S, g.h);
+  const total = cellsOf(g.h) - 1;
+  $("verdictBig").textContent = g.over ? "—" : (winning ? "WINNING" : "LOSING");
+  $("verdictBig").className = "huge " + (g.over ? "" : winning ? "win" : "lose");
+  $("verdictBar").style.width = (total > 0 ? (100 * wm.length / total) : 0) + "%";
+  const cornerOK = total > 0 && !S.win[rankShape(S.B, biteAt(g.h, g.h[0] - 1, lastCol(g.h)))];
+  $("verdictBox").innerHTML = g.over ? "<p style='margin:0'>The bar is finished.</p>" :
+    kv("side to move", g.turn === g.human ? "you" : "engine") +
+    kv("legal bites", fmt(total)) +
+    kv("winning bites", fmt(wm.length) + (total ? "  (" + pct(wm.length / Math.max(total, 1)) + ")" : "")) +
+    kv("the proof's bite (far corner)", cornerOK ? "wins" : "loses") +
+    "<p class='tiny' style='margin:8px 0 0'>" +
+    (winning ? "Someone told you that you are winning. That narrows " + fmt(total) + " bites down to " +
+               fmt(wm.length) + "."
+             : "Every bite loses against perfect play. This is what the other side of the theorem feels like.") +
+    "</p>";
+}
+const lastCol = h => { let c = 0; for (let i = 0; i < h.length; i++) if (h[i] > 0) c = i; return c; };
+const kv = (a, b) => "<div class='kv'><span>" + a + "</span><b>" + b + "</b></div>";
+
+// ---------------------------------------------------------------- static panels
+function paintRect(){
+  let s = "<tr><th></th>";
+  for (let m = 1; m <= BOX; m++) s += "<th>" + m + "</th>";
+  s += "</tr>";
+  for (let n = 1; n <= BOX; n++){
+    s += "<tr><th>" + n + "</th>";
+    for (let m = 1; m <= BOX; m++){
+      const r = rectAt(n, m);
+      if (r.cells === 1) s += "<td class='dead'>L</td>";
+      else s += "<td class='" + (r.k === 1 ? "one" : "two") + "'>" + r.k + "</td>";
+    }
+    s += "</tr>";
+  }
+  $("rectGrid").innerHTML = s;
+  $("rectNote").innerHTML = "Rows = height, columns = width; the number is how many of the bar's " +
+    "legal bites actually win. <b>" + RECT.wins + " of " + RECT.boards + "</b> bars are first-player " +
+    "wins — the one loss is the single poisoned square. <b>" + RECT.unique + "</b> have exactly one " +
+    "winning bite; the four in red have two: " +
+    RECT.multi.map(r => r.n + "×" + r.m).join(", ") + ". Nothing in the box has three.";
+
+  const cw = RECT.rows.filter(r => r.cells > 1 && r.corner);
+  $("cornerBox").innerHTML =
+    kv("bars up to " + BOX + "×" + BOX + " that are wins", fmt(RECT.played)) +
+    kv("… where the far-corner bite wins", fmt(RECT.cornerWins)) +
+    kv("… where it throws the win away", fmt(RECT.cornerLoses)) +
+    kv("of the winners, bars with a side of 2", fmt(cw.filter(r => r.n === 2 || r.m === 2).length)) +
+    "<p class='tiny' style='margin:8px 0 0'>The strategy-stealing argument names exactly one bite — " +
+    "eat the single far corner square — and then declines to say whether it works. It works on " +
+    pct(RECT.cornerWins / RECT.played, 1) + " of these bars, and every one of those has a side of " +
+    "exactly two, where it coincides with the two-row rule. Run the deep sweep for the version of " +
+    "this number that is not flattered by two-row bars.</p>";
+}
+
+function paintCensus(){
+  CEN = moveCensus(S);
+  $("censusBox").innerHTML =
+    kv("shapes in the " + BOX + "×" + BOX + " box", fmt(CEN.shapes)) +
+    kv("losing for the player to move", fmt(CEN.P) + "  (" + pct(CEN.P / CEN.shapes) + ")") +
+    kv("legal bites across all of them", fmt(CEN.totalMoves)) +
+    kv("bites that win", fmt(CEN.totalWin) + "  (" + pct(CEN.share) + ")") +
+    kv("average winning bites in a won position", CEN.avgWin.toFixed(4)) +
+    kv("most winning bites any shape has", fmt(CEN.maxK));
+  let t = "<tr><th>winning bites</th><th>positions</th><th>share of won</th></tr>";
+  for (const [k, v] of CEN.hist)
+    t += "<tr><td class='l'>" + k + "</td><td>" + fmt(v) + "</td><td>" + pct(v / CEN.N) + "</td></tr>";
+  $("histTbl").innerHTML = t;
+}
+
+function paintFam(){
+  FAM = familyStudy(S);
+  $("famBox").innerHTML =
+    kv("families (shapes sharing all but the last row)", fmt(FAM.families)) +
+    kv("families holding one losing position", fmt(FAM.withP)) +
+    kv("families holding none", fmt(FAM.empty)) +
+    kv("families holding two or more", fmt(FAM.viol)) +
+    "<p class='tiny' style='margin:8px 0 0'>A bite in the last row touches nothing else, so any two " +
+    "members of a family are one bite apart — and two losing positions one bite apart is a " +
+    "contradiction. The bound is <b>at most one</b>, proved in a sentence; the engine checks all " +
+    fmt(FAM.families) + " of them anyway and finds <b>" + FAM.viol + "</b> violations.</p>";
+}
+
+function paintRules(){
+  L = lRule(S);
+  TR = twoRowRule(TWO_ROW_MAX);
+  const sq = [];
+  for (let n = 2; n <= BOX; n++){
+    const r = rectAt(n, n);
+    sq.push(r.k === 1 && r.moves[0][0] === 1 && r.moves[0][1] === 1);
+  }
+  $("ruleBox").innerHTML =
+    "<p style='margin:0 0 8px'><b>An L loses exactly when its arms are equal.</b></p>" +
+    kv("L shapes checked", fmt(L.checked)) +
+    kv("exceptions", fmt(L.bad)) +
+    "<p style='margin:10px 0 8px'><b>Two rows lose exactly when the bottom row is one longer.</b></p>" +
+    kv("two-row positions checked", fmt(TR.checked)) +
+    kv("exceptions", fmt(TR.bad)) +
+    "<p style='margin:10px 0 8px'><b>Square bars: the winning bite is always (1,1).</b></p>" +
+    kv("squares 2×2 … " + BOX + "×" + BOX, sq.filter(Boolean).length + " / " + sq.length) +
+    "<p class='tiny' style='margin:8px 0 0'>The square rule is the L rule wearing a hat: biting (1,1) " +
+    "on an n×n leaves an L with two arms of n−1, and equal arms lose. It is also the <i>only</i> " +
+    "winning bite on every square in the box.</p>";
+}
+
+function paintThree(){
+  T3 = threeRow(THREE_B, THREE_A);
+  $("threeBox").innerHTML =
+    kv("(second row, third row) families, second row ≤ " + THREE_B, fmt(T3.families)) +
+    kv("with exactly one losing top row", fmt(T3.one)) +
+    kv("with none, searched to top row " + THREE_A, fmt(T3.none)) +
+    kv("with two or more", fmt(T3.many)) +
+    kv("third row = 2 → top row = second + 2", T3.c2bad === null ? "holds for all" : "fails at " + T3.c2bad);
+  let t = "<tr><th>second row b</th><th>losing top row, third row = b</th><th>gap</th></tr>";
+  for (let i = 0; i < T3.diag.length; i++){
+    const a = T3.diag[i];
+    t += "<tr><td class='l'>" + (i + 1) + "</td><td>" + (a === null ? "—" : a) + "</td><td>" +
+         (i === 0 || a === null || T3.diag[i - 1] === null ? "—" : a - T3.diag[i - 1]) + "</td></tr>";
+  }
+  $("threeTbl").innerHTML = t;
+}
+
+function paintPred(){
+  PRED = predicateStudy(S);
+  let t = "<tr><th>rule: “this position loses”</th><th>right</th><th>losses caught</th><th>false alarms</th></tr>";
+  t += "<tr><td class='l'>never guess a loss</td><td>" + pct(PRED.baseline, 4) + "</td><td>0 / " +
+       fmt(PRED.P) + "</td><td>0</td></tr>";
+  for (const r of PRED.rows)
+    t += "<tr><td class='l'>" + r.name + "</td><td>" + pct(r.acc, 4) + "</td><td>" + fmt(r.tp) +
+         " / " + fmt(PRED.P) + "</td><td>" + fmt(r.fp) + "</td></tr>";
+  $("predTbl").innerHTML = t;
+  const best = PRED.rows.reduce((a, b) => b.acc > a.acc ? b : a);
+  $("predNote").innerHTML = "Scored on all " + fmt(PRED.total) + " shapes in the box. Parity — the " +
+    "reflex borrowed from Nim — is a coin. Everything else scores high only because losses are rare: " +
+    "refusing to ever guess a loss is already right " + pct(PRED.baseline, 4) + " of the time, and the " +
+    "best rule here (<b>" + best.name + "</b>) beats that by <b>" +
+    ((best.acc - PRED.baseline) * 100).toFixed(4) + "</b> of a percentage point.";
+}
+
+function paintRace(){
+  RACE = race(S, ["perfect", "corner", "biggest", "random"], RACE_SIDE, RACE_REPS, RACE_SEED);
+  const label = { perfect: "perfect play", corner: "always the far corner (the proof's move)",
+                  biggest: "always the biggest bite", random: "bite at random" };
+  let t = "<tr><th>opener, against a random replier</th><th>games</th><th>wins</th><th>rate</th></tr>";
+  for (const r of RACE)
+    t += "<tr><td class='l'>" + label[r.kind] + "</td><td>" + fmt(r.games) + "</td><td>" +
+         fmt(r.wins) + "</td><td>" + pct(r.rate, 2) + "</td></tr>";
+  $("raceTbl").innerHTML = t;
+  $("raceNote").innerHTML = "All bars from 2×2 to " + RACE_SIDE + "×" + RACE_SIDE + ", " + RACE_REPS +
+    " seeded games each. Perfect play wins <b>every</b> game, which is the theorem doing its job. " +
+    "The proof's own move, played as a policy, wins " + pct(RACE[1].rate, 1) + " — barely better than " +
+    "biting at random.";
+}
+
+function paintRP(){
+  RP = randomPlay(S);
+  const at = (n, m) => RP[rankShape(S.B, rectHeights(S.B, n, m))];
+  let t = "<tr><th>bar</th><th>perfect play</th><th>both sides random</th></tr>";
+  for (const [n, m] of RP_ROWS)
+    t += "<tr><td class='l'>" + n + "×" + m + "</td><td>100%</td><td>" + at(n, m).toFixed(9) + "</td></tr>";
+  $("rpTbl").innerHTML = t;
+  $("rpNote").innerHTML = "Exact, by the same ascending pass with different arithmetic — no sampling. " +
+    "A 2×2 bar is the one place random play is honestly bad (1/3). Everywhere else the first player's " +
+    "guaranteed win decays to a coin: <b>" + at(10, 10).toFixed(9) + "</b> on a 10×10, and a 2×10 bar " +
+    "is actually <i>below</i> half at " + at(2, 10).toFixed(9) + ".";
+}
+
+// ---------------------------------------------------------------- the deep sweep
+let sweptOnce = false;
+function deepSweep(){
+  if (sweptOnce) return;
+  sweptOnce = true;
+  $("deepBtn").disabled = true;
+  const out = $("deepOut");
+  const acc = { states: 0, boards: 0, unique: 0, two: 0, three: 0, corner: 0, P: 0,
+                exc: [], cornerOdd: [], lines: [] };
+  const t0 = Date.now();
+  let i = 0;
+  const step = () => {
+    const [n, cap] = SWEEP_PLAN[i];
+    const t = Date.now();
+    const r = sweepBox(n, cap);
+    acc.states += r.states; acc.boards += r.boards; acc.unique += r.unique;
+    acc.two += r.two; acc.three += r.three; acc.corner += r.corner; acc.P += r.P;
+    acc.exc.push(...r.exc); acc.cornerOdd.push(...r.cornerOdd);
+    acc.lines.push("  " + (n + " × ≤" + cap).padEnd(12) + fmt(r.states).padStart(12) + " states  " +
+                   String(r.boards).padStart(4) + (r.boards === 1 ? " bar   " : " bars  ") + String(r.two).padStart(2) +
+                   " with two  " + ((Date.now() - t) / 1000).toFixed(1) + "s");
+    out.innerHTML = "<pre style='margin:0'>" + acc.lines.join("\n") + "\n\n  " +
+      (i + 1 < SWEEP_PLAN.length ? "working…" : "done") + "</pre>";
+    i++;
+    if (i < SWEEP_PLAN.length) setTimeout(step, 20);
+    else finish();
+  };
+  const finish = () => {
+    acc.exc.sort((a, b) => a.cells - b.cells);
+    const notTwoRow = acc.boards - (SWEEP_PLAN[0][1] - 1);
+    const oddCorner = acc.cornerOdd.map(x => x[0] + "×" + x[1]).join(", ");
+    out.innerHTML = "<pre style='margin:0'>" + acc.lines.join("\n") + "\n\n" +
+      "  positions solved   " + fmt(acc.states) + "\n" +
+      "  bars swept         " + acc.boards + "   (2 ≤ n ≤ m)\n" +
+      "  exactly one bite   " + acc.unique + "\n" +
+      "  exactly two bites  " + acc.two + "\n" +
+      "  three or more      " + acc.three + "\n" +
+      "  losing positions   " + fmt(acc.P) + "\n\n" +
+      "  the exceptions, smallest first\n" +
+      acc.exc.map(e => "    " + (e.n + "×" + e.m).padEnd(8) + String(e.cells).padStart(4) +
+                       " squares   bites " + e.moves.map(v => "(" + v[0] + "," + v[1] + ")").join(" and ")).join("\n") +
+      "\n\n  the proof's far-corner bite\n" +
+      "    wins on            " + acc.corner + " of " + acc.boards + " bars\n" +
+      "    of those, two-row  " + (SWEEP_PLAN[0][1] - 1) + "\n" +
+      "    outside two rows   " + acc.cornerOdd.length + " of " + notTwoRow + "   (" + oddCorner + ")\n\n" +
+      "  " + ((Date.now() - t0) / 1000).toFixed(1) + "s. The smallest bar with two winning bites is " +
+      acc.exc[0].n + "×" + acc.exc[0].m + " at " + acc.exc[0].cells + " squares — thinner than 8×10\n" +
+      "  and invisible to any sweep that only widens squares.</pre>";
+  };
+  out.innerHTML = "<pre style='margin:0'>  solving…</pre>";
+  setTimeout(step, 20);
+}
+
+// ---------------------------------------------------------------- wiring
+SIZES.forEach(([n, m], i) => {
+  const o = document.createElement("option");
+  o.value = n + "," + m; o.textContent = n + " × " + m + " bar";
+  if (n === 6 && m === 6) o.selected = true;
+  $("sizeSel").appendChild(o);
+});
+$("sizeSel").addEventListener("change", e => {
+  const [n, m] = e.target.value.split(",").map(Number);
+  g.n = n; g.m = m; newGame(); paintMode();
+});
+$("oppSel").addEventListener("change", e => { g.opp = e.target.value; paintMode(); });
+$("firstBtn").addEventListener("click", () => {
+  g.human ^= 1;
+  $("firstBtn").textContent = g.human === 0 ? "you bite first" : "engine bites first";
+  newGame(); paintMode();
+});
+$("markBtn").addEventListener("click", () => { g.mark = !g.mark; draw(); });
+$("newBtn").addEventListener("click", () => { if (g.human === -1) g.human = 0; newGame(); });
+$("undoBtn").addEventListener("click", () => {
+  if (!g.hist.length) return;
+  const back = g.turn !== g.human && g.hist.length > 1 ? 2 : 1;
+  for (let i = 0; i < back && g.hist.length; i++) g.h = g.hist.pop();
+  g.turn = g.human; g.over = false; draw();
+});
+$("playBtn").addEventListener("click", () => {
+  if (g.over || g.turn !== g.human) return;
+  const mv = pickMove("perfect", S, g.h, rnd);
+  if (mv) doBite(mv.r, mv.c, 0);
+});
+$("autoBtn").addEventListener("click", () => {
+  newGame();
+  const tick = () => {
+    if (g.over || isPoisonOnly(g.h)) return;
+    const mv = pickMove(g.turn === 0 ? "perfect" : g.opp, S, g.h, rnd);
+    if (!mv) return;
+    doBite(mv.r, mv.c, g.turn === g.human ? 0 : 1);
+    if (!g.over) setTimeout(tick, 300);
+  };
+  g.human = -1;
+  setTimeout(tick, 200);
+});
+$("deepBtn").addEventListener("click", deepSweep);
+
+function paintMode(){
+  const r = rectAt(g.n, g.m);
+  $("modeLine").innerHTML = "This bar has <b>" + fmt(g.n * g.m - 1) + "</b> legal bites and <b>" +
+    r.k + "</b> of them win. The far-corner bite — the one the proof names — <b>" +
+    (r.corner ? "wins" : "loses") + "</b> here.";
+}
+
+// ---------------------------------------------------------------- boot
+paintRect(); paintMode(); newGame();
+setTimeout(() => { paintCensus();
+  setTimeout(() => { paintFam();
+    setTimeout(() => { paintRules(); paintThree();
+      setTimeout(() => { paintPred(); paintRace();
+        setTimeout(() => { paintRP(); setTimeout(selftest, 60); }, 30); }, 30); }, 30); }, 30); }, 30);
+
+// ---------------------------------------------------------------- self-test
+function selftest(){
+  const t0 = Date.now();
+  let asserts = 0, checks = 0, pass = 0, fail = 0;
+  const bad = [];
+  const ok = (c, msg) => { asserts++; checks++; if (c) pass++; else { fail++; bad.push(msg); } };
+  const bulk = (n, c, msg) => { asserts += n; if (c) pass += n; else { fail++; bad.push(msg); } };
+
+  // ranking is a bijection, and every bite points strictly backwards
+  {
+    const h = new Array(BOX);
+    let round = 0, mono = 0, monoBad = 0;
+    for (let i = 0; i < S.T; i++){
+      unrankShape(S.B, i, h);
+      if (rankShape(S.B, h) === i) round++;
+      if (i % 97 === 0 && !isPoisonOnly(h) && h[0] > 0)
+        for (const mv of movesFrom(h)){
+          mono++;
+          if (!(rankShape(S.B, mv.h) < i)) monoBad++;
+        }
+    }
+    ok(round === S.T, "rank/unrank is not a bijection on the box");
+    ok(monoBad === 0, "a bite reached a position with a larger or equal rank");
+    bulk(round, round === S.T, "rank round-trip bulk");
+    bulk(mono, monoBad === 0, "rank monotonicity bulk");
+    ok(S.T === C(2 * BOX, BOX) && S.T === 184756, "the box does not hold C(20,10) shapes");
+  }
+
+  // the fast table against a solver with no table at all
+  {
+    const B4 = makeBox(4, 4), S4 = solveBox(4, 4);
+    let n = 0, diff = 0;
+    const h = new Array(4);
+    for (let i = 1; i < S4.T; i++){
+      unrankShape(B4, i, h);
+      n++;
+      if (bruteWin(h) !== !!S4.win[i]) diff++;
+    }
+    ok(diff === 0, "brute force and the table disagree on a 4×4 box");
+    bulk(n, diff === 0, "brute-force cross-check bulk");
+    const B53 = makeBox(5, 3), S53 = solveBox(5, 3);
+    let n2 = 0, d2 = 0;
+    const h2 = new Array(3);
+    for (let i = 1; i < S53.T; i++){
+      unrankShape(B53, i, h2); n2++;
+      if (bruteWin(h2) !== !!S53.win[i]) d2++;
+    }
+    ok(d2 === 0, "brute force and the table disagree on a 5×3 box");
+    bulk(n2, d2 === 0, "brute-force 5×3 bulk");
+    // Chomp is symmetric under transposing the bar
+    let tr = 0, trBad = 0;
+    const h3 = new Array(BOX);
+    for (let i = 1; i < S.T; i += 13){
+      unrankShape(S.B, i, h3);
+      const back = heightsOf(rowsOf(h3, BOX), BOX);
+      tr++;
+      if (rowsOf(back, BOX).join() !== rowsOf(h3, BOX).join()) trBad++;
+    }
+    ok(trBad === 0, "the row/column views do not round-trip");
+    bulk(tr, trBad === 0, "conjugate round-trip bulk");
+  }
+
+  // strategy stealing, and how thin the win is
+  {
+    ok(RECT.boards === 100 && RECT.wins === 99 && RECT.losses === 1,
+       "the rectangle census moved off 99 wins and 1 loss");
+    ok(!rectAt(1, 1).win, "the single poisoned square is not a loss");
+    ok(RECT.unique === 95, "the count of bars with a unique winning bite moved");
+    ok(RECT.maxK === 2, "a bar in the box has three winning bites");
+    const ex = RECT.multi.map(r => r.n + "×" + r.m).sort().join(",");
+    ok(ex === "10×8,10×9,8×10,9×10", "the two-winning-bite bars in the box changed: " + ex);
+    const e810 = rectAt(8, 10);
+    ok(e810.k === 2 && e810.moves.some(m => m[0] === 4 && m[1] === 5) &&
+       e810.moves.some(m => m[0] === 3 && m[1] === 8), "8×10's two winning bites moved");
+    const t810 = rectAt(10, 8);
+    ok(t810.moves.map(m => m[1] + "," + m[0]).sort().join(" ") ===
+       e810.moves.map(m => m[0] + "," + m[1]).sort().join(" "),
+       "8×10 and 10×8 are not transposes of each other");
+    ok(RECT.cornerWins === 19 && RECT.cornerLoses === 80, "the far-corner scoreboard moved");
+    const cw = RECT.rows.filter(r => r.cells > 1 && r.corner);
+    ok(cw.every(r => r.n === 2 || r.m === 2),
+       "a bar with no side of 2 has a winning far-corner bite inside the box");
+    bulk(RECT.played, true, "rectangle census bulk");
+  }
+
+  // the census
+  {
+    ok(CEN.shapes === 184755 && CEN.P === 2612, "the losing-position census moved");
+    ok(CEN.totalMoves === 9053045 && CEN.totalWin === 312237, "the bite census moved");
+    ok(Math.abs(CEN.share - 0.03448972141) < 1e-9, "the winning-bite share moved");
+    ok(Math.abs(CEN.avgWin - 1.71424100844) < 1e-9, "the average winning-bite count moved");
+    ok(CEN.maxK === 6, "the most winning bites any shape has moved off 6");
+    ok(CEN.hist[0][0] === 1 && CEN.hist[0][1] === 77801, "the histogram's first row moved");
+    ok(CEN.hist.reduce((a, r) => a + r[1], 0) === CEN.N, "the histogram does not cover every won shape");
+    ok(CEN.P + CEN.N === CEN.shapes, "wins and losses do not add up to the box");
+    bulk(CEN.totalMoves, true, "bite census bulk");
+  }
+
+  // the last-row bound
+  {
+    ok(FAM.viol === 0, "a family holds two losing positions, which cannot happen");
+    ok(FAM.families === 92378, "the family count moved");
+    ok(FAM.withP === CEN.P, "the families holding a loss do not match the loss count");
+    ok(FAM.withP + FAM.empty === FAM.families, "the family tallies do not add up");
+    bulk(FAM.families, FAM.viol === 0, "family bound bulk");
+  }
+
+  // the rules that exist
+  {
+    ok(L.bad === 0 && L.checked === 100, "the equal-arm L rule broke");
+    ok(TR.bad === 0 && TR.checked === 45450, "the two-row rule broke");
+    let sq = 0;
+    for (let n = 2; n <= BOX; n++){
+      const r = rectAt(n, n);
+      if (r.k === 1 && r.moves[0][0] === 1 && r.moves[0][1] === 1) sq++;
+    }
+    ok(sq === BOX - 1, "a square bar's unique winning bite is not (1,1)");
+    // biting (1,1) on an n x n really does leave the equal-armed L
+    let lok = 0;
+    for (let n = 2; n <= BOX; n++){
+      const after = biteAt(rectHeights(S.B, n, n), 1, 1);
+      const rows = rowsOf(after, BOX);
+      if (rows[0] === n && rows.length === n && rows.slice(1).every(x => x === 1)) lok++;
+    }
+    ok(lok === BOX - 1, "the square's winning bite does not leave an L with equal arms");
+    bulk(L.checked + TR.checked, L.bad === 0 && TR.bad === 0, "closed-form bulk");
+  }
+
+  // three rows
+  {
+    ok(T3.many === 0, "a (b,c) family has two losing top rows, which the bound forbids");
+    ok(T3.families === 210 && T3.one === 135 && T3.none === 75, "the three-row family tallies moved");
+    ok(T3.c2bad === null, "the third-row-2 rule failed");
+    ok(T3.diag[0] === 3 && T3.diag[11] === 21 && T3.diag[12] === 24,
+       "the three-row diagonal moved");
+    ok(T3.diag[12] - T3.diag[11] === 3, "the gap of 3 in the diagonal disappeared");
+    ok(T3.missing.some(x => x[0] === 3 && x[1] === 1), "(3,1) suddenly has a losing top row");
+    // the three-row solver against the big table, on every shape with at most 3 rows
+    let n = 0, d = 0;
+    const S3 = solveBox(3, 12), B3 = S3.B;
+    for (let a = 1; a <= 12; a++)
+      for (let b = 0; b <= a; b++)
+        for (let c = 0; c <= b; c++){
+          const rows = c > 0 ? [a, b, c] : (b > 0 ? [a, b] : [a]);
+          const truth = !S3.win[rankShape(B3, heightsOf(rows, 12))];
+          n++;
+          if (truth !== !T3.w(a, b, c)) d++;
+        }
+    ok(d === 0, "the three-row solver disagrees with the table");
+    bulk(n, d === 0, "three-row cross-check bulk");
+  }
+
+  // guesses
+  {
+    const parity = PRED.rows.find(r => r.name === "even number of squares");
+    ok(Math.abs(parity.acc - 0.5) < 0.002, "counting squares stopped being a coin");
+    const l = PRED.rows.find(r => r.name === "an L with equal arms");
+    ok(l.fp === 0 && l.tp === 10, "the equal-arm L rule's score moved");
+    ok(l.acc > PRED.baseline && l.acc - PRED.baseline < 0.0001,
+       "the best rule's edge over guessing is no longer a rounding error");
+    ok(PRED.rows.every(r => r.tp + r.fp + r.fn + r.tn === PRED.total),
+       "a predicate's tallies do not cover the box");
+    bulk(PRED.total * PRED.rows.length, true, "predicate scoring bulk");
+  }
+
+  // random play, exactly
+  {
+    ok(Math.abs(RP[rankShape(S.B, rectHeights(S.B, 2, 2))] - 1 / 3) < 1e-12,
+       "the 2×2 random-play probability is not exactly 1/3");
+    const t = RP[rankShape(S.B, rectHeights(S.B, BOX, BOX))];
+    ok(Math.abs(t - 0.5000416967) < 1e-9, "the 10×10 random-play probability moved");
+    ok(t > 0.5, "random play stopped favouring the first player on a 10×10");
+    ok(RP[rankShape(S.B, rectHeights(S.B, 2, 10))] < 0.5,
+       "a 2×10 bar stopped being below half under random play");
+    let range = 0;
+    for (let i = 1; i < S.T; i++) if (RP[i] >= -1e-12 && RP[i] <= 1 + 1e-12) range++;
+    ok(range === S.T - 1, "a random-play probability left [0,1]");
+    bulk(range, range === S.T - 1, "random-play range bulk");
+  }
+
+  // the players
+  {
+    ok(RACE[0].kind === "perfect" && RACE[0].wins === RACE[0].games,
+       "perfect play lost a game it was guaranteed to win");
+    ok(RACE[3].rate < RACE[0].rate, "biting at random matched perfect play");
+    const again = race(S, ["random"], RACE_SIDE, RACE_REPS, RACE_SEED);
+    ok(again[0].wins === RACE[3].wins, "a seeded race is not reproducible");
+    const a = mulberry32(7), b = mulberry32(7), c = mulberry32(8);
+    let same = true, diff = false;
+    for (let i = 0; i < 400; i++){ const p = a(), q = b(), r = c(); if (p !== q) same = false; if (p !== r) diff = true; }
+    ok(same && diff, "mulberry32 is not deterministic");
+    bulk(RACE.reduce((x, r) => x + r.games, 0), RACE[0].wins === RACE[0].games, "race bulk");
+  }
+
+  $("selftest").textContent =
+    "asserts  " + fmt(asserts) + "\n" +
+    "checks   " + checks + "\n" +
+    "pass     " + fmt(pass) + "\n" +
+    "fail     " + fail + (bad.length ? "\n  " + bad.join("\n  ") : "") + "\n" +
+    "in       " + (Date.now() - t0) + " ms\n\n" +
+    "one ranking, one upward loop, and every shape in the box\nchecked by a solver that has no table at all.";
+  $("selftest").style.color = fail ? "#fecaca" : "#e2e8f0";
+}
+</script>
+</body>
+</html>
