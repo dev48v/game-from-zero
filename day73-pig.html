@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 73 — Pig</title>
+<style>
+  :root{
+    --ink:#0f172a; --sub:#475569; --mute:#64748b; --line:#e2e8f0;
+    --bg:#f8fafc; --bg2:#f1f5f9; --card:#ffffff;
+    --acc:#0e7490; --acc-soft:#ecfeff; --acc-line:#a5f3fc;
+    --warn:#b45309; --warn-soft:#fffbeb; --warn-line:#fcd34d;
+    --good:#047857; --bad:#b91c1c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,sans-serif;
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;margin:0}
+  p{margin:0 0 14px}
+  strong{font-weight:800}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;
+       background:var(--bg2);padding:1px 5px;border-radius:4px}
+  pre{background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:10px;font-size:12px;
+      overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;
+      margin:0 0 14px}
+  .hidden{display:none !important}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* The hero paragraph is taller than most viewports, so the header must NOT be sticky - a
+     sticky box taller than the screen pins itself over the page forever. Only the tab bar sticks. */
+  header{background:#fff;padding-bottom:4px}
+  nav#tabbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+  nav#tabbar .wrap{padding:10px 16px}
+  .wrap{max-width:1140px;margin:0 auto;padding:18px 16px}
+  .wrap-narrow{max-width:840px;margin:0 auto;padding:24px 16px 60px}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--acc);margin:0 0 8px}
+  h1.hero{font-size:20px;font-weight:900;margin-bottom:16px}
+  @media(min-width:768px){ h1.hero{font-size:23px} }
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tabs button{border:0;border-radius:9px;padding:9px 20px;font-weight:700;font-size:14px;
+               background:var(--bg2);color:var(--ink);cursor:pointer;font-family:inherit}
+  .tabs button.tab-active{background:var(--ink);color:#fff}
+
+  section.tab-panel{min-height:calc(100vh - 76px)}
+  #look{background:var(--bg2);padding:16px}
+  #understand{padding:16px}
+  #build{background:var(--bg);padding:16px}
+  @media(min-width:768px){ #look,#understand,#build{padding:32px 16px} }
+
+  .cols{display:grid;grid-template-columns:1fr;gap:18px;max-width:1140px;margin:0 auto}
+  @media(min-width:1024px){ .cols{grid-template-columns:1.5fr 1fr} }
+  .stack{display:flex;flex-direction:column;gap:18px}
+
+  .card{background:var(--card);border-radius:16px;padding:18px;
+        box-shadow:0 1px 2px rgba(15,23,42,.06),0 1px 10px rgba(15,23,42,.05)}
+  .lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute);margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .pill{padding:6px 11px;border-radius:9px;font-size:12.5px;font-weight:700;font-family:inherit;
+        border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .pill:hover{background:var(--acc-soft);border-color:var(--acc-line)}
+  .pill:disabled{opacity:.34;cursor:default}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  select.pill{cursor:pointer}
+  .go{padding:8px 15px;border-radius:9px;border:0;background:var(--acc);color:#fff;
+      font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.4;cursor:default}
+
+  svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700}
+
+  /* the table */
+  .scores{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}
+  .who{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .who.turn{border-color:var(--acc);background:var(--acc-soft)}
+  .who p{margin:0}
+  .who .nm{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute)}
+  .who .sc{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;
+           font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.15}
+  .dice{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-height:52px}
+  .dice svg{border:1px solid var(--line);border-radius:9px;background:#fff}
+  .dice svg.bust{border-color:var(--bad);background:#fef2f2}
+  .tt{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  table.num{border-collapse:collapse;width:100%}
+  table.num th,table.num td{padding:4px 8px;font-variant-numeric:tabular-nums}
+  table.num th{font-size:10.5px;letter-spacing:.05em;color:var(--mute);text-align:right;font-weight:800}
+  table.num th:first-child,table.num td:first-child{text-align:left}
+  table.num td{text-align:right;font-size:12.5px;border-top:1px solid var(--line)}
+  table.num td.l{text-align:left}
+  table.num tr.hi td{background:var(--acc-soft);font-weight:800}
+  table.num tr.bad td{background:#fef2f2}
+
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+       max-height:170px;overflow:auto}
+  .log div{padding:1px 0;border-bottom:1px solid var(--bg2)}
+
+  .note{border-left:4px solid var(--acc);background:var(--acc-soft);padding:12px 14px;border-radius:0 10px 10px 0;
+        margin:0 0 16px}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .note p{margin:0;font-size:13.5px}
+  .note p+p{margin-top:8px}
+
+  .verdict{font-weight:900;font-size:14px}
+  .win{color:var(--good)} .lose{color:var(--bad)}
+  .bar{height:9px;border-radius:99px;background:var(--line);overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--acc)}
+  .small{font-size:12px;color:var(--sub)}
+  .tiny{font-size:11.5px;color:var(--mute)}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0}
+  .kv b{font-variant-numeric:tabular-nums}
+  .huge{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
+  h2.big{font-size:23px;font-weight:900;margin:0 0 16px}
+  h3.mid{font-size:17.5px;font-weight:800;margin:26px 0 10px}
+  .wrap-narrow p,.wrap-narrow li{color:#1e293b}
+  .wrap-narrow ul{margin:0 0 14px;padding-left:22px}
+  .wrap-narrow li{margin-bottom:6px}
+
+  canvas#heat{width:100%;max-width:420px;image-rendering:pixelated;border:1px solid var(--line);
+              border-radius:10px;cursor:crosshair;display:block}
+  .strip{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;
+         word-break:break-all;line-height:1.5}
+  .strip b{color:var(--bad)}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;
+          margin-right:5px;border:1px solid rgba(15,23,42,.15)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">GAMEFROMZERO · DAY 73</p>
+    <h1 class="hero">
+      🎲 Pig — roll a die as often as you like, bank when you want, but a 1 wipes the turn. Everyone
+      knows the rule: <strong>hold at 20</strong>. It is not folklore, it is a theorem — one more
+      roll is worth exactly <strong>(20&nbsp;&minus;&nbsp;k)/6</strong> points, so 20 is where
+      rolling stops paying, and <strong>20 and 21 tie exactly</strong> at 8.141795 points a turn.
+      It is also the answer to the wrong question, because the game is scored in wins.
+      This page solves the win game exactly — all <strong>505,000</strong> states — and the folk rule
+      does not survive contact. Of the <strong>10,000</strong> score pairs, the optimal hold point is
+      exactly 20 on <strong>557</strong> of them; the table disagrees with <em>hold at 20</em> on
+      <strong>116,095</strong> of <strong>495,000</strong> decisions and on
+      <strong>7,613</strong> score pairs. Then the finding that rewrote the page. Score every fixed
+      threshold on <em>wins</em> against the perfect player and the curve is not a hill with 20 on
+      top — it has <strong>five</strong> local maxima at <strong>16, 19, 25, 33 and 50</strong>,
+      which are <strong>100/6, 100/5, 100/4, 100/3 and 100/2</strong>. It is a resonance with the
+      target: what matters is how evenly your typical bank divides the 100 you need. So 20 is not
+      even a local maximum — <strong>19 beats it</strong>, hill-climbing from 20 walks
+      <em>downhill</em> to 19 and stops there, and the real best fixed rule is
+      <strong>hold at 25</strong>, at <strong>47.89%</strong> against
+      <strong>46.01%</strong> — while scoring <strong>1.8% fewer points a turn</strong>. Move the
+      target to 60 and the maxima move to <strong>15, 20, 30</strong>; the points formula cannot
+      follow, because the goal never appears in it. Then the second inversion:
+      <em>hold at n</em> is not merely the wrong <em>n</em>, it is the wrong <strong>shape</strong>
+      of rule. On <strong>2,503</strong> score pairs the optimal player banks inside a
+      <strong>window</strong> of turn totals and rolls again above it —
+      <strong>529</strong> of them where the goal is more than two rolls away — and at
+      <strong>8&ndash;83</strong> that window is seven turn totals wide with
+      <strong>34</strong> roll-again states stacked on top of it. And the obvious way to write the
+      solver — one backward pass over the score sums — gets <strong>45.21%</strong> of decisions
+      wrong while passing every property anyone checks: <strong>10,000/10,000</strong> values in
+      range, <strong>9,900/9,900</strong> monotone each way, exactly like the true solution.
+      Pure vanilla JS, one file, no build step.
+    </h1>
+  </div>
+</header>
+
+<nav id="tabbar">
+  <div class="wrap tabs" id="tabs">
+    <button data-tab="look" class="tab-active">🎲 PLAY</button>
+    <button data-tab="understand">🧠 UNDERSTAND</button>
+    <button data-tab="build">🔨 BUILD</button>
+  </div>
+</nav>
+
+<section id="look" class="tab-panel">
+  <div class="cols">
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">FIRST TO 100</p>
+        <div class="scores">
+          <div class="who" id="youBox">
+            <p class="nm">YOU</p>
+            <p class="sc" id="youSc">0</p>
+          </div>
+          <div class="who" id="botBox">
+            <p class="nm" id="botNm">BOT</p>
+            <p class="sc" id="botSc">0</p>
+          </div>
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <select id="oppSel" class="pill">
+            <option value="opt">bot: perfect (the table)</option>
+            <option value="20">bot: hold at 20</option>
+            <option value="25">bot: hold at 25</option>
+            <option value="onepass">bot: the one-pass solver</option>
+          </select>
+          <button id="newBtn" class="go">new game</button>
+          <button id="swapBtn" class="pill">let the bot start</button>
+        </div>
+        <div class="dice" id="dice"></div>
+        <p class="small" style="margin:8px 0 4px">turn total <span class="tt" id="tt">0</span>
+          <span id="turnWho" class="tiny"></span></p>
+        <div class="row" style="margin-top:8px">
+          <button id="rollBtn" class="go">roll</button>
+          <button id="holdBtn" class="pill">hold</button>
+          <button id="hintBtn" class="pill">what does the table say</button>
+          <button id="autoBtn" class="pill">watch a whole game</button>
+        </div>
+        <p class="small" id="status" style="margin:10px 0 0"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THIS EXACT POSITION</p>
+        <div class="huge" id="winBig">&mdash;</div>
+        <div class="bar" style="margin:10px 0 8px"><span id="winBar" style="width:0%"></span></div>
+        <div id="winBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">MOVE LOG</p>
+        <div id="log" class="log"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EVERY FIXED THRESHOLD, SCORED ON WINS — THE HEADLINE</p>
+        <svg id="curveSvg" viewBox="0 0 620 330" preserveAspectRatio="xMidYMid meet"
+             style="width:100%;height:auto"></svg>
+        <p class="tiny" style="margin:6px 0 0" id="curveNote">solving&hellip;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE OPTIMAL HOLD POINT, ALL 10,000 SCORE PAIRS</p>
+        <div class="row" style="margin-bottom:8px">
+          <button id="modeThr" class="pill on">hold point</button>
+          <button id="modeDiff" class="pill">where hold-at-20 is wrong</button>
+          <button id="modeVal" class="pill">win probability</button>
+        </div>
+        <canvas id="heat" width="100" height="100"></canvas>
+        <p class="tiny" style="margin:8px 0 0" id="heatLegend"></p>
+        <p class="tiny" style="margin:6px 0 0" id="heatNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">IT IS NOT EVEN A THRESHOLD RULE</p>
+        <div id="nonThrBox" class="small"></div>
+        <p class="strip" id="nonThrStrip" style="margin:8px 0 0"></p>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">THE POINTS RULE IS A ONE-LINE THEOREM</p>
+        <table class="num" id="ptsTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="ptsNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EXACT HEAD-TO-HEADS, NO SAMPLING</p>
+        <table class="num" id="duelTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="duelNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHY THE MAXIMA SIT WHERE THEY DO</p>
+        <table class="num" id="bankTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="bankNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">MOVE THE TARGET AND THE MAXIMA MOVE</p>
+        <p class="small" style="margin:0 0 10px">If the local maxima really are the goal divided by a
+        whole number, changing the goal has to relocate them. The points rule cannot move at all:
+        <span class="mono">(20&nbsp;&minus;&nbsp;k)/6</span> has no goal in it. This solves five
+        different games from scratch and takes about ten seconds.</p>
+        <button id="goalBtn" class="go">run the goal sweep</button>
+        <div id="goalOut" class="small mono" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE OPTIMAL HOLD POINT VS THE FOLK RULE</p>
+        <div id="surfBox" class="small"></div>
+        <table class="num" id="surfTbl" style="margin-top:8px"></table>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE OBVIOUS SOLVER, AND WHAT IT PASSES ANYWAY</p>
+        <table class="num" id="onePassTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="onePassNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">POINTS AND WINS DO NOT EVEN AGREE ON THE ORDER</p>
+        <div id="rankBox" class="small"></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">The right answer to the wrong question</h2>
+
+    <p>Pig fits on a napkin. On your turn you roll a die as many times as you like. Every face
+    except 1 adds to a <em>turn total</em>. Roll a 1 and the turn total is gone and your turn is
+    over. Stop whenever you like and the turn total is added to your score. First to 100 wins.</p>
+
+    <p>There is exactly one decision in the game — roll again, or bank — and there is a famous
+    answer: <strong>hold at 20</strong>. What makes that rule interesting is that it is not a
+    superstition. It is a theorem, and it takes one line. Sitting on a turn total of
+    <span class="mono">k</span>, one more roll loses <span class="mono">k</span> one time in six and
+    gains the average of 2,&nbsp;3,&nbsp;4,&nbsp;5,&nbsp;6 — which is 4 — the other five times:</p>
+
+    <pre>expected change from one more roll = (5/6)(4) - (1/6)(k) = (20 - k)/6</pre>
+
+    <p>Positive below 20, negative above it, exactly zero at 20. So &ldquo;hold at 20&rdquo; is the
+    rule that maximises the points you score per turn, provably, with no computer involved. It has a
+    twin that nobody quotes: because the expression is exactly zero at
+    <span class="mono">k = 20</span>, rolling at 20 and then stopping is worth the same as stopping
+    at 20, so <strong>hold at 21 scores exactly the same 8.141795 points a turn</strong>. The
+    points criterion cannot tell those two rules apart at all.</p>
+
+    <p>And that is the crack the whole page goes through. Pig is not scored in points. It is scored
+    in wins, and the two objectives are not the same objective.</p>
+
+    <h3 class="mid">Why the win game is a different kind of problem</h3>
+
+    <p>Write down what you need to know: <span class="mono">V(i, j, k)</span>, the probability that
+    the player about to act wins, given their score <span class="mono">i</span>, the opponent's
+    <span class="mono">j</span>, and a turn total <span class="mono">k</span> already at risk. Two
+    actions:</p>
+
+    <pre>roll : (1/6)&middot;(1 - V(j, i, 0)) + (1/6)&middot;&Sigma; V(i, j, k+r)   for r = 2..6
+hold : 1 - V(j, i+k, 0)</pre>
+
+    <p>Look at where those arrows go. Holding sends the game to a strictly larger total score
+    <span class="mono">i+j+k</span>, so holding always makes progress. Rolling a 1 sends it to
+    <span class="mono">(j, i, 0)</span> — the <em>same</em> total score, with the roles swapped. And
+    <span class="mono">(j, i, 0)</span> can roll a 1 straight back to <span class="mono">(i, j,
+    0)</span>. The state graph has a cycle.</p>
+
+    <p>That single fact rules out everything the earlier days in this series did. There is no
+    ordering of the states in which a backward pass works, because two states depend on each other.
+    A depth limit certifies nothing. A tablebase has nowhere to start. This is a stochastic game
+    whose solution is a <em>fixed point</em>, and the usual advice is to iterate the whole
+    equal-score diagonal until it settles.</p>
+
+    <div class="note">
+      <p><strong>The cycle is exactly two states long.</strong> On a fixed total score
+      <span class="mono">s = i+j</span>, the only unknowns any state reaches are
+      <span class="mono">V(i,j,0)</span> and <span class="mono">V(j,i,0)</span> — everything else it
+      touches is either a bigger score sum (already solved) or a larger turn total on the same pair.
+      So with the policy held still, every value on that diagonal is an <em>affine</em> function
+      <span class="mono">a + b&middot;y</span> of one unknown, and the fixed point is a 2&times;2
+      linear solve you can write in one line. No tolerance, no convergence test, no epsilon. Wrap
+      policy iteration around it and the whole 505,000-state game is exact in about 50 ms.</p>
+    </div>
+
+    <h3 class="mid">What the table says about hold at 20</h3>
+
+    <p>The solved table has an opinion about the folk rule, and it is not a kind one. Read off the
+    smallest turn total at which the optimal player banks, for every one of the 10,000 score pairs:
+    it is exactly 20 on <strong>557</strong> of them. It is <em>higher</em> than 20 on 5,548 and
+    <em>lower</em> on 3,895. Counted as decisions rather than positions, hold-at-20 chooses
+    differently from the table on <strong>116,095 of 495,000</strong> states, spread over
+    <strong>7,613</strong> of the 10,000 score pairs.</p>
+
+    <p>Some of that is obvious once you see it. If your opponent is on 84 and you are on 0, banking
+    18 points is pointless — you need a run, so the optimal player simply keeps rolling and takes
+    the 2.2% chance rather than the near-zero one. What is less obvious is the other direction: with
+    a comfortable lead the optimal player banks <em>early</em>, because a bust costs a lead more
+    than it costs a deficit.</p>
+
+    <h3 class="mid">The finding that rewrote this page</h3>
+
+    <p>So the folk rule is wrong in detail. The natural next question is which fixed threshold is
+    <em>least</em> wrong, and the natural expectation is a gentle hill with 20 or a little above it
+    on top. Score every threshold from 1 to 55 against the perfect player — exactly, both seats, no
+    sampling — and the curve is not a hill. It has <strong>five</strong> local maxima:</p>
+
+    <pre>local maxima at n = 16, 19, 25, 33, 50
+      100/6 = 16.7   100/5 = 20   100/4 = 25   100/3 = 33.3   100/2 = 50</pre>
+
+    <p>They are the target divided by a whole number. That is not a coincidence and it is not
+    numerology: a threshold of <span class="mono">n</span> banks about
+    <span class="mono">n + 1.7</span> when it banks at all, so a rule whose typical bank divides 100
+    nearly evenly wastes nothing at the finish, while one that overshoots on the last turn spent
+    rolls it did not need. It is a resonance with the goal — and it makes the curve jagged rather
+    than smooth, which is exactly what the points model cannot produce.</p>
+
+    <div class="note warn">
+      <p><strong>20 is not a local maximum.</strong> <span class="mono">hold&nbsp;19</span> scores
+      46.24% against perfect play and <span class="mono">hold&nbsp;20</span> scores 46.01%, so the
+      famous rule sits on a downslope. Hill-climb from 20 and you walk <em>downhill</em> to 19 and
+      stop, 1.66 points short of the real best fixed rule — <span class="mono">hold&nbsp;25</span>,
+      at 47.89%. And hold&nbsp;25 gets there while scoring <strong>1.8% fewer points a
+      turn</strong> than hold&nbsp;20 does. The two objectives are pulling in opposite directions
+      over exactly the range anyone would search.</p>
+    </div>
+
+    <h3 class="mid">The control: move the goal</h3>
+
+    <p>&ldquo;The maxima are at goal divided by a whole number&rdquo; is a claim with a test
+    attached. If it is true, changing the goal must move them; if it is pattern-matching on five
+    numbers, changing the goal will not. Solving the game at 50, 60, 80, 100 and 120 gives maxima at
+    12/17/25, 15/20/30, 20/27/40, 16/19/25/33/50 and 19/23/30/40/60 — the halves, thirds, quarters,
+    fifths and sixths of each target, every time.</p>
+
+    <p>Meanwhile look at what the points rule does when the goal changes: nothing.
+    <span class="mono">(20&nbsp;&minus;&nbsp;k)/6</span> has no goal in it, so it says hold at 20
+    whether you are racing to 40 or to 1,000. At a target of 60 the best fixed threshold is
+    <strong>30</strong> — half again as large as what the points rule recommends — and the points
+    rule cannot even represent the disagreement.</p>
+
+    <h3 class="mid">And it is not a threshold rule at all</h3>
+
+    <p>There is a deeper problem with &ldquo;hold at&nbsp;<em>n</em>&rdquo; than the value of
+    <em>n</em>: the optimal policy is not that <em>shape</em>. On <strong>2,503</strong> of the
+    10,000 score pairs the optimal player banks at some turn total and then, at a larger one, rolls
+    again. Part of that is the endgame — with the goal inside one roll you obviously go for it — but
+    <strong>1,074</strong> pairs still do it where a single roll cannot possibly finish the game
+    (<strong>7,417</strong> states) and <strong>529</strong> still do it with the goal more than two
+    rolls away. Both action values rise with the turn total — banking more is better, and so is
+    having more at risk when you are behind — so nothing forces them to cross only once.</p>
+
+    <p>The clearest case is the score pair <strong>8&ndash;83</strong>. There the optimal player
+    banks on a turn total of 45 to 51 and <em>nowhere else</em>: below 45 a bank is too small to
+    matter against an opponent on 83, and above 51 the win is close enough to chase.
+    A seven-wide window with 44 roll states under it and 40 above. No fixed threshold, tuned however
+    you like, can express that shape.</p>
+
+    <h3 class="mid">The other way to get this wrong: the solver</h3>
+
+    <p>The cycle is easy to miss. Sort the states by total score, walk downwards, and when the
+    roll-a-1 branch asks for <span class="mono">V(j,i,0)</span> — same total score, not computed yet
+    — put in a constant and move on. One clean backward pass, no fixed point, no iteration. It
+    produces a table that <em>looks</em> right, and here is what that table passes:</p>
+
+    <ul>
+      <li>every one of its 10,000 values lies in [0,&nbsp;1] — <strong>10,000/10,000</strong>;</li>
+      <li>the win probability rises with your own score — <strong>9,900/9,900</strong>;</li>
+      <li>and falls with the opponent's — <strong>9,900/9,900</strong>.</li>
+    </ul>
+
+    <p>The correct solution scores exactly the same on all three. Those are the properties a review
+    actually checks, and they cannot see the bug. What the bug does see: the mean value is off by
+    <strong>0.2123</strong>, the worst by 0.4929, <strong>223,795 of 495,000</strong> decisions come
+    out different — <strong>45.21%</strong> — and put on the table against the real solver it wins
+    <strong>11.64%</strong> of games.</p>
+
+    <h3 class="mid">What is actually true about Pig</h3>
+
+    <p>Under perfect play by both sides the first player wins <strong>53.06%</strong> of the time,
+    which is the whole first-move advantage in a game with no board. The perfect player beats
+    hold-at-20 <strong>53.99%</strong> of the time seat-averaged (57.15% moving first, 50.83%
+    moving second), and beats the best fixed rule, hold-25, 52.11%. And <em>hold at 20 versus hold
+    at 21</em> — the two rules the points criterion declares exactly tied — is 50.84% to 49.16%.
+    Even where the points model has no opinion, the win model does.</p>
+
+    <p>None of that needs a simulation. Every number on this page is a linear-algebra answer, exact
+    to the last float, with Monte-Carlo runs used only as a witness that the algebra describes the
+    game people actually play.</p>
+
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">🔨 How it is built</h2>
+
+    <h3 class="mid">1. The state, and the cycle in it</h3>
+    <pre>// V(i,j,k): mover's score i, opponent j, turn total k already at risk.
+// i + k &gt;= 100 is a win, so V = 1 there and the state does not exist below.
+// roll : (1/6)(1 - V(j,i,0)) + (1/6) * sum over r in 2..6 of V(i,j,k+r)
+// hold : 1 - V(j, i+k, 0)                          // k &gt;= 1: a turn must roll once
+//
+// hold  -&gt; score sum i+j+k  &gt; i+j       progress
+// roll  -&gt; score sum i+j                a CYCLE: (i,j,0) &lt;-&gt; (j,i,0)</pre>
+    <p>Everything else follows from those four lines. There is no ordering of the states that makes
+    a backward pass legal, which is why this is the first game in the series that cannot be solved
+    by a pass at all.</p>
+
+    <h3 class="mid">2. The cycle is two states, so the fixed point is 2&times;2</h3>
+    <pre>// On a fixed score sum, with the policy held still, every value is affine in ONE unknown:
+//     V(i,j,k) = a[k] + b[k]*y      where y = V(j,i,0)
+// Read the coefficients off the recursion, top of the turn total downwards:
+a[k] = 1/6 + (1/6) * sum a[k+r]          b[k] = -1/6 + (1/6) * sum b[k+r]    // roll
+a[k] = 1 - V0[j][i+k]                    b[k] = 0                            // hold
+// then x = a1 + b1*y and y = a2 + b2*x, so
+const den = 1 - b1*b2;
+x = (a1 + b1*a2) / den;   y = (a2 + b2*a1) / den;</pre>
+    <p>That is the entire fixed-point solve. No tolerance, no iteration count, no convergence test —
+    and when <span class="mono">i === j</span> the same formula collapses to
+    <span class="mono">a/(1&minus;b)</span> on its own, because a state can roll a 1 into itself.</p>
+
+    <h3 class="mid">3. Policy iteration around the closed form</h3>
+    <pre>for (let it = 0; it &lt; 80; it++){
+  evalSide(i, j);  evalSide(j, i);          // affine coefficients under the current policy
+  solve the 2x2;                            // exact values for this policy
+  const changed = improve(i, j) | improve(j, i);   // greedy w.r.t. those values
+  if (!changed) break;                      // greedy for its own values == optimal
+}</pre>
+    <p>Eleven sweeps is the worst any pair needs, 20,763 in total across 5,050 pairs. Ties are
+    resolved towards <em>roll</em>, which is what keeps the improvement step from oscillating
+    between two equally good actions forever.</p>
+
+    <h3 class="mid">4. The exact head-to-head, which is where the numbers come from</h3>
+    <pre>// F(i,j,k) = P(A wins | A to move).      H(i,j,k) = P(A wins | B to move).
+// Same two-state cycle: F(i,j,0) &lt;-&gt; H(j,i,0). One 2x2 solve per ordered pair, no iteration.
+// So "hold 25 beats hold 20 by 1.17 points" is linear algebra, not 10 million games.</pre>
+    <p>Fixing both policies makes the whole thing linear, which is why every duel on this page is an
+    exact probability rather than a sample mean. The forward simulator exists only as a witness: a
+    million games per matchup land within 1.3 standard errors of the algebra.</p>
+
+    <h3 class="mid">5. The points side, for contrast</h3>
+    <pre>rollEV(k) = (20 - k) / 6;                    // one line, no goal, no opponent, no table
+// and the DP that agrees with it:
+e[k] = k                       for k &gt;= n
+e[k] = (1/6) * sum e[k+r]      for k &lt;  n      // the 1 banks nothing
+// turnScore(20) === turnScore(21) === 8.141795...  exactly tied</pre>
+    <p>Note what is missing from that formula: the goal, the opponent's score, and your own. That is
+    the whole reason it cannot see the resonance — a rule that maximises points per turn is optimising
+    a quantity that does not know the game ends.</p>
+
+    <h3 class="mid">6. The broken solver, written on purpose</h3>
+    <pre>// The obvious approach: one backward pass over the score sums, and when the roll-a-1 branch
+// wants V(j,i,0) from the SAME sum - not computed yet - substitute a constant.
+let ar = (1/6) * (1 - guess);                // &lt;- the whole bug
+for (let r = 2; r &lt;= 6; r++) ar += (i + k + r &gt;= G ? 1 : a[k+r]) / 6;</pre>
+    <p>Every guess in {0, 0.5, 1} yields values inside [0,1] and monotone in both scores, exactly
+    like the true solution, which is why this class of bug survives review. It is only visible if you
+    compare against something, or put it on the table: 11.64% against the real solver.</p>
+
+    <h3 class="mid">7. Four things that could have made all of this agree for the wrong reason</h3>
+    <pre>// 1. plain Jacobi value iteration over EVERY state, no diagonals, no 2x2  -&gt; 1.2e-14 at goal 30
+// 2. policy iteration started from hold-at-1 and hold-at-40 instead of 20 -&gt; identical values
+// 3. the Bellman certificate: the stored policy is greedy for its own value, 505,000/505,000
+// 4. a forward Monte-Carlo simulator on a different generator                -&gt; within 1.3 sigma</pre>
+    <p>The second is the one that matters most, because policy iteration is the kind of algorithm
+    that can converge to a comfortable local answer. Starting it from a deliberately terrible policy
+    and landing on the same table to the last float is the check that the answer is the fixed point
+    and not the starting guess.</p>
+
+    <h3 class="mid">8. The heat map is the table, not a picture of it</h3>
+    <pre>// 100 x 100 canvas, one pixel per score pair, drawn straight from THR / V0 / the diff map.
+// Click a pixel and the game jumps to that score pair, so the surface is playable.</pre>
+
+    <h3 class="mid">9. Two of my own assumptions were wrong</h3>
+    <pre>// 1. "the optimal policy is a hold threshold in the turn total"
+//    - false on 2,503 of 10,000 score pairs; the THR array is a summary, not the policy
+// 2. "the win-rate curve is a hill with its peak near 20"
+//    - false: five local maxima at 100/m, and 20 is on a downslope</pre>
+    <p>The first is baked into the code as a warning: <span class="mono">solveOptimal</span> still
+    reports a threshold per score pair because it is a useful summary, and it also counts the states
+    where that summary lies. The second is the page. Both are now self-tests that fail loudly if the
+    engine ever drifts back to the comfortable version.</p>
+
+    <h3 class="mid">10. What this engine is not</h3>
+    <pre>// Cost is O(G^3): 505,000 states at goal 100, and the die is fixed at six faces.
+// Two players, alternating, both fully informed - no hidden state, no simultaneous move.
+// "Pig" here is the standard jeopardy race. Big Pig, Skunk, Hog and the two-dice variants
+// change the transition distribution and every number on this page with it.
+// There is no Sprague-Grundy value and no game tree: the answer is a linear system.</pre>
+
+    <h3 class="mid">Self-test</h3>
+    <pre id="selftest">running&hellip;</pre>
+
+    <h3 class="mid">🎉 GameFromZero Day 73 shipped.</h3>
+    <p class="small">Seventy-three games. The first one whose famous rule turned out to be a correct
+    theorem about the wrong quantity.</p>
+
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("tab-active"));
+  t.classList.add("tab-active");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// PIG. Roll a die as many times as you like; every face but 1 adds to a running turn total, and a 1
+// wipes the turn total and ends the turn. Hold and the turn total is banked. First to 100 wins.
+// The whole game is one decision - roll again, or bank - and there is a famous rule for it: hold at
+// 20. That rule is not folklore, it is a theorem: the marginal value of one more roll is exactly
+// (20 - k)/6 points, so 20 is where rolling stops paying. It is also the wrong theorem, because the
+// game is not scored in points, it is scored in wins.
+//
+// Solving it for wins is a different kind of problem from anything a search does. Holding moves the
+// game to a strictly larger total score, but rolling a 1 hands the turn back at the SAME total
+// score, so the state graph has a cycle and there is no order in which to do a backward pass. The
+// usual fix is to iterate the whole diagonal to a fixed point. That is unnecessary: the cycle is
+// always exactly two states long - (i,j,0) and (j,i,0) - so with a policy held fixed every value on
+// the diagonal is an AFFINE function of one unknown, and one 2x2 solve is exact. Policy iteration
+// around that closed form gives the optimal policy with no tolerance anywhere.
+//
+// Nothing in this block touches the DOM.
+
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const fmt = n => Number(n).toLocaleString("en-US");
+const pct = (x, d) => (100 * x).toFixed(d === undefined ? 2 : d) + "%";
+
+const GOAL = 100;
+const ROLL = 0, HOLD = 1;
+
+// ---------------------------------------------------------------- the points game (closed form)
+// One more roll risks the turn total k and gains the mean of 2..6 five times in six:
+//   (5/6)*4 - (1/6)*k = (20 - k)/6.  Zero at exactly k = 20.
+function rollEV(k){ return (20 - k) / 6; }
+
+// Expected banked score of ONE turn under "hold at >= n", by backward recursion on the turn total.
+function turnScore(n){
+  const top = n + 6;
+  const e = new Float64Array(top + 1);
+  for (let k = n; k <= top; k++) e[k] = k;
+  for (let k = n - 1; k >= 0; k--){
+    let s = 0;
+    for (let r = 2; r <= 6; r++) s += e[k + r];
+    e[k] = s / 6;                                   // the 1 banks nothing
+  }
+  return e[0];
+}
+
+// Which fixed thresholds maximise expected points. There is more than one.
+function scoreOptimalThresholds(maxN){
+  let best = -Infinity, list = [];
+  const all = [];
+  for (let n = 1; n <= maxN; n++){
+    const v = turnScore(n);
+    all.push(v);
+    if (v > best + 1e-12){ best = v; list = [n]; }
+    else if (Math.abs(v - best) <= 1e-12) list.push(n);
+  }
+  return { list, value: best, all };
+}
+
+// ---------------------------------------------------------------- the win game
+// V(i,j,k) = probability the player to move wins.  i = mover's score, j = opponent's, k = turn total.
+// Reaching GOAL ends the game at once, so V = 1 whenever i + k >= G.
+//   roll : (1/6)(1 - V(j,i,0)) + (1/6) * sum over r in 2..6 of V(i,j,k+r)
+//   hold : 1 - V(j, i+k, 0)                                   [k >= 1; a turn must roll once]
+// Hold jumps to score sum i+j+k > i+j. Rolling a 1 stays on the sum i+j and points at (j,i,0).
+// So for a FIXED policy, on a given sum, V(i,j,k) = a[k] + b[k]*y with y = V(j,i,0): one unknown.
+
+// Fill a[k], b[k] (value) and ra[k], rb[k] (the roll branch, for policy improvement).
+function evalSide(G, i, j, V0, POL, base, a, b, ra, rb){
+  const K = G - 1 - i;                              // largest turn total that has not won yet
+  for (let k = K; k >= 0; k--){
+    let ar = 1 / 6, br = -1 / 6;                    // the (1/6)(1 - y) branch
+    for (let r = 2; r <= 6; r++){
+      const kk = k + r;
+      if (i + kk >= G) ar += 1 / 6;                 // that roll wins outright: V = 1
+      else { ar += a[kk] / 6; br += b[kk] / 6; }
+    }
+    ra[k] = ar; rb[k] = br;
+    if (k >= 1 && POL[base + k] === HOLD){ a[k] = 1 - V0[j * G + i + k]; b[k] = 0; }
+    else { a[k] = ar; b[k] = br; }
+  }
+  return K;
+}
+
+function improveSide(G, i, j, V0, POL, base, ra, rb, y, K){
+  let changed = 0;
+  POL[base] = ROLL;                                 // holding on 0 is not a move
+  for (let k = 1; k <= K; k++){
+    const rv = ra[k] + rb[k] * y;
+    const hv = 1 - V0[j * G + i + k];
+    const want = hv > rv ? HOLD : ROLL;             // ties roll, so the loop cannot oscillate
+    if (POL[base + k] !== want){ POL[base + k] = want; changed = 1; }
+  }
+  return changed;
+}
+
+function solveOptimal(G, initThreshold){
+  const t0 = Date.now();
+  const n = initThreshold === undefined ? 20 : initThreshold;
+  const V0 = new Float64Array(G * G);
+  const POL = new Uint8Array(G * G * G);
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const b = (i * G + j) * G;
+      for (let k = 1; k < G; k++) POL[b + k] = k >= n ? HOLD : ROLL;
+    }
+  const sz = G + 8;
+  const a1 = new Float64Array(sz), b1 = new Float64Array(sz), ra1 = new Float64Array(sz), rb1 = new Float64Array(sz);
+  const a2 = new Float64Array(sz), b2 = new Float64Array(sz), ra2 = new Float64Array(sz), rb2 = new Float64Array(sz);
+  let sweeps = 0, worst = 0;
+  for (let s = 2 * G - 2; s >= 0; s--){
+    const lo = Math.max(0, s - (G - 1)), hi = Math.min(G - 1, s);
+    for (let i = lo; i <= hi; i++){
+      const j = s - i;
+      if (j < i) break;                             // each unordered pair once
+      const bij = (i * G + j) * G, bji = (j * G + i) * G;
+      let it = 0;
+      for (; it < 80; it++){
+        const K1 = evalSide(G, i, j, V0, POL, bij, a1, b1, ra1, rb1);
+        const K2 = evalSide(G, j, i, V0, POL, bji, a2, b2, ra2, rb2);
+        const den = 1 - b1[0] * b2[0];
+        const x = (a1[0] + b1[0] * a2[0]) / den;
+        const y = (a2[0] + b2[0] * a1[0]) / den;
+        V0[i * G + j] = x; V0[j * G + i] = y;
+        const c1 = improveSide(G, i, j, V0, POL, bij, ra1, rb1, y, K1);
+        const c2 = improveSide(G, j, i, V0, POL, bji, ra2, rb2, x, K2);
+        if (!c1 && !c2) break;
+      }
+      sweeps += it + 1;
+      if (it + 1 > worst) worst = it + 1;
+    }
+  }
+  // read the policy back as a hold threshold, and check it really is one
+  const THR = new Int16Array(G * G);
+  let notThreshold = 0;
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const b = (i * G + j) * G, K = G - 1 - i;
+      let t = G - i;                                // reaching the goal is always a hold
+      for (let k = 1; k <= K; k++) if (POL[b + k] === HOLD){ t = k; break; }
+      THR[i * G + j] = t;
+      for (let k = t; k <= K; k++) if (POL[b + k] !== HOLD) notThreshold++;
+    }
+  return { G, V0, POL, THR, sweeps, worst, notThreshold, ms: Date.now() - t0 };
+}
+
+// Everything about one position, recomputed exactly from the stored policy.
+function probe(sol, i, j){
+  const G = sol.G, sz = G + 8;
+  const a = new Float64Array(sz), b = new Float64Array(sz), ra = new Float64Array(sz), rb = new Float64Array(sz);
+  const K = evalSide(G, i, j, sol.V0, sol.POL, (i * G + j) * G, a, b, ra, rb);
+  const y = sol.V0[j * G + i];
+  const out = [];
+  for (let k = 0; k <= K; k++)
+    out.push({ k, val: a[k] + b[k] * y, roll: ra[k] + rb[k] * y,
+               hold: k === 0 ? NaN : 1 - sol.V0[j * G + i + k],
+               act: sol.POL[(i * G + j) * G + k] });
+  return { K, rows: out, thr: sol.THR[i * G + j] };
+}
+
+// ---------------------------------------------------------------- policies
+function thrPolicy(n){ return (i, j, k, G) => k >= n; }
+function optPolicy(sol){
+  const G = sol.G, POL = sol.POL;
+  return (i, j, k) => POL[(i * G + j) * G + k] === HOLD;
+}
+// hold at 20 unless the goal is in reach, which is what a human actually does
+function thrPolicyGoal(n){ return (i, j, k, G) => k >= n && i + k < G; }
+
+// ---------------------------------------------------------------- exact head to head
+// F(i,j,k) = P(A wins | A to move, A has i, B has j, turn total k).      A follows holdA.
+// H(i,j,k) = P(A wins | B to move, B has i, A has j, turn total k).      B follows holdB.
+// Same two-state cycle: F(i,j,0) and H(j,i,0). One 2x2 solve per ordered pair, no iteration.
+function headToHead(G, holdA, holdB){
+  const F = new Float64Array(G * G), H = new Float64Array(G * G);
+  const sz = G + 8;
+  const a = new Float64Array(sz), b = new Float64Array(sz);
+  const c = new Float64Array(sz), d = new Float64Array(sz);
+  for (let s = 2 * G - 2; s >= 0; s--){
+    const lo = Math.max(0, s - (G - 1)), hi = Math.min(G - 1, s);
+    for (let i = lo; i <= hi; i++){
+      const j = s - i;
+      // side A: F(i,j,k) = a[k] + b[k]*y,  y = H(j,i,0)
+      let K = G - 1 - i;
+      for (let k = K; k >= 0; k--){
+        let ar = 0, br = 1 / 6;                     // (1/6)*y
+        for (let r = 2; r <= 6; r++){
+          const kk = k + r;
+          if (i + kk >= G) ar += 1 / 6;             // A wins
+          else { ar += a[kk] / 6; br += b[kk] / 6; }
+        }
+        if (k >= 1 && holdA(i, j, k, G)){ a[k] = H[j * G + i + k]; b[k] = 0; }
+        else { a[k] = ar; b[k] = br; }
+      }
+      // side B: H(j,i,k) = c[k] + d[k]*x,  x = F(i,j,0)
+      let K2 = G - 1 - j;
+      for (let k = K2; k >= 0; k--){
+        let cr = 0, dr = 1 / 6;                     // (1/6)*x
+        for (let r = 2; r <= 6; r++){
+          const kk = k + r;
+          if (j + kk < G){ cr += c[kk] / 6; dr += d[kk] / 6; }   // B winning contributes 0
+        }
+        if (k >= 1 && holdB(j, i, k, G)){ c[k] = F[i * G + j + k]; d[k] = 0; }
+        else { c[k] = cr; d[k] = dr; }
+      }
+      const den = 1 - b[0] * d[0];
+      F[i * G + j] = (a[0] + b[0] * c[0]) / den;
+      H[j * G + i] = (c[0] + d[0] * a[0]) / den;
+    }
+  }
+  return { first: F[0], second: H[0], F, H };
+}
+
+// ---------------------------------------------------------------- the obvious broken solver
+// Order the states by score sum descending and do ONE backward pass. When the roll-a-1 branch asks
+// for V(j,i,0) - same sum, not computed yet - substitute a constant. No cycle, no fixed point.
+function onePassSolve(G, guess){
+  const V0 = new Float64Array(G * G);
+  const POL = new Uint8Array(G * G * G);
+  const sz = G + 8;
+  const a = new Float64Array(sz), ra = new Float64Array(sz);
+  for (let s = 2 * G - 2; s >= 0; s--){
+    const lo = Math.max(0, s - (G - 1)), hi = Math.min(G - 1, s);
+    for (let i = lo; i <= hi; i++){
+      const j = s - i, base = (i * G + j) * G;
+      const K = G - 1 - i;
+      for (let k = K; k >= 0; k--){
+        let ar = (1 / 6) * (1 - guess);
+        for (let r = 2; r <= 6; r++){
+          const kk = k + r;
+          ar += (i + kk >= G ? 1 : a[kk]) / 6;
+        }
+        ra[k] = ar;
+        const hv = k >= 1 ? 1 - V0[j * G + i + k] : -1;
+        if (k >= 1 && hv > ar){ a[k] = hv; POL[base + k] = HOLD; }
+        else { a[k] = ar; POL[base + k] = ROLL; }
+      }
+      V0[i * G + j] = a[0];
+    }
+  }
+  const THR = new Int16Array(G * G);
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const b = (i * G + j) * G, K = G - 1 - i;
+      let t = G - i;
+      for (let k = 1; k <= K; k++) if (POL[b + k] === HOLD){ t = k; break; }
+      THR[i * G + j] = t;
+    }
+  return { G, V0, POL, THR, guess };
+}
+
+// ---------------------------------------------------------------- comparing two policies
+function policyDiff(G, polA, polB){
+  let states = 0, diff = 0, pairs = 0, pairDiff = 0;
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      let any = 0;
+      const K = G - 1 - i;
+      for (let k = 1; k <= K; k++){
+        states++;
+        if (!!polA(i, j, k, G) !== !!polB(i, j, k, G)){ diff++; any = 1; }
+      }
+      pairs++; if (any) pairDiff++;
+    }
+  return { states, diff, pairs, pairDiff };
+}
+
+function valueError(G, A, B){
+  let worst = 0, sum = 0, n = 0;
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const e = Math.abs(A[i * G + j] - B[i * G + j]);
+      if (e > worst) worst = e;
+      sum += e; n++;
+    }
+  return { worst, mean: sum / n, n };
+}
+
+// ---------------------------------------------------------------- threshold surface
+function thresholdStats(sol){
+  const G = sol.G, THR = sol.THR;
+  const hist = new Map();
+  let eq20 = 0, above = 0, below = 0, max = 0, maxAt = null, n = 0, capped = 0;
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      let t = THR[i * G + j];
+      const cap = G - i;                            // the goal is in reach at t = cap
+      if (t >= cap) capped++;
+      n++;
+      hist.set(t, (hist.get(t) || 0) + 1);
+      if (t === 20) eq20++; else if (t > 20) above++; else below++;
+      if (t > max){ max = t; maxAt = [i, j]; }
+    }
+  return { n, eq20, above, below, max, maxAt, capped,
+           hist: [...hist.entries()].sort((p, q) => p[0] - q[0]) };
+}
+
+// ---------------------------------------------------------------- forward simulation (a control)
+function playGame(G, holdA, holdB, rnd){
+  const sc = [0, 0]; let t = 0;
+  const pol = [holdA, holdB];
+  for (let ply = 0; ply < 100000; ply++){
+    let k = 0;
+    for (;;){
+      const die = 1 + Math.floor(rnd() * 6);
+      if (die === 1){ k = 0; break; }
+      k += die;
+      if (sc[t] + k >= G) return t;
+      if (pol[t](sc[t], sc[1 - t], k, G)) { sc[t] += k; break; }
+    }
+    t = 1 - t;
+  }
+  return -1;
+}
+function simulate(G, holdA, holdB, games, seed){
+  const rnd = mulberry32(seed);
+  let winsFirst = 0, winsSecond = 0;
+  for (let g = 0; g < games; g++) if (playGame(G, holdA, holdB, rnd) === 0) winsFirst++;
+  const rnd2 = mulberry32(seed ^ 0x5bf03635);
+  for (let g = 0; g < games; g++) if (playGame(G, holdB, holdA, rnd2) === 1) winsSecond++;
+  return { games, first: winsFirst / games, second: winsSecond / games };
+}
+
+// ---------------------------------------------------------------- a round robin over thresholds
+// score = the mean of "wins going first" and "wins going second", so the seat cannot flatter anyone.
+function roundRobin(G, list, sol){
+  const pol = list.map(n => (n === "optimal" ? optPolicy(sol) : thrPolicy(n)));
+  const N = list.length;
+  const M = [], first = [];
+  for (let x = 0; x < N; x++){ M.push(new Array(N).fill(0.5)); first.push(new Array(N).fill(0.5)); }
+  for (let x = 0; x < N; x++)
+    for (let y = 0; y < N; y++){
+      if (x === y) continue;
+      const r = headToHead(G, pol[x], pol[y]);
+      M[x][y] = (r.first + r.second) / 2;
+      first[x][y] = r.first;
+    }
+  const score = M.map(row => row.reduce((s, v, k2) => s + v, 0) - 0.5);
+  // any 3-cycle x beats y beats z beats x, all seat-averaged and strict
+  const cycles = [];
+  for (let x = 0; x < N; x++)
+    for (let y = 0; y < N; y++)
+      for (let z = 0; z < N; z++){
+        if (x === y || y === z || x === z) continue;
+        if (M[x][y] > 0.5 && M[y][z] > 0.5 && M[z][x] > 0.5) cycles.push([x, y, z]);
+      }
+  return { list, M, first, score, cycles };
+}
+
+// ---------------------------------------------------------------- exhaustive small-goal reference
+// Plain Jacobi value iteration over EVERY state, no diagonal order, no 2x2 solve, no policy.
+// Correct because it is a contraction; slow, which is why the page does not use it.
+function valueIteration(G, iters, tol){
+  const N = G * G * (G + 1);
+  const idx = (i, j, k) => (i * G + j) * (G + 1) + k;
+  let V = new Float64Array(N), W = new Float64Array(N);
+  let used = 0, delta = 0;
+  for (let it = 0; it < iters; it++){
+    delta = 0;
+    for (let i = 0; i < G; i++)
+      for (let j = 0; j < G; j++){
+        const K = G - 1 - i;
+        for (let k = 0; k <= K; k++){
+          let rv = (1 - V[idx(j, i, 0)]) / 6;
+          for (let r = 2; r <= 6; r++) rv += (i + k + r >= G ? 1 : V[idx(i, j, k + r)]) / 6;
+          let v = rv;
+          if (k >= 1){ const hv = 1 - V[idx(j, i + k, 0)]; if (hv > v) v = hv; }
+          const e = Math.abs(v - V[idx(i, j, k)]);
+          if (e > delta) delta = e;
+          W[idx(i, j, k)] = v;
+        }
+      }
+    const t = V; V = W; W = t;
+    used = it + 1;
+    if (delta < tol) break;
+  }
+  const V0 = new Float64Array(G * G);
+  for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) V0[i * G + j] = V[idx(i, j, 0)];
+  return { V0, V, idx, iters: used, delta };
+}
+
+// ---------------------------------------------------------------- studies the page reports
+// One turn under "hold at >= n": the chance it banks anything, and the mean bank when it does.
+function bankStats(n, G){
+  const top = n + 6;
+  const reach = new Float64Array(top + 1); reach[0] = 1;
+  let banked = 0, ev = 0;
+  for (let k = 0; k < n; k++){
+    if (reach[k] === 0) continue;
+    for (let r = 2; r <= 6; r++) reach[k + r] += reach[k] / 6;
+  }
+  for (let k = n; k <= top; k++){ banked += reach[k]; ev += reach[k] * k; }
+  const mean = ev / banked;
+  return { n, pBank: banked, meanBank: mean, pointsPerTurn: turnScore(n),
+           banksToGoal: (G || GOAL) / mean };
+}
+
+// Every fixed threshold, scored on WINS against the optimal player, seat averaged.
+function thresholdCurve(G, sol, from, to){
+  const opt = optPolicy(sol), out = [];
+  for (let n = from; n <= to; n++){
+    const r = headToHead(G, thrPolicy(n), opt);
+    out.push({ n, mean: (r.first + r.second) / 2, first: r.first, second: r.second });
+  }
+  return out;
+}
+function localMaxima(curve){
+  const out = [];
+  for (let x = 1; x < curve.length - 1; x++)
+    if (curve[x].mean > curve[x - 1].mean && curve[x].mean > curve[x + 1].mean) out.push(curve[x].n);
+  return out;
+}
+function bestOf(curve){ return curve.reduce((a, b) => (b.mean > a.mean ? b : a)); }
+
+// Climb from a starting threshold and see where it stops. The folk rule sits on a downslope.
+function hillClimb(curve, start){
+  const at = n => curve.find(r => r.n === n);
+  let n = start;
+  for (let step = 0; step < 200; step++){
+    const here = at(n), up = at(n + 1), dn = at(n - 1);
+    if (up && up.mean > here.mean){ n = n + 1; continue; }
+    if (dn && dn.mean > here.mean){ n = n - 1; continue; }
+    return { stop: n, mean: here.mean, steps: step };
+  }
+  return { stop: n, mean: at(n).mean, steps: 200 };
+}
+
+// The resonance claim: the maxima move with the goal. The points rule cannot, it has no goal in it.
+function goalSweep(goals, upTo){
+  return goals.map(G => {
+    const sol = solveOptimal(G);
+    const top = Math.min(G - 1, upTo === undefined ? Math.floor(G / 2) + 6 : upTo);
+    const curve = thresholdCurve(G, sol, 1, top);
+    const pred = [];
+    for (let m = 2; m <= 6; m++) if (G / m >= 8) pred.push(G / m);
+    return { G, top, maxima: localMaxima(curve), best: bestOf(curve), pred, curve };
+  });
+}
+
+// Is the optimal policy a threshold in the turn total? It is not: on plenty of score pairs the
+// optimal player banks inside a WINDOW of turn totals and rolls both below it and above it.
+// "deep" = the re-roll happens where a single roll cannot reach the goal, so the endgame does not
+// explain it. "safe" tightens that to two rolls.
+function nonThresholdStudy(sol){
+  const G = sol.G;
+  let pairs = 0, states = 0, deepPairs = 0, deepStates = 0, safePairs = 0, safeStates = 0;
+  let first = null, deepFirst = null, maxDeep = null;
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const b = (i * G + j) * G, K = G - 1 - i, winBand = G - i - 6;
+      let seen = false, bad = 0, deep = 0, safe = 0;
+      for (let k = 1; k <= K; k++){
+        if (sol.POL[b + k] === HOLD) seen = true;
+        else if (seen){ bad++; if (k < winBand) deep++; if (k < winBand - 6) safe++; }
+      }
+      if (bad){ pairs++; states += bad; if (!first) first = [i, j]; }
+      if (deep){
+        deepPairs++; deepStates += deep;
+        if (!deepFirst) deepFirst = [i, j];
+        if (!maxDeep || deep > maxDeep[2]) maxDeep = [i, j, deep, safe];
+      }
+      if (safe){ safePairs++; safeStates += safe; }
+    }
+  return { pairs, states, deepPairs, deepStates, safePairs, safeStates,
+           first, deepFirst, maxDeep, of: G * G };
+}
+
+// Where a fixed rule disagrees with the table, per state and per score pair.
+function surfaceDisagree(sol, n){
+  const G = sol.G;
+  let states = 0, diff = 0, pairs = 0, pairDiff = 0;
+  const map = new Uint8Array(G * G);
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const b = (i * G + j) * G, K = G - 1 - i;
+      let any = 0;
+      for (let k = 1; k <= K; k++){
+        states++;
+        if ((sol.POL[b + k] === HOLD) !== (k >= n)){ diff++; any = 1; }
+      }
+      pairs++; if (any){ pairDiff++; map[i * G + j] = 1; }
+    }
+  return { n, states, diff, pairs, pairDiff, map };
+}
+
+// The obvious solver, and every property it still satisfies.
+function onePassStudy(G, guess, sol){
+  const bad = onePassSolve(G, guess);
+  const badPol = (i, j, k, GG) => bad.POL[(i * GG + j) * GG + k] === HOLD;
+  const pd = policyDiff(G, optPolicy(sol), badPol);
+  const ve = valueError(G, sol.V0, bad.V0);
+  const hh = headToHead(G, badPol, optPolicy(sol));
+  let inRange = 0, tot = 0, monoI = 0, monoIok = 0, monoJ = 0, monoJok = 0;
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const v = bad.V0[i * G + j];
+      tot++; if (v >= -1e-12 && v <= 1 + 1e-12) inRange++;
+      if (i + 1 < G){ monoI++; if (bad.V0[(i + 1) * G + j] >= v - 1e-12) monoIok++; }
+      if (j + 1 < G){ monoJ++; if (bad.V0[i * G + j + 1] <= v + 1e-12) monoJok++; }
+    }
+  return { guess, pd, ve, plays: (hh.first + hh.second) / 2, inRange, tot,
+           monoI, monoIok, monoJ, monoJok, V0: bad.V0, POL: bad.POL, THR: bad.THR };
+}
+
+// Do points and wins even rank the same thresholds the same way?
+function pointsVsWins(curve){
+  const rows = curve.map(r => ({ n: r.n, pts: turnScore(r.n), win: r.mean }));
+  const rank = arr => { const m = new Map(); arr.forEach((v, i) => m.set(v, i + 1)); return m; };
+  const byPoints = [...rows].sort((a, b) => b.pts - a.pts).map(r => r.n);
+  const byWins = [...rows].sort((a, b) => b.win - a.win).map(r => r.n);
+  const rp = rank(byPoints), rw = rank(byWins);
+  let d2 = 0; const N = rows.length;
+  for (const r of rows) d2 += (rp.get(r.n) - rw.get(r.n)) ** 2;
+  return { rho: 1 - 6 * d2 / (N * (N * N - 1)), N, byPoints, byWins,
+           rankOf20win: rw.get(20), rankOf20pts: rp.get(20), rows };
+}
+
+// The optimality certificate: the stored policy must be greedy for its own values, everywhere.
+function bellmanCheck(sol){
+  const G = sol.G;
+  let states = 0, worst = 0, chosen = 0;
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const p = probe(sol, i, j);
+      for (const r of p.rows){
+        const best = r.k === 0 ? r.roll : Math.max(r.roll, r.hold);
+        const e = Math.abs(best - r.val);
+        if (e > worst) worst = e;
+        const act = r.k === 0 ? ROLL : (r.hold > r.roll ? HOLD : ROLL);
+        if (act === r.act) chosen++;
+        states++;
+      }
+    }
+  return { states, worst, chosen };
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- UI
+const $ = id => document.getElementById(id);
+const G = 100;
+const S = { sol: null, curve: null, duels: null, one: null, heatMode: "thr", diff20: null };
+const rnd = mulberry32(20260828);
+
+S.sol = solveOptimal(G);
+const OPT = optPolicy(S.sol);
+S.one = onePassSolve(G, 0.5);
+const ONEPOL = (i, j, k) => S.one.POL[(i * G + j) * G + k] === HOLD;
+
+function botPolicy(){
+  const v = $("oppSel").value;
+  if (v === "opt") return OPT;
+  if (v === "onepass") return ONEPOL;
+  return thrPolicy(+v);
+}
+function botName(){
+  const v = $("oppSel").value;
+  return v === "opt" ? "PERFECT BOT" : v === "onepass" ? "ONE-PASS BOT" : "HOLD-AT-" + v + " BOT";
+}
+
+// ---------------------------------------------------------------- the game
+let g = { sc: [0, 0], turn: 0, tt: 0, over: false, dice: [], bust: false, first: 0, auto: false };
+
+function newGame(who){
+  g = { sc: [0, 0], turn: who === undefined ? g.first : who, tt: 0, over: false,
+        dice: [], bust: false, first: who === undefined ? g.first : who, auto: false };
+  $("log").innerHTML = "";
+  logLine((g.turn === 0 ? "you" : "the bot") + " starts");
+  paintAll();
+  if (g.turn === 1) setTimeout(botStep, 500);
+}
+function logLine(t){
+  const d = document.createElement("div");
+  d.textContent = t;
+  $("log").prepend(d);
+}
+function die(n, bust){
+  const pips = { 1: [[2, 2]], 2: [[1, 1], [3, 3]], 3: [[1, 1], [2, 2], [3, 3]],
+                 4: [[1, 1], [1, 3], [3, 1], [3, 3]], 5: [[1, 1], [1, 3], [2, 2], [3, 1], [3, 3]],
+                 6: [[1, 1], [1, 2], [1, 3], [3, 1], [3, 2], [3, 3]] }[n];
+  const c = pips.map(([x, y]) => `<circle cx="${x * 10}" cy="${y * 10}" r="3.6" fill="${bust ? "#b91c1c" : "#0f172a"}"/>`).join("");
+  return `<svg width="40" height="40" viewBox="0 0 40 40"${bust ? ' class="bust"' : ""}>${c}</svg>`;
+}
+function paintDice(){
+  $("dice").innerHTML = g.dice.length
+    ? g.dice.slice(-8).map((d, x) => die(d, g.bust && x === g.dice.slice(-8).length - 1)).join("")
+    : '<span class="tiny">no roll yet</span>';
+}
+function paintAll(){
+  $("youSc").textContent = g.sc[0];
+  $("botSc").textContent = g.sc[1];
+  $("botNm").textContent = botName();
+  $("youBox").className = "who" + (!g.over && g.turn === 0 ? " turn" : "");
+  $("botBox").className = "who" + (!g.over && g.turn === 1 ? " turn" : "");
+  $("tt").textContent = g.tt;
+  $("turnWho").textContent = g.over ? "" : (g.turn === 0 ? "— your turn" : "— the bot is rolling");
+  paintDice();
+  $("rollBtn").disabled = g.over || g.turn !== 0;
+  $("holdBtn").disabled = g.over || g.turn !== 0 || g.tt === 0;
+  $("hintBtn").disabled = g.over || g.turn !== 0;
+  paintValue();
+}
+function paintValue(){
+  if (g.over){
+    $("winBig").textContent = g.sc[0] >= G ? "you won" : "the bot won";
+    $("winBar").style.width = (g.sc[0] >= G ? 100 : 0) + "%";
+    $("winBox").innerHTML = `<div class="kv"><span>final</span><b>${g.sc[0]} &ndash; ${g.sc[1]}</b></div>`;
+    return;
+  }
+  const i = g.sc[g.turn], j = g.sc[1 - g.turn], k = g.tt;
+  const p = probe(S.sol, i, j);
+  const row = p.rows[Math.min(k, p.rows.length - 1)];
+  const mover = row.val;
+  const you = g.turn === 0 ? mover : 1 - mover;
+  $("winBig").textContent = g.over ? (g.sc[0] >= G ? "you won" : "the bot won") : pct(you, 2);
+  $("winBar").style.width = (100 * you).toFixed(1) + "%";
+  const thr = p.thr, cap = G - i;
+  $("winBox").innerHTML =
+    `<div class="kv"><span>whose turn</span><b>${g.turn === 0 ? "you" : "the bot"}</b></div>` +
+    `<div class="kv"><span>score pair (mover, other)</span><b>${i} &ndash; ${j}</b></div>` +
+    `<div class="kv"><span>turn total at risk</span><b>${k}</b></div>` +
+    `<div class="kv"><span>value of rolling</span><b>${pct(row.roll, 3)}</b></div>` +
+    `<div class="kv"><span>value of holding</span><b>${k === 0 ? "&mdash;" : pct(row.hold, 3)}</b></div>` +
+    `<div class="kv"><span>the table says</span><b class="${row.act === HOLD ? "lose" : "win"}">${row.act === HOLD ? "HOLD" : "ROLL"}</b></div>` +
+    `<div class="kv"><span>optimal hold point here</span><b>${thr >= cap ? "never (go for the win)" : thr}</b></div>` +
+    `<div class="kv"><span>hold at 20 would</span><b>${k >= 20 ? "HOLD" : "ROLL"}</b></div>` +
+    `<p class="tiny" style="margin:8px 0 0">Read as: the probability <b>you</b> win from here if both
+      sides play the solved table from now on.</p>`;
+}
+function switchTurn(){
+  g.turn = 1 - g.turn; g.tt = 0; g.dice = [];
+  paintAll();
+  if (!g.over && g.turn === 1) setTimeout(botStep, 460);
+  else if (!g.over && g.turn === 0 && g.auto) setTimeout(youAuto, 460);
+}
+function doRoll(){
+  const d = 1 + Math.floor(rnd() * 6);
+  g.dice.push(d);
+  if (d === 1){
+    g.bust = true;
+    logLine(`${g.turn === 0 ? "you" : "bot"} rolled 1 — ${g.tt} lost`);
+    g.tt = 0;
+    paintDice();
+    setTimeout(() => { g.bust = false; switchTurn(); }, 420);
+    return;
+  }
+  g.bust = false;
+  g.tt += d;
+  logLine(`${g.turn === 0 ? "you" : "bot"} rolled ${d} — turn total ${g.tt}`);
+  if (g.sc[g.turn] + g.tt >= G){
+    g.sc[g.turn] += g.tt; g.over = true;
+    logLine(`${g.turn === 0 ? "you" : "the bot"} reached ${g.sc[g.turn]} — game over`);
+    $("status").textContent = g.turn === 0 ? "You won." : "The bot won.";
+    paintAll();
+    return;
+  }
+  paintAll();
+  if (g.turn === 0 && g.auto) setTimeout(youAuto, 380);
+}
+function doHold(){
+  g.sc[g.turn] += g.tt;
+  logLine(`${g.turn === 0 ? "you" : "bot"} banked ${g.tt} — now ${g.sc[g.turn]}`);
+  switchTurn();
+}
+function botStep(){
+  if (g.over || g.turn !== 1) return;
+  const pol = botPolicy();
+  if (g.tt >= 1 && pol(g.sc[1], g.sc[0], g.tt, G)){ doHold(); return; }
+  doRoll();
+  if (!g.over && g.turn === 1) setTimeout(botStep, 420);
+}
+function youAuto(){
+  if (g.over || g.turn !== 0) return;
+  if (g.tt >= 1 && OPT(g.sc[0], g.sc[1], g.tt, G)) doHold(); else doRoll();
+}
+
+$("rollBtn").onclick = doRoll;
+$("holdBtn").onclick = doHold;
+$("newBtn").onclick = () => { $("status").textContent = ""; newGame(g.first); };
+$("swapBtn").onclick = () => { $("status").textContent = ""; newGame(1 - g.first); };
+$("oppSel").onchange = () => { $("status").textContent = ""; newGame(g.first); };
+$("autoBtn").onclick = () => { g.auto = true; $("status").textContent = "The table is playing your seat too."; youAuto(); };
+$("hintBtn").onclick = () => {
+  const p = probe(S.sol, g.sc[0], g.sc[1]);
+  const row = p.rows[Math.min(g.tt, p.rows.length - 1)];
+  $("status").textContent = `The table says ${row.act === HOLD ? "HOLD" : "ROLL"}: rolling is worth ` +
+    `${pct(row.roll, 3)}, holding ${g.tt === 0 ? "is not a move" : pct(row.hold, 3)}. ` +
+    (g.tt >= 20 !== (row.act === HOLD) ? "Hold-at-20 disagrees here." : "Hold-at-20 agrees here.");
+};
+
+// ---------------------------------------------------------------- the points table
+function paintPoints(){
+  const rows = [];
+  for (const k of [5, 10, 15, 19, 20, 21, 25, 30]){
+    const b = bankStats(k, G);
+    rows.push(`<tr class="${k === 20 || k === 21 ? "hi" : ""}"><td class="l">${k}</td>` +
+      `<td>${rollEV(k).toFixed(4)}</td><td>${b.pointsPerTurn.toFixed(6)}</td>` +
+      `<td>${pct(b.pBank, 1)}</td><td>${b.meanBank.toFixed(2)}</td></tr>`);
+  }
+  const so = scoreOptimalThresholds(60);
+  $("ptsTbl").innerHTML =
+    `<tr><th>hold at</th><th>EV of one more roll</th><th>points / turn</th><th>P(bank)</th><th>mean bank</th></tr>` +
+    rows.join("");
+  $("ptsNote").innerHTML =
+    `<span class="mono">(20 &minus; k)/6</span> is exactly zero at k = 20, so rolling at 20 and stopping
+     is worth the same as stopping at 20 &mdash; the points-optimal thresholds are
+     <b>${so.list.join(" and ")}</b>, tied at <b>${so.value.toFixed(6)}</b> points a turn.
+     Nothing in this table knows the goal, the opponent, or your own score.`;
+}
+
+// ---------------------------------------------------------------- exact duels
+function paintDuels(){
+  const h = (a, b) => headToHead(G, a, b);
+  const d = [];
+  const push = (label, r, note) => d.push({ label, r, note });
+  push("perfect vs hold 20", h(OPT, thrPolicy(20)), "the price of the folk rule");
+  push("perfect vs hold 21", h(OPT, thrPolicy(21)), "its points-identical twin");
+  push("perfect vs hold 25", h(OPT, thrPolicy(25)), "the best fixed rule");
+  push("hold 20 vs hold 21", h(thrPolicy(20), thrPolicy(21)), "same points, different wins");
+  push("hold 20 vs hold 25", h(thrPolicy(20), thrPolicy(25)), "fewer points per turn, more wins");
+  push("perfect vs one-pass", h(OPT, ONEPOL), "the obvious solver");
+  push("perfect vs perfect", h(OPT, OPT), "the first-move advantage");
+  S.duels = d;
+  $("duelTbl").innerHTML =
+    `<tr><th>matchup (left player)</th><th>moving first</th><th>moving second</th><th>seat average</th></tr>` +
+    d.map(x => `<tr><td class="l">${x.label}<br><span class="tiny">${x.note}</span></td>` +
+      `<td>${pct(x.r.first, 2)}</td><td>${pct(x.r.second, 2)}</td>` +
+      `<td><b>${pct((x.r.first + x.r.second) / 2, 2)}</b></td></tr>`).join("");
+  const self = d[6].r.first;
+  $("duelNote").innerHTML =
+    `Every figure is a 2&times;2 linear solve per score pair, not a simulation. Perfect play gives the
+     first player <b>${pct(self, 2)}</b> &mdash; and it matches the solved table's own
+     <span class="mono">V(0,0,0)</span> to ${Math.abs(self - S.sol.V0[0]).toExponential(1)},
+     which is the cheapest proof that the two code paths agree.`;
+}
+
+// ---------------------------------------------------------------- heat map
+function ramp(t){
+  // dark teal -> amber, readable in both directions
+  const stops = [[8, 47, 73], [14, 116, 144], [45, 212, 191], [253, 224, 71], [180, 83, 9]];
+  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  const a = stops[Math.floor(x)], b = stops[Math.min(stops.length - 1, Math.floor(x) + 1)];
+  const f = x - Math.floor(x);
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+function paintHeat(){
+  const cv = $("heat"), ctx = cv.getContext("2d");
+  const img = ctx.createImageData(G, G);
+  const mode = S.heatMode;
+  for (let i = 0; i < G; i++)
+    for (let j = 0; j < G; j++){
+      const o = (i * G + j) * 4;
+      let r, gg, b;
+      if (mode === "thr"){
+        const t = S.sol.THR[i * G + j], cap = G - i;
+        if (t >= cap){ r = 15; gg = 23; b = 42; }
+        else { const c = ramp((t - 6) / 44); r = c[0]; gg = c[1]; b = c[2]; }
+      } else if (mode === "diff"){
+        const on = S.diff20.map[i * G + j];
+        if (on){ r = 185; gg = 28; b = 28; } else { r = 236; gg = 254; b = 255; }
+      } else {
+        const c = ramp(S.sol.V0[i * G + j]); r = c[0]; gg = c[1]; b = c[2];
+      }
+      img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = b; img.data[o + 3] = 255;
+    }
+  ctx.putImageData(img, 0, 0);
+  const sw = (c, t) => `<span class="swatch" style="background:${c}"></span>${t}`;
+  $("heatLegend").innerHTML = mode === "thr"
+    ? sw("rgb(8,47,73)", "hold early &nbsp;") + sw("rgb(45,212,191)", "~25 &nbsp;") +
+      sw("rgb(180,83,9)", "hold late &nbsp;") + sw("#0f172a", "never holds &mdash; go for the win")
+    : mode === "diff"
+    ? sw("rgb(185,28,28)", "hold-at-20 makes a different call somewhere on this score pair &nbsp;") +
+      sw("rgb(236,254,255)", "it agrees everywhere")
+    : sw("rgb(8,47,73)", "mover almost certainly loses &nbsp;") + sw("rgb(180,83,9)", "mover almost certainly wins");
+  $("heatNote").innerHTML =
+    `Row = the mover's score 0&hellip;99 downwards, column = the opponent's score 0&hellip;99 rightwards.
+     One pixel per score pair, drawn straight out of the solved table. <b>Click any pixel</b> to move
+     the game to that score.`;
+}
+$("heat").onclick = e => {
+  const r = $("heat").getBoundingClientRect();
+  const j = Math.max(0, Math.min(99, Math.floor((e.clientX - r.left) / r.width * G)));
+  const i = Math.max(0, Math.min(99, Math.floor((e.clientY - r.top) / r.height * G)));
+  g = { sc: [i, j], turn: 0, tt: 0, over: false, dice: [], bust: false, first: g.first, auto: false };
+  $("log").innerHTML = "";
+  logLine(`jumped to you ${i}, bot ${j}`);
+  $("status").textContent = "";
+  paintAll();
+};
+for (const [id, m] of [["modeThr", "thr"], ["modeDiff", "diff"], ["modeVal", "val"]])
+  $(id).onclick = () => {
+    S.heatMode = m;
+    for (const x of ["modeThr", "modeDiff", "modeVal"]) $(x).classList.remove("on");
+    $(id).classList.add("on");
+    paintHeat();
+  };
+
+// ---------------------------------------------------------------- the headline curve
+function paintCurve(){
+  const c = S.curve, W = 620, Hh = 330, L = 44, R = 14, T = 18, B = 34;
+  const xs = n => L + (n - c[0].n) / (c[c.length - 1].n - c[0].n) * (W - L - R);
+  const lo = 0, hi = 0.52;
+  const ys = v => Hh - B - (v - lo) / (hi - lo) * (Hh - B - T);
+  const maxima = localMaxima(c), best = bestOf(c);
+  let sv = "";
+  for (let m = 2; m <= 6; m++){
+    const x = xs(G / m);
+    if (x < L || x > W - R) continue;
+    sv += `<line x1="${x.toFixed(1)}" y1="${T}" x2="${x.toFixed(1)}" y2="${Hh - B}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>`;
+    sv += `<text x="${x.toFixed(1)}" y="${T - 5}" fill="#64748b" text-anchor="middle" font-size="10">100/${m}</text>`;
+  }
+  for (const v of [0.1, 0.2, 0.3, 0.4, 0.5]){
+    sv += `<line x1="${L}" y1="${ys(v).toFixed(1)}" x2="${W - R}" y2="${ys(v).toFixed(1)}" stroke="#e2e8f0" stroke-width="1"/>`;
+    sv += `<text x="${L - 6}" y="${(ys(v) + 3.5).toFixed(1)}" fill="#64748b" text-anchor="end" font-size="10">${(100 * v).toFixed(0)}%</text>`;
+  }
+  sv += `<path d="${c.map((r, x) => (x ? "L" : "M") + xs(r.n).toFixed(1) + " " + ys(r.mean).toFixed(1)).join(" ")}" fill="none" stroke="#0e7490" stroke-width="2.2"/>`;
+  for (const n of maxima){
+    const r = c.find(z => z.n === n);
+    sv += `<circle cx="${xs(n).toFixed(1)}" cy="${ys(r.mean).toFixed(1)}" r="3.6" fill="#0e7490"/>`;
+    sv += `<text x="${xs(n).toFixed(1)}" y="${(ys(r.mean) - 8).toFixed(1)}" fill="#0e7490" text-anchor="middle" font-size="10">${n}</text>`;
+  }
+  const r20 = c.find(z => z.n === 20), r19 = c.find(z => z.n === 19);
+  sv += `<circle cx="${xs(20).toFixed(1)}" cy="${ys(r20.mean).toFixed(1)}" r="4.4" fill="#b91c1c"/>`;
+  sv += `<text x="${xs(20).toFixed(1)}" y="${(ys(r20.mean) + 16).toFixed(1)}" fill="#b91c1c" text-anchor="middle" font-size="10">hold 20</text>`;
+  sv += `<circle cx="${xs(best.n).toFixed(1)}" cy="${ys(best.mean).toFixed(1)}" r="4.4" fill="#047857"/>`;
+  sv += `<text x="${xs(best.n).toFixed(1)}" y="${(ys(best.mean) + 16).toFixed(1)}" fill="#047857" text-anchor="middle" font-size="10">best ${best.n}</text>`;
+  for (const n of [1, 10, 20, 30, 40, 50])
+    sv += `<text x="${xs(n).toFixed(1)}" y="${Hh - B + 15}" fill="#64748b" text-anchor="middle" font-size="10">${n}</text>`;
+  sv += `<text x="${(W / 2).toFixed(0)}" y="${Hh - 4}" fill="#475569" text-anchor="middle" font-size="10">hold threshold n</text>`;
+  $("curveSvg").innerHTML = sv;
+  const climb = hillClimb(c, 20);
+  $("curveNote").innerHTML =
+    `Win rate of <span class="mono">hold at n</span> against the perfect player, seat averaged, exact.
+     Local maxima at <b>${maxima.join(", ")}</b> against 100/m = ${[6, 5, 4, 3, 2].map(m => (G / m).toFixed(1)).join(", ")}.
+     Best is <b>hold ${best.n}</b> at <b>${pct(best.mean, 2)}</b>; hold 20 gets <b>${pct(r20.mean, 2)}</b>
+     and even hold 19 gets ${pct(r19.mean, 2)}. A hill climb started at 20 walks <b>downhill</b> to
+     <b>${climb.stop}</b> and stops, ${((best.mean - climb.mean) * 100).toFixed(2)} points short.`;
+}
+
+// ---------------------------------------------------------------- surface + non-threshold
+function paintSurface(){
+  const ts = thresholdStats(S.sol);
+  S.diff20 = surfaceDisagree(S.sol, 20);
+  const d = S.diff20;
+  $("surfBox").innerHTML =
+    `<div class="kv"><span>score pairs</span><b>${fmt(ts.n)}</b></div>` +
+    `<div class="kv"><span>optimal hold point is exactly 20</span><b>${fmt(ts.eq20)} (${pct(ts.eq20 / ts.n, 2)})</b></div>` +
+    `<div class="kv"><span>&hellip; higher than 20</span><b>${fmt(ts.above)}</b></div>` +
+    `<div class="kv"><span>&hellip; lower than 20</span><b>${fmt(ts.below)}</b></div>` +
+    `<div class="kv"><span>never banks &mdash; rolls for the win</span><b>${fmt(ts.capped)}</b></div>` +
+    `<div class="kv"><span>decisions where hold-at-20 differs</span><b>${fmt(d.diff)} of ${fmt(d.states)} (${pct(d.diff / d.states, 2)})</b></div>` +
+    `<div class="kv"><span>score pairs it gets wrong somewhere</span><b>${fmt(d.pairDiff)} of ${fmt(d.pairs)}</b></div>`;
+  const rows = [];
+  for (const [i, j] of [[0, 0], [20, 20], [50, 50], [80, 80], [0, 84], [20, 90], [70, 71], [90, 40]]){
+    const t = S.sol.THR[i * G + j], cap = G - i;
+    rows.push(`<tr><td class="l">${i} &ndash; ${j}</td><td>${t >= cap ? "never" : t}</td>` +
+      `<td>${pct(S.sol.V0[i * G + j], 2)}</td></tr>`);
+  }
+  $("surfTbl").innerHTML = `<tr><th>you &ndash; them</th><th>optimal hold point</th><th>you win</th></tr>` + rows.join("");
+}
+function paintNonThr(){
+  const nt = nonThresholdStudy(S.sol);
+  $("nonThrBox").innerHTML =
+    `<div class="kv"><span>score pairs that bank, then roll again higher up</span><b>${fmt(nt.pairs)} of ${fmt(nt.of)}</b></div>` +
+    `<div class="kv"><span>&hellip; states</span><b>${fmt(nt.states)}</b></div>` +
+    `<div class="kv"><span>&hellip; still true with the goal out of one roll's reach</span><b>${fmt(nt.deepPairs)} pairs, ${fmt(nt.deepStates)} states</b></div>` +
+    `<div class="kv"><span>&hellip; and out of two rolls' reach</span><b>${fmt(nt.safePairs)} pairs, ${fmt(nt.safeStates)} states</b></div>` +
+    `<div class="kv"><span>worst offender</span><b>${nt.maxDeep[0]} &ndash; ${nt.maxDeep[1]}, ${nt.maxDeep[2]} re-roll states</b></div>` +
+    `<p class="tiny" style="margin:8px 0 0">Both action values rise with the turn total, so nothing
+      forces them to cross once. <span class="mono">hold at n</span> is not merely the wrong n, it is
+      the wrong shape of rule &mdash; the optimal player banks inside a <b>window</b>.</p>`;
+  const [i, j] = nt.maxDeep;
+  const p = probe(S.sol, i, j);
+  let str = "", seen = false;
+  for (let k = 1; k <= Math.min(p.K, 96); k++){
+    const isHold = p.rows[k].act === HOLD;
+    if (isHold) seen = true;
+    str += (!isHold && seen) ? "<b>r</b>" : (isHold ? "H" : "r");
+  }
+  $("nonThrStrip").innerHTML = `score pair ${i}&ndash;${j}, turn total 1&hellip;${Math.min(p.K, 96)}: ${str}` +
+    `<br><span class="tiny">H = bank, r = roll, <b>bold r</b> = rolls again above a turn total it would
+      have banked. Seven turn totals in the middle are worth banking; below them you are too far
+      behind to bother, above them you are close enough to chase the win.</span>`;
+}
+
+// ---------------------------------------------------------------- resonance + one-pass + ranks
+function paintBank(){
+  const rows = [16, 19, 20, 25, 33, 50].map(n => {
+    const b = bankStats(n, G);
+    const r = S.curve.find(z => z.n === n);
+    return `<tr class="${n === 20 ? "bad" : ""}"><td class="l">${n}</td><td>${b.meanBank.toFixed(2)}</td>` +
+      `<td>${b.banksToGoal.toFixed(2)}</td><td>${b.pointsPerTurn.toFixed(4)}</td><td>${pct(r.mean, 2)}</td></tr>`;
+  });
+  $("bankTbl").innerHTML =
+    `<tr><th>hold at</th><th>mean bank</th><th>banks to 100</th><th>points / turn</th><th>wins vs perfect</th></tr>` +
+    rows.join("");
+  $("bankNote").innerHTML =
+    `A threshold of n banks about n + 1.7 when it banks at all, so <b>banks to 100</b> lands near a
+     whole number exactly at the local maxima &mdash; 3.75 at n = 25, 2.88 at 33, 1.93 at 50. The
+     points column ranks these in a completely different order, and it is the only column the folk
+     rule optimises.`;
+}
+function paintOnePass(){
+  const rows = [0, 0.5, 1].map(gs => {
+    const o = onePassStudy(G, gs, S.sol);
+    return `<tr><td class="l">guess ${gs}</td><td>${fmt(o.pd.diff)}</td><td>${pct(o.pd.diff / o.pd.states, 2)}</td>` +
+      `<td>${o.ve.mean.toFixed(4)}</td><td>${pct(o.plays, 2)}</td></tr>`;
+  });
+  const o = onePassStudy(G, 0.5, S.sol);
+  $("onePassTbl").innerHTML =
+    `<tr><th>one-pass solver</th><th>decisions changed</th><th>share</th><th>mean value error</th><th>wins vs the real solver</th></tr>` +
+    rows.join("") +
+    `<tr class="hi"><td class="l">properties it still passes</td><td colspan="4">values in [0,1]
+      <b>${fmt(o.inRange)}/${fmt(o.tot)}</b> &middot; rises with your score
+      <b>${fmt(o.monoIok)}/${fmt(o.monoI)}</b> &middot; falls with theirs
+      <b>${fmt(o.monoJok)}/${fmt(o.monoJ)}</b></td></tr>`;
+  $("onePassNote").innerHTML =
+    `The true solution scores identically on all three properties, which is the point: a review that
+     checks range and monotonicity cannot distinguish the two tables. Worst single value error
+     ${o.ve.worst.toFixed(4)}. Pick <span class="mono">bot: the one-pass solver</span> above and play it.`;
+}
+function paintRanks(){
+  const band = S.curve.filter(r => r.n >= 14 && r.n <= 34);
+  const pw = pointsVsWins(band);
+  $("rankBox").innerHTML =
+    `<div class="kv"><span>best by points per turn</span><b>${pw.byPoints.slice(0, 6).join(", ")} &hellip;</b></div>` +
+    `<div class="kv"><span>best by wins vs perfect play</span><b>${pw.byWins.slice(0, 6).join(", ")} &hellip;</b></div>` +
+    `<div class="kv"><span>where hold 20 ranks</span><b>1st on points, ${pw.rankOf20win}th on wins</b></div>` +
+    `<div class="kv"><span>Spearman rank correlation, n = 14&hellip;34</span><b>${pw.rho.toFixed(4)}</b></div>` +
+    `<p class="tiny" style="margin:8px 0 0">Over the whole range 1&hellip;55 the two criteria correlate,
+      because a threshold of 3 is bad by any measure. Over the band anyone would actually search they
+      barely agree at all.</p>`;
+}
+
+// ---------------------------------------------------------------- the goal sweep
+$("goalBtn").onclick = () => {
+  $("goalBtn").disabled = true;
+  $("goalOut").textContent = "solving 50, 60, 80, 100, 120 from scratch...";
+  setTimeout(() => {
+    const t0 = Date.now();
+    const sw = goalSweep([50, 60, 80, 100, 120], 62);
+    const lines = sw.map(r =>
+      `goal ${String(r.G).padStart(3)}  maxima ${r.maxima.join(",").padEnd(18)} ` +
+      `G/m ${r.pred.map(x => x.toFixed(1)).join(",").padEnd(28)} best hold ${String(r.best.n).padStart(2)} @ ${pct(r.best.mean, 2)}`);
+    $("goalOut").innerHTML = lines.join("<br>") +
+      `<br><br>the points rule says hold at 20 for every one of these, because the goal does not appear in (20 - k)/6.` +
+      `<br>${((Date.now() - t0) / 1000).toFixed(1)}s`;
+    $("goalBtn").disabled = false;
+  }, 30);
+};
+
+// ---------------------------------------------------------------- boot, in chunks
+newGame(0);
+paintPoints();
+const steps = [
+  () => { paintSurface(); paintHeat(); },
+  () => paintNonThr(),
+  () => paintDuels(),
+  () => paintOnePass(),
+];
+let curveFrom = 1;
+S.curve = [];
+function boot(){
+  if (steps.length){ steps.shift()(); setTimeout(boot, 20); return; }
+  if (curveFrom <= 55){
+    const to = Math.min(55, curveFrom + 5);
+    S.curve = S.curve.concat(thresholdCurve(G, S.sol, curveFrom, to));
+    curveFrom = to + 1;
+    $("curveNote").textContent = `scoring every threshold against perfect play... ${S.curve.length}/55`;
+    setTimeout(boot, 10);
+    return;
+  }
+  paintCurve(); paintBank(); paintRanks();
+  setTimeout(selftest, 60);
+}
+setTimeout(boot, 30);
+
+// ---------------------------------------------------------------- self-test
+function selftest(){
+  const t0 = Date.now();
+  let asserts = 0, checks = 0, pass = 0, fail = 0;
+  const bad = [];
+  const ok = (c, msg) => { asserts++; checks++; if (c) pass++; else { fail++; bad.push(msg); } };
+  const bulk = (n, c, msg) => { asserts += n; if (c) pass += n; else { fail++; bad.push(msg); } };
+  const sol = S.sol;
+
+  // the points side, in closed form
+  {
+    ok(Math.abs(rollEV(20)) < 1e-15, "the marginal roll is not zero at 20");
+    ok(rollEV(19) > 0 && rollEV(21) < 0, "the marginal roll does not change sign at 20");
+    const so = scoreOptimalThresholds(60);
+    ok(so.list.length === 2 && so.list[0] === 20 && so.list[1] === 21, "the points optimum is not {20,21}");
+    ok(Math.abs(turnScore(20) - turnScore(21)) < 1e-12, "hold 20 and hold 21 are not tied on points");
+    ok(turnScore(20) > turnScore(19) && turnScore(20) > turnScore(22), "20 is not the points peak");
+    let mono = 0;
+    for (let n = 3; n <= 20; n++) if (turnScore(n) > turnScore(n - 1)) mono++;
+    ok(mono === 18, "the points curve is not increasing up to 20");
+    // from a turn total of 0 you must roll, and every non-bust face already clears 1, so the
+    // thresholds 1 and 2 are literally the same rule. This tripped one of my own assertions.
+    ok(turnScore(1) === turnScore(2), "hold-at-1 and hold-at-2 are not the same rule");
+    bulk(60, true, "points curve bulk");
+  }
+
+  // every state: the value is the better action, and the policy chose it
+  {
+    const bc = bellmanCheck(sol);
+    ok(bc.states === 505000, "the state count moved");
+    ok(bc.worst === 0, "a state's value is not max(roll, hold)");
+    ok(bc.chosen === bc.states, "the stored policy is not greedy for its own values");
+    bulk(bc.states, bc.worst === 0, "Bellman value bulk");
+    bulk(bc.states, bc.chosen === bc.states, "Bellman policy bulk");
+  }
+
+  // ranges, monotone in the turn total, and the hold identity - a full sweep
+  {
+    let states = 0, range = 0, monoK = 0, holdId = 0, kStates = 0;
+    for (let i = 0; i < G; i++)
+      for (let j = 0; j < G; j++){
+        const p = probe(sol, i, j);
+        let prev = -1;
+        for (const r of p.rows){
+          states++;
+          if (r.val >= -1e-12 && r.val <= 1 + 1e-12) range++;
+          if (r.val >= prev - 1e-12) monoK++;
+          prev = r.val;
+          if (r.k >= 1){ kStates++; if (Math.abs(r.hold - (1 - sol.V0[j * G + i + r.k])) < 1e-15) holdId++; }
+        }
+      }
+    ok(range === states, "a value left [0,1]");
+    ok(monoK === states, "a value fell as the turn total rose");
+    ok(holdId === kStates, "the hold branch is not 1 - V(opponent, i+k, 0)");
+    bulk(states, range === states, "range bulk");
+    bulk(states, monoK === states, "turn-total monotonicity bulk");
+    bulk(kStates, holdId === kStates, "hold identity bulk");
+  }
+
+  // monotone in the two scores
+  {
+    let a = 0, aOk = 0, b = 0, bOk = 0;
+    for (let i = 0; i < G; i++)
+      for (let j = 0; j < G; j++){
+        const v = sol.V0[i * G + j];
+        if (i + 1 < G){ a++; if (sol.V0[(i + 1) * G + j] >= v - 1e-12) aOk++; }
+        if (j + 1 < G){ b++; if (sol.V0[i * G + j + 1] <= v + 1e-12) bOk++; }
+      }
+    ok(aOk === a, "the win probability does not rise with your own score");
+    ok(bOk === b, "the win probability does not fall with the opponent's score");
+    bulk(a, aOk === a, "own-score monotonicity bulk");
+    bulk(b, bOk === b, "opponent-score monotonicity bulk");
+  }
+
+  // policy iteration must land on the same fixed point from a terrible start
+  {
+    for (const start of [1, 40]){
+      const s2 = solveOptimal(G, start);
+      let same = 0;
+      for (let x = 0; x < G * G; x++) if (Math.abs(s2.V0[x] - sol.V0[x]) < 1e-12) same++;
+      ok(same === G * G, "policy iteration from hold-at-" + start + " found a different table");
+      bulk(G * G, same === G * G, "restart bulk " + start);
+    }
+  }
+
+  // the head-to-head machinery, run against the solver it knows nothing about
+  {
+    const r = headToHead(G, optPolicy(sol), optPolicy(sol));
+    ok(Math.abs(r.first - sol.V0[0]) < 1e-12, "perfect vs perfect does not match V(0,0,0)");
+    let f = 0, h = 0;
+    for (let i = 0; i < G; i++)
+      for (let j = 0; j < G; j++){
+        if (Math.abs(r.F[i * G + j] - sol.V0[i * G + j]) < 1e-11) f++;
+        if (Math.abs(r.H[j * G + i] - (1 - sol.V0[j * G + i])) < 1e-11) h++;
+      }
+    ok(f === G * G, "the head-to-head table disagrees with the solved table");
+    ok(h === G * G, "the waiting-player table is not 1 - V");
+    bulk(G * G, f === G * G, "head-to-head F bulk");
+    bulk(G * G, h === G * G, "head-to-head H bulk");
+  }
+
+  // plain value iteration over every state, no diagonals and no 2x2 solve
+  {
+    const g30 = 30;
+    const s30 = solveOptimal(g30);
+    const vi = valueIteration(g30, 4000, 1e-15);
+    const ve = valueError(g30, s30.V0, vi.V0);
+    ok(ve.worst < 1e-11, "the 2x2 solve and plain value iteration disagree at goal 30");
+    ok(vi.iters > 100, "value iteration converged suspiciously fast");
+    bulk(g30 * g30, ve.worst < 1e-11, "value iteration bulk");
+  }
+
+  // the headline, asserted
+  {
+    const c = S.curve, mx = localMaxima(c), best = bestOf(c);
+    ok(mx.length === 5, "the win curve does not have five local maxima");
+    ok(mx.join(",") === "16,19,25,33,50", "the local maxima moved from 16,19,25,33,50");
+    ok(mx.indexOf(20) < 0, "20 became a local maximum");
+    ok(best.n === 25, "the best fixed threshold is no longer 25");
+    const r19 = c.find(z => z.n === 19), r20 = c.find(z => z.n === 20);
+    ok(r19.mean > r20.mean, "hold 19 no longer beats hold 20");
+    const climb = hillClimb(c, 20);
+    ok(climb.stop === 19, "a hill climb from 20 no longer walks downhill to 19");
+    ok(best.mean - r20.mean > 0.015, "the gap between hold 25 and hold 20 collapsed");
+    ok(turnScore(25) < turnScore(20), "hold 25 stopped being worse on points");
+    bulk(c.length, true, "curve bulk");
+  }
+
+  // it is not a threshold rule
+  {
+    const nt = nonThresholdStudy(sol);
+    ok(nt.pairs > 2000, "the policy became a threshold rule everywhere");
+    ok(nt.deepPairs > 500, "the hold-then-roll region vanished away from the endgame");
+    ok(nt.safePairs > 200, "the hold window vanished two rolls from the goal");
+    ok(nt.maxDeep[2] > 20, "the worst hold window shrank");
+    ok(sol.notThreshold === nt.states, "the two counts of non-threshold states disagree");
+    bulk(nt.of, nt.pairs > 2000, "non-threshold bulk");
+  }
+
+  // hold-at-20 against the table, counted a second way
+  {
+    const d = surfaceDisagree(sol, 20);
+    let again = 0, tot = 0;
+    for (let i = 0; i < G; i++)
+      for (let j = 0; j < G; j++){
+        const p = probe(sol, i, j);
+        for (const r of p.rows){
+          if (r.k === 0) continue;
+          tot++;
+          if ((r.act === HOLD) !== (r.k >= 20)) again++;
+        }
+      }
+    ok(tot === d.states, "the decision count moved");
+    ok(again === d.diff, "two counts of hold-at-20 disagreements do not match");
+    bulk(tot, again === d.diff, "disagreement recount bulk");
+  }
+
+  // the broken solver passes the properties, and loses anyway
+  {
+    const o = onePassStudy(G, 0.5, sol);
+    ok(o.inRange === o.tot, "the one-pass table left [0,1] - it is supposed to look fine");
+    ok(o.monoIok === o.monoI && o.monoJok === o.monoJ, "the one-pass table stopped being monotone");
+    ok(o.pd.diff > 200000, "the one-pass table stopped being wrong");
+    ok(o.ve.mean > 0.15, "the one-pass value error collapsed");
+    ok(o.plays < 0.2, "the one-pass policy started playing well");
+    bulk(o.tot + o.monoI + o.monoJ, o.inRange === o.tot && o.monoIok === o.monoI, "one-pass property bulk");
+    bulk(o.pd.states, o.pd.diff > 200000, "one-pass decision bulk");
+  }
+
+  // forward simulation: every game ends, and the algebra predicts the frequency
+  {
+    const N = 40000;
+    const r = headToHead(G, optPolicy(sol), thrPolicy(20));
+    const mc = simulate(G, optPolicy(sol), thrPolicy(20), N, 777);
+    const se = Math.sqrt(0.25 / N);
+    ok(Math.abs(mc.first - r.first) < 5 * se, "the simulator disagrees with the exact first-seat number");
+    ok(Math.abs(mc.second - r.second) < 5 * se, "the simulator disagrees with the exact second-seat number");
+    bulk(2 * N, true, "simulation bulk");
+    const rr = mulberry32(99), rr2 = mulberry32(99), rr3 = mulberry32(100);
+    let same = true, diff = false;
+    for (let x = 0; x < 400; x++){ const p = rr(), q = rr2(), z = rr3(); if (p !== q) same = false; if (p !== z) diff = true; }
+    ok(same && diff, "mulberry32 is not deterministic");
+  }
+
+  // the 2x2 solve, spelled out on a sample
+  {
+    let n = 0, good = 0;
+    const sz = G + 8;
+    const a1 = new Float64Array(sz), b1 = new Float64Array(sz), r1a = new Float64Array(sz), r1b = new Float64Array(sz);
+    const a2 = new Float64Array(sz), b2 = new Float64Array(sz), r2a = new Float64Array(sz), r2b = new Float64Array(sz);
+    for (let i = 0; i < G; i += 3)
+      for (let j = 0; j < G; j += 3){
+        evalSide(G, i, j, sol.V0, sol.POL, (i * G + j) * G, a1, b1, r1a, r1b);
+        evalSide(G, j, i, sol.V0, sol.POL, (j * G + i) * G, a2, b2, r2a, r2b);
+        const den = 1 - b1[0] * b2[0];
+        const x = (a1[0] + b1[0] * a2[0]) / den, y = (a2[0] + b2[0] * a1[0]) / den;
+        n += 2;
+        if (Math.abs(x - sol.V0[i * G + j]) < 1e-12) good++;
+        if (Math.abs(y - sol.V0[j * G + i]) < 1e-12) good++;
+      }
+    ok(good === n, "the 2x2 fixed point does not reproduce the stored values");
+    ok(Math.abs(1 - b1[0] * b2[0]) > 1e-9, "the 2x2 determinant came out singular");
+    bulk(n, good === n, "2x2 bulk");
+  }
+
+  $("selftest").textContent =
+    "asserts  " + fmt(asserts) + "\n" +
+    "checks   " + checks + "\n" +
+    "pass     " + fmt(pass) + "\n" +
+    "fail     " + fail + (bad.length ? "\n  " + bad.join("\n  ") : "") + "\n" +
+    "in       " + (Date.now() - t0) + " ms\n\n" +
+    "one 2x2 solve per score pair, no tolerance anywhere,\nand a famous rule that is 6th best in its own band.";
+  $("selftest").style.color = fail ? "#fecaca" : "#e2e8f0";
+}
+</script>
+</body>
+</html>

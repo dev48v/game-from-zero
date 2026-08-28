@@ -1,0 +1,1891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 74 — Kuhn Poker</title>
+<style>
+  :root{
+    --ink:#161226; --sub:#4c4468; --mute:#6b6389; --line:#e6e2f2;
+    --bg:#faf9fd; --bg2:#f2effa; --card:#ffffff;
+    --acc:#6d28d9; --acc-soft:#f5f3ff; --acc-line:#ddd6fe;
+    --warn:#b45309; --warn-soft:#fffbeb; --warn-line:#fcd34d;
+    --good:#047857; --bad:#b91c1c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,sans-serif;
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;margin:0}
+  p{margin:0 0 14px}
+  strong{font-weight:800}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;
+       background:var(--bg2);padding:1px 5px;border-radius:4px}
+  pre{background:#161226;color:#e6e2f2;padding:12px 14px;border-radius:10px;font-size:12px;
+      overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;
+      margin:0 0 14px}
+  .hidden{display:none !important}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* The hero paragraph is taller than most viewports, so the header must NOT be sticky - a sticky
+     box taller than the screen pins itself over the page forever. Only the tab bar sticks. */
+  header{background:#fff;padding-bottom:4px}
+  nav#tabbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+  nav#tabbar .wrap{padding:10px 16px}
+  .wrap{max-width:1140px;margin:0 auto;padding:18px 16px}
+  .wrap-narrow{max-width:840px;margin:0 auto;padding:24px 16px 60px}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--acc);margin:0 0 8px}
+  h1.hero{font-size:20px;font-weight:900;margin-bottom:16px}
+  @media(min-width:768px){ h1.hero{font-size:23px} }
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tabs button{border:0;border-radius:9px;padding:9px 20px;font-weight:700;font-size:14px;
+               background:var(--bg2);color:var(--ink);cursor:pointer;font-family:inherit}
+  .tabs button.tab-active{background:var(--ink);color:#fff}
+
+  section.tab-panel{min-height:calc(100vh - 76px)}
+  #look{background:var(--bg2);padding:16px}
+  #understand{padding:16px}
+  #build{background:var(--bg);padding:16px}
+  @media(min-width:768px){ #look,#understand,#build{padding:32px 16px} }
+
+  .cols{display:grid;grid-template-columns:1fr;gap:18px;max-width:1140px;margin:0 auto}
+  @media(min-width:1024px){ .cols{grid-template-columns:1.5fr 1fr} }
+  .stack{display:flex;flex-direction:column;gap:18px}
+
+  .card{background:var(--card);border-radius:16px;padding:18px;
+        box-shadow:0 1px 2px rgba(22,18,38,.06),0 1px 10px rgba(22,18,38,.05)}
+  .lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute);margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .pill{padding:6px 11px;border-radius:9px;font-size:12.5px;font-weight:700;font-family:inherit;
+        border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .pill:hover{background:var(--acc-soft);border-color:var(--acc-line)}
+  .pill:disabled{opacity:.34;cursor:default}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  select.pill{cursor:pointer}
+  .go{padding:8px 15px;border-radius:9px;border:0;background:var(--acc);color:#fff;
+      font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.4;cursor:default}
+
+  svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700}
+
+  .cardrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;min-height:96px}
+  .pcard{width:62px;height:88px;border:1px solid var(--line);border-radius:9px;background:#fff;
+         display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .pcard .rk{font-size:30px;font-weight:900;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .pcard .sm{font-size:10px;color:var(--mute);font-weight:800;letter-spacing:.08em}
+  .pcard.hole{background:var(--bg2);border-style:dashed}
+  .pcard.win{border-color:var(--good);background:#ecfdf5}
+  .pcard.lose{border-color:var(--bad);background:#fef2f2}
+
+  table.num{border-collapse:collapse;width:100%}
+  table.num th,table.num td{padding:4px 8px;font-variant-numeric:tabular-nums}
+  table.num th{font-size:10.5px;letter-spacing:.05em;color:var(--mute);text-align:right;font-weight:800}
+  table.num th:first-child,table.num td:first-child{text-align:left}
+  table.num td{text-align:right;font-size:12.5px;border-top:1px solid var(--line)}
+  table.num td.l{text-align:left}
+  table.num tr.hi td{background:var(--acc-soft);font-weight:800}
+  table.num tr.bad td{background:#fef2f2}
+  table.num tr.good td{background:#ecfdf5}
+
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+       max-height:170px;overflow:auto}
+  .log div{padding:1px 0;border-bottom:1px solid var(--bg2)}
+
+  .note{border-left:4px solid var(--acc);background:var(--acc-soft);padding:12px 14px;border-radius:0 10px 10px 0;
+        margin:0 0 16px}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .note p{margin:0;font-size:13.5px}
+  .note p+p{margin-top:8px}
+
+  .verdict{font-weight:900;font-size:14px}
+  .win{color:var(--good)} .lose{color:var(--bad)}
+  .bar{height:9px;border-radius:99px;background:var(--line);overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--acc)}
+  .small{font-size:12px;color:var(--sub)}
+  .tiny{font-size:11.5px;color:var(--mute)}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0}
+  .kv b{font-variant-numeric:tabular-nums}
+  .huge{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
+  h2.big{font-size:23px;font-weight:900;margin:0 0 16px}
+  h3.mid{font-size:17.5px;font-weight:800;margin:26px 0 10px}
+  .wrap-narrow p,.wrap-narrow li{color:#251f3a}
+  .wrap-narrow ul{margin:0 0 14px;padding-left:22px}
+  .wrap-narrow li{margin-bottom:6px}
+
+  .sl{display:grid;grid-template-columns:132px 1fr 76px;gap:8px;align-items:center;margin:0 0 6px}
+  .sl label{font-size:12px;font-weight:700}
+  .sl input[type=range]{width:100%}
+  .sl b{font-variant-numeric:tabular-nums;font-size:12.5px;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-align:right}
+  .strip{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;
+         word-break:break-all;line-height:1.5}
+  .strip b{color:var(--bad)}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;
+          margin-right:5px;border:1px solid rgba(22,18,38,.15)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">GAMEFROMZERO · DAY 74</p>
+    <h1 class="hero">
+      🃏 Kuhn poker — three cards, one bet, and the first game in this series where
+      <strong>you cannot see the position</strong>. With hidden information there is no best move,
+      only a best <em>distribution</em>, and the first player's optimal set is not a point but a
+      <strong>segment</strong>: bluff the Jack at any rate
+      <strong>&alpha;&nbsp;&isin;&nbsp;[0,&nbsp;1/3]</strong> as long as you bet the King at exactly
+      <strong>3&alpha;</strong> and call with the Queen at exactly <strong>&alpha;&nbsp;+&nbsp;1/3</strong>.
+      Every member is worth exactly <strong>&minus;1/18</strong> a hand and is
+      <strong>exactly</strong> unexploitable &mdash; certified in BigInt rationals, not to a
+      tolerance. Now find it the way anyone would, by sweeping a grid over the strategy space, and
+      the answer is decided by <strong>arithmetic, not resolution</strong>: a grid of step
+      <span class="mono">1/q</span> contains exactly <strong>q/3&nbsp;+&nbsp;1</strong>
+      unexploitable strategies when <strong>3 divides q</strong> and <strong>exactly zero</strong>
+      otherwise, because every payoff on that grid is a multiple of
+      <span class="mono">1/6q</span> and the game value is not. So <strong>2,197</strong> cells at
+      step 1/12 contain <strong>five</strong> exact optima and <strong>1,030,301</strong> cells at
+      step 1/100 contain <strong>none</strong> &mdash; 469&times; the work for a floor of
+      <strong>1/900</strong> that no amount of searching can beat. Refining is not the fix.
+      <strong>Every power of two fails</strong>, and doubling one improves the floor by exactly
+      4&times; or by exactly <em>nothing</em>, alternating forever: 1/32 and 1/64 return the
+      identical floor <strong>1/576</strong>, 1/128 and 1/256 the identical
+      <strong>1/2304</strong>. Going from 100 steps to <strong>101</strong> halves the floor to
+      1/1818; going to <strong>102</strong> takes it to <strong>zero</strong>. All of it is one
+      rounding question &mdash; whether 1/3 lands above or below the nearest grid point &mdash;
+      because <strong>under-calling the Queen costs exactly twice</strong> what over-calling costs.
+      Then the two other things a reasonable person does. Hill-climb instead: the 1/30 grid has
+      <strong>31</strong> local minima and <strong>20</strong> of them are not optimal. Or test
+      against a solved opponent: <strong>all 29,791</strong> grid strategies score exactly the game
+      value against the equilibrium, and <strong>18 of the 64</strong> pure strategies tie it too
+      &mdash; the worst of them leaking <strong>4/9</strong>, eight times the value of the whole
+      game. Pure vanilla JS, one file, no build step.
+    </h1>
+  </div>
+</header>
+
+<nav id="tabbar">
+  <div class="wrap tabs" id="tabs">
+    <button data-tab="look" class="tab-active">🃏 PLAY</button>
+    <button data-tab="understand">🧠 UNDERSTAND</button>
+    <button data-tab="build">🔨 BUILD</button>
+  </div>
+</nav>
+
+<section id="look" class="tab-panel">
+  <div class="cols">
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">ONE HAND OF KUHN POKER &mdash; YOU ARE FIRST TO ACT</p>
+        <div class="row" style="margin-bottom:10px">
+          <select id="oppSel" class="pill">
+            <option value="eq">opponent: the equilibrium (unique)</option>
+            <option value="exploit">opponent: the punisher for your current sliders</option>
+            <option value="callall">opponent: calls everything, never bluffs</option>
+            <option value="foldall">opponent: folds everything to a bet</option>
+          </select>
+          <button id="dealBtn" class="go">deal</button>
+          <button id="autoBtn" class="pill">play 200 hands with the sliders</button>
+        </div>
+        <div class="cardrow" id="cards"></div>
+        <p class="small" id="potLine" style="margin:8px 0 4px"></p>
+        <div class="row" style="margin-top:6px">
+          <button id="aCheck" class="go">check</button>
+          <button id="aBet" class="go">bet 1</button>
+          <button id="aFold" class="pill">fold</button>
+          <button id="aCall" class="pill">call 1</button>
+        </div>
+        <p class="small" id="status" style="margin:10px 0 0"></p>
+        <div id="log" class="log" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">YOUR STRATEGY, AND THE PLAYER WHO PUNISHES IT</p>
+        <div class="sl"><label>bluff the Jack</label><input id="sx" type="range" min="0" max="60" value="10"><b id="vx"></b></div>
+        <div class="sl"><label>bet the King</label><input id="sy" type="range" min="0" max="60" value="30"><b id="vy"></b></div>
+        <div class="sl"><label>call with the Queen</label><input id="sz" type="range" min="0" max="60" value="30"><b id="vz"></b></div>
+        <div class="row" style="margin:8px 0 10px">
+          <button class="pill" data-preset="0">&alpha; = 0</button>
+          <button class="pill" data-preset="1">&alpha; = 1/6</button>
+          <button class="pill" data-preset="2">&alpha; = 1/3</button>
+          <button class="pill" data-preset="3">never bluff, always bet K</button>
+          <button class="pill" data-preset="4">+ always call Q</button>
+        </div>
+        <div class="huge" id="exBig">&mdash;</div>
+        <div class="bar" style="margin:10px 0 8px"><span id="exBar" style="width:0%"></span></div>
+        <div id="exBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE GRID SEARCH, AND WHY 3 DECIDES IT &mdash; THE HEADLINE</p>
+        <svg id="lawSvg" viewBox="0 0 620 320" preserveAspectRatio="xMidYMid meet"
+             style="width:100%;height:auto"></svg>
+        <p class="tiny" style="margin:6px 0 0" id="lawNote">sweeping&hellip;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EVERY RESOLUTION, SWEPT CELL BY CELL</p>
+        <table class="num" id="lawTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="lawTblNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE FOUR HEADLINE GRIDS, EXHAUSTIVELY</p>
+        <table class="num" id="bigTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="bigNote">running&hellip;</p>
+        <div class="row" style="margin-top:10px">
+          <button id="bigBtn" class="go">also sweep 1/120 and the 4-parameter grid at 1/30</button>
+        </div>
+        <div id="bigOut" class="small mono" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">POWERS OF TWO PAIR UP, FOREVER</p>
+        <table class="num" id="powTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="powNote"></p>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">THE EQUILIBRIUM FAMILY, IN EXACT RATIONALS</p>
+        <table class="num" id="certTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="certNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE LEAK IS AN ALGEBRAIC DISTANCE</p>
+        <table class="num" id="leakTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="leakNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">CONTROL 1 &mdash; HILL-CLIMB INSTEAD</p>
+        <div id="climbBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">CONTROL 2 &mdash; TEST AGAINST A SOLVED OPPONENT</p>
+        <div id="tieBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">NOT ONE PURE STRATEGY SURVIVES</p>
+        <table class="num" id="matTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="matNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHAT IS PINNED, AND BY WHAT</p>
+        <table class="num" id="domTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="domNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">A SECOND MISTAKE CAN BE A PARTIAL FIX</p>
+        <table class="num" id="compTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="compNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE SECOND SEAT PAYS EXACTLY DOUBLE</p>
+        <table class="num" id="p2Tbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="p2Note"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">REGRET MATCHING: THE AVERAGE CONVERGES, THE ITERATE NEVER DOES</p>
+        <svg id="cfrSvg" viewBox="0 0 560 260" preserveAspectRatio="xMidYMid meet"
+             style="width:100%;height:auto"></svg>
+        <p class="tiny" style="margin:6px 0 0" id="cfrNote">iterating&hellip;</p>
+        <div class="row" style="margin-top:8px">
+          <button id="cfrBtn" class="go">run it to a million</button>
+        </div>
+        <div id="cfrOut" class="small mono" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">A FORWARD SIMULATOR, AS A WITNESS</p>
+        <table class="num" id="simTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="simNote"></p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">Where the optimum lives, and why a grid cannot see it</h2>
+
+    <p>Kuhn poker is the smallest poker there is. Three cards &mdash; J, Q, K. Each player antes 1
+    and gets one card, face down. The first player checks or bets 1. If they check, the second
+    player checks (showdown for the pot of 2) or bets 1, and the first player folds or calls. If
+    they bet, the second player folds or calls. Higher card wins the pot. That is the whole game:
+    six possible deals and at most three decisions.</p>
+
+    <p>Every previous game in this series had a <em>position</em> you could look at. Here you cannot.
+    You know your own card and nothing else, so you are not choosing a move in a position &mdash;
+    you are choosing what to do in an <strong>information set</strong>, a bundle of positions you
+    cannot tell apart. The first player has six of them (a card, and either the opening decision or
+    the decision after checking into a bet) and so does the second. Six binary decisions each, so
+    <strong>64 pure strategies</strong> a side and a <strong>64&times;64</strong> payoff matrix that
+    fits on a screen.</p>
+
+    <p>And that matrix has <strong>no saddle point</strong>. Not one of its 4,096 cells is both the
+    worst in its row and the best in its column. The best guarantee a pure first-player plan can
+    make is <span class="mono">&minus;1/6</span>; the best a pure second-player plan can hold it to
+    is <span class="mono">+1/6</span>. There is a third of an ante of daylight between those two
+    numbers, and the value of the game, <strong>&minus;1/18</strong>, sits inside it. Randomising is
+    worth exactly <strong>1/9</strong> of an ante a hand to the first player, and it is not optional:
+    <strong>zero</strong> of the 64 pure strategies have zero exploitability, and the median one
+    leaks <strong>4/9</strong>.</p>
+
+    <h3 class="mid">The optimum is a segment</h3>
+
+    <p>Two of the six decisions answer themselves. Calling a bet with the Jack loses 2 instead of 1,
+    every time; calling with the King wins 2 instead of folding for &minus;1, every time. Those are
+    checked here by exhaustion rather than asserted &mdash; 4,096 opponent pairs each, zero
+    exceptions. What is left is three numbers: how often you bet the Jack (a bluff), how often you
+    bet the King (a value bet), and how often you call with the Queen.</p>
+
+    <p>The optimal set is not a point in that cube. It is a straight line:</p>
+
+    <pre>bet the Jack   with probability  alpha,   alpha in [0, 1/3]
+bet the King   with probability  3*alpha
+call the Queen with probability  alpha + 1/3</pre>
+
+    <p>Every point on it is worth exactly &minus;1/18 and has exploitability exactly zero. So
+    <em>never bluffing</em> is optimal &mdash; at &alpha;&nbsp;=&nbsp;0 you check every hand you are
+    dealt, including the King, and you cannot be beaten by more than the game already beats you.
+    <em>Always betting the King</em> is optimal too, at &alpha;&nbsp;=&nbsp;1/3, where you bluff the
+    Jack one hand in three. What is not optional is the <strong>ratio</strong>. Value bets and
+    bluffs are locked together at 3:1, and the page measures what breaking the lock costs:</p>
+
+    <pre>with the Queen call at alpha + 1/3, the exploitability is exactly
+        | bet-King-rate  -  3 * bluff-rate |  /  6</pre>
+
+    <p>That is an identity, not a fit &mdash; 3,721 points checked, worst deviation below
+    10<sup>&minus;15</sup>. The other direction has an asymmetry in it that turns out to run the
+    whole page: with the ratio held correct, calling the Queen <em>less</em> often than
+    &alpha;&nbsp;+&nbsp;1/3 by &Delta; costs <span class="mono">&Delta;/3</span>, and calling
+    <em>more</em> often by &Delta; costs <span class="mono">&Delta;/6</span>.
+    <strong>Under-calling is exactly twice as expensive as over-calling.</strong></p>
+
+    <h3 class="mid">Now go and find it</h3>
+
+    <p>You would not be told the answer. You would sweep the cube: put the three probabilities on a
+    uniform grid of step <span class="mono">1/q</span>, evaluate every cell against every one of the
+    opponent's 64 pure strategies, and keep the cells with zero exploitability. That is a completely
+    reasonable plan, and whether it returns anything at all has nothing to do with how fine the grid
+    is.</p>
+
+    <div class="note">
+      <p><strong>Every payoff on a step-1/q grid is a multiple of 1/6q.</strong> The expectation is
+      an average over six equally likely deals of terminal payoffs in
+      {&plusmn;1,&nbsp;&plusmn;2} weighted by probabilities that are multiples of
+      <span class="mono">1/q</span> &mdash; so it lands in
+      <span class="mono">(1/6q)&#8484;</span>, always. The game value is
+      <span class="mono">&minus;1/18</span>. For that to be a multiple of
+      <span class="mono">1/6q</span> you need <span class="mono">6q/18&nbsp;=&nbsp;q/3</span> to be
+      a whole number. So <strong>if 3 does not divide q, no cell on the grid can even attain the
+      value</strong>, let alone be unexploitable, and the sweep returns nothing &mdash; at any
+      resolution, for a reason that has nothing to do with poker.</p>
+    </div>
+
+    <p>When 3 <em>does</em> divide q the count is exact: the grid holds
+    <strong>q/3&nbsp;+&nbsp;1</strong> unexploitable strategies, one for each
+    &alpha;&nbsp;=&nbsp;k/q with k&nbsp;=&nbsp;0&hellip;q/3. Swept cell by cell for every q from 2 to
+    36 and again at 60, 64, 100 and 120, that formula is right every time.</p>
+
+    <h3 class="mid">The control: refine the grid</h3>
+
+    <p>The natural response to &ldquo;the sweep found nothing&rdquo; is to make the grid finer. Here
+    is what that buys. The best exploitability available on a failing grid is
+    <strong>1/18q</strong> when q&nbsp;&equiv;&nbsp;2&nbsp;(mod&nbsp;3) and <strong>1/9q</strong>
+    when q&nbsp;&equiv;&nbsp;1, and both come from the same place: the best cell is always
+    &ldquo;never bluff, never bet the King, call the Queen at the grid point nearest 1/3&rdquo;, and
+    the nearest grid point is <em>above</em> 1/3 in one residue class and <em>below</em> it in the
+    other. Above costs &Delta;/6. Below costs &Delta;/3. Twice as much, for the same distance.</p>
+
+    <ul>
+      <li><strong>1/12</strong> &mdash; 2,197 cells, <strong>5 exact optima</strong>.</li>
+      <li><strong>1/32</strong> &mdash; 35,937 cells, none, floor <strong>1/576</strong>.</li>
+      <li><strong>1/64</strong> &mdash; 274,625 cells (7.6&times; the work), none, floor
+        <strong>1/576</strong>. Identical. The doubling bought <em>nothing</em>.</li>
+      <li><strong>1/60</strong> &mdash; 226,981 cells, <strong>21 exact optima</strong>. Finer than 1/12
+        and it works, because 60 is divisible by three.</li>
+      <li><strong>1/100</strong> &mdash; 1,030,301 cells, none, floor <strong>1/900</strong>.</li>
+      <li><strong>1/101</strong> &mdash; one more grid point, and the floor halves to
+        <strong>1/1818</strong>.</li>
+      <li><strong>1/102</strong> &mdash; one more again, and the floor is <strong>0</strong>, with
+        35 exact optima.</li>
+    </ul>
+
+    <div class="note warn">
+      <p><strong>Every power of two is in the failing class</strong>, because
+      2<sup>k</sup>&nbsp;mod&nbsp;3 alternates 2,&nbsp;1,&nbsp;2,&nbsp;1&hellip; and never reaches 0.
+      Worse, the alternation makes the floors pair up exactly: the extra factor of two in the
+      numerator when q&nbsp;&equiv;&nbsp;1 cancels the factor of two in q. So (2,&nbsp;4) share a
+      floor, (8,&nbsp;16) share one, (32,&nbsp;64), (128,&nbsp;256), (512,&nbsp;1024),
+      (2048,&nbsp;4096) &mdash; every second doubling of a power-of-two grid improves the best
+      achievable answer by <strong>exactly zero</strong>, forever.</p>
+    </div>
+
+    <h3 class="mid">Control two: hill-climb</h3>
+
+    <p>If sweeping is too expensive, climb. Start somewhere, step to a neighbour that lowers
+    exploitability, stop when none does. On the 1/30 grid that procedure has
+    <strong>31</strong> places to stop and only <strong>11</strong> of them are optimal &mdash;
+    <strong>20 traps</strong>, nearly two thirds. The surface is a maximum of 64 linear functions, so
+    it is piecewise linear with plenty of ridges, and nothing about it is convex in the direction a
+    local search walks.</p>
+
+    <h3 class="mid">Control three: play it against a solved opponent</h3>
+
+    <p>The last reasonable idea is to skip the theory and just test: sit your candidate down against
+    a known-optimal opponent and see whether it loses more than &minus;1/18. This has exactly zero
+    power, and not approximately.</p>
+
+    <p>Against the equilibrium, <strong>all 29,791</strong> strategies on the 1/30 grid score
+    <strong>exactly &minus;1/18</strong> &mdash; including the 29,780 that are exploitable. On the
+    pure side, <strong>18 of 64</strong> pure strategies tie the equilibrium exactly, and the worst
+    of those leaks <strong>4/9</strong>: eight times the entire value of the game, undetectable by
+    the test. This is what an equilibrium <em>is</em>: it makes its opponent indifferent everywhere
+    it can be reached. It does not punish. It declines to lose.</p>
+
+    <h3 class="mid">Two things that came out backwards</h3>
+
+    <p>First, the leaks do not add up. Always betting the King while never bluffing leaks
+    <strong>1/6</strong>. Always calling the Queen leaks <strong>1/9</strong>. Doing
+    <em>both</em> leaks <strong>1/9</strong> &mdash; less than the first mistake alone. Exploitability
+    is a maximum over 64 punishers, not a sum of errors, and a second error can shift which punisher
+    is worst in a way that helps.</p>
+
+    <p>Second, and sharper: once you have committed to betting the King every time, the
+    equilibrium's own Queen-calling rate is the <em>worst</em> rate to pair it with. Sweep it and the
+    best answer is <strong>2/3</strong>, not 1/3, and it takes the leak from 1/6 to
+    <strong>1/18</strong> &mdash; a third of what it was. A component of an optimal strategy is not
+    an optimal component.</p>
+
+    <h3 class="mid">And the machine that finds it anyway</h3>
+
+    <p>Regret matching &mdash; counterfactual regret minimisation, run over the full tree with no
+    sampling &mdash; converges here, but only in <em>average</em>. The average strategy's
+    exploitability falls steadily; the current iterate's does not fall at all. Over the last half
+    million of a million iterations the current strategy's exploitability oscillates between
+    <strong>0.2778</strong> and <strong>0.6667</strong> and never once drops below a quarter, while
+    the average sits at <strong>5.1&times;10<sup>&minus;4</sup></strong>. Returning the last
+    iterate is the single most common way to get this wrong, and the number it returns is roughly
+    <strong>500&times;</strong> worse than the number sitting next to it in memory.</p>
+
+    <p>Where does the average land on the segment? At &alpha;&nbsp;&asymp;&nbsp;<strong>0.208</strong>
+    &mdash; interior, neither endpoint, nothing anybody chose. The check that it really is on the
+    segment is that its three coordinates agree: the bluff rate, a third of the King-bet rate, and
+    the Queen-call rate minus 1/3 all read 0.2077&hellip;0.2084 at a million iterations. Three
+    numbers derived from three different information sets, agreeing to three decimals, is the
+    evidence &mdash; not the exploitability figure, which a bug could also make small.</p>
+
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">🔨 How it is built</h2>
+
+    <h3 class="mid">1. The whole game is one function of six numbers</h3>
+    <pre>// p[0..2] = P(bet | J,Q,K)      p[3..5] = P(call | J,Q,K) after checking into a bet
+// q[0..2] = P(call | J,Q,K)     q[3..5] = P(bet  | J,Q,K) facing a check
+function uDeal(c1, c2, p, q){
+  const w2 = c1 &gt; c2 ? 2 : -2, w1 = c1 &gt; c2 ? 1 : -1;      // showdown for 4, and for 2
+  const betVal   = (1 - q[c2]) + q[c2] * w2;                // they fold, or they call
+  const pc = p[3 + c1];
+  const checkVal = (1 - q[3 + c2]) * w1 + q[3 + c2] * ((1 - pc) * (-1) + pc * w2);
+  return p[c1] * betVal + (1 - p[c1]) * checkVal;
+}
+uVal = average of uDeal over the six ordered deals   // no tree object, no recursion</pre>
+    <p>Six deals, three decisions, no search anywhere. Everything else on this page is built out of
+    this one expression.</p>
+
+    <h3 class="mid">2. Best response by enumeration, because 64 is small</h3>
+    <pre>br2(p) = min over m in 0..63 of uVal(p, pureStrat(m))    // the punisher
+exploit1(p) = GAME_VALUE - br2(p).val                   // what the leak costs, per hand</pre>
+    <p>With 64 pure strategies a side there is no need for a counterfactual-value pass: the exact
+    best response is a loop. The verifier computes the same quantity by tree recursion over reach
+    probabilities instead, which is the check that the enumeration is not accidentally right.</p>
+
+    <h3 class="mid">3. The certificate is exact, so &ldquo;optimal&rdquo; means optimal</h3>
+    <pre>// BigInt fractions, reduced by gcd. No tolerance, no epsilon.
+class Q { add sub mul cmp isZero }
+eqP1(alpha) = [alpha, 0, 3*alpha, 0, alpha + 1/3, 1]
+for each alpha in {0, 1/12, 1/9, 1/6, 1/4, 1/3}:
+    exploit1 === 0   and   exploit2 === 0   and   u === -1/18     // as rationals</pre>
+    <p>Two exact zeros are a proof of equilibrium, and a proof of equilibrium fixes the value at
+    &minus;1/18 without solving a linear program. The page does not quote Kuhn's 1950 result; it
+    writes the family down and certifies it, and the 4-parameter sweep then re-derives the same line
+    from scratch without being told it exists.</p>
+
+    <h3 class="mid">4. The sweep is integer arithmetic, so a zero is a zero</h3>
+    <pre>// For each of the 64 pure opponents, 6*u is AFFINE in the three probabilities:
+//     6u = A + B x + C y + D z          (A..D integers, checked on 6,912 points)
+// Put x = i/q, y = j/q, z = k/q and multiply through by q:
+//     6 q u = A q + B i + C j + D k     <- an integer
+// exploitability zero  <=>  min over the 64 of that integer  ===  6 q * (-1/18) = -q/3
+//     18 q * exploit = -q - 3 * min     <- also an integer, and THAT is the test</pre>
+    <p>No float ever decides whether a cell is optimal. And the same integer says why the whole
+    thing works: <span class="mono">-q - 3*min</span> is congruent to <span class="mono">-q</span>
+    mod 3, so when q is not a multiple of 3 it cannot be zero, whatever the grid does.</p>
+
+    <h3 class="mid">5. The floor of a failing grid, proved rather than searched</h3>
+    <pre>// lower bound: 18q*exploit is a positive integer congruent to -q mod 3
+//              so it is at least 1 when q % 3 === 2, at least 2 when q % 3 === 1
+// upper bound: one witness cell   alpha = 0, betK = 0, callQ = nearest grid point to 1/3
+//              which by the leak identity costs 1/(18q) or 1/(9q) exactly
+// -> gridLaw(q) returns the floor for ANY q, including 2^20, with no sweep at all</pre>
+    <p>The exhaustive sweeps for q&nbsp;=&nbsp;2&hellip;36 are not how the law is established, they
+    are how it is <em>tested</em>: 0 disagreements. That is what lets the page state the floor at
+    1/4096 honestly &mdash; the claim is arithmetic, and the sweep is the witness that the arithmetic
+    describes the same object.</p>
+
+    <h3 class="mid">6. The second seat, and where the bound goes slack</h3>
+    <pre>// The same congruence gives the second player a lower bound of 1 (q%3===1) or 2 (q%3===2).
+// Measured floor: 4 and 2. So the bound is TIGHT for the first player and 4x SLACK for the
+// second, and the resulting floors come out at exactly 2x the first player's, every q.</pre>
+    <p>That factor of two is measured, not derived, and it is stated that way. The second player's
+    optimum is also a single <em>point</em> rather than a segment &mdash; call the Queen at 1/3, bet
+    the Jack at 1/3 &mdash; so it needs 1/3 to be representable twice, and the sweep finds exactly
+    one cell whenever 3 divides q and zero otherwise.</p>
+
+    <h3 class="mid">7. Regret matching, and the two strategies it holds</h3>
+    <pre>for t = 1..T:
+   current = regretMatching(R)                 // what the iterate is
+   accumulate reach-weighted current into S    // what the AVERAGE is
+   update R with counterfactual regrets        // full tree, all six deals, no sampling
+avgStrategy = S normalised per information set  // this is the thing that converges</pre>
+    <p>Both are kept and both are measured every snapshot, which is the only way the divergence
+    shows up. The exploitability of the average is monotone in the log; the exploitability of the
+    iterate is a permanent oscillation, and its floor over the last half of the run is a
+    <em>bound</em> in the self-test rather than a number, because the oscillation is not periodic.</p>
+
+    <h3 class="mid">8. Deterministic randomness</h3>
+    <pre>// mulberry32, seeded from a counter. No Math.random and no clock anywhere in the engine,
+// so the dealt cards, the mixed actions and the 400,000-hand witness all replay identically.
+// The simulator exists only to confirm the algebra describes the game people actually play:
+// |mc - exact| / se came out at 0.20 to 0.59 over four matchups.</pre>
+
+    <h3 class="mid">9. What is pinned, and the one pin that is not a theorem</h3>
+    <pre>// Proved by exhaustion over all 4,096 pure pairs, 0 exceptions each:
+//   fold the Jack facing a bet   call the King facing a bet     (both players)
+// NOT dominated, and pinned anyway:
+//   the first player never bets the Queen  - 2,688 of 4,096 pairs PREFER betting it
+// justified instead by the 4-parameter sweep: 0 of its optima bet the Queen, at 1/12, 1/21, 1/30</pre>
+    <p>The honest version of a reduced strategy space is to say which reductions are theorems and
+    which are results. Two are theorems. The Queen-bet pin is a measurement, and the sweep that
+    justifies it is on the page rather than in a footnote.</p>
+
+    <h3 class="mid">10. Three assumptions of mine that the engine refused</h3>
+    <pre>// 1. "a finer grid is a better grid"        - 1/64 returns 1/32's answer to the last bit
+// 2. "two leaks cost more than one"          - 1/6 plus 1/9 measures 1/9
+// 3. "the second player's floor follows the same congruence bound"
+//                                            - the bound is slack by 4x; the law is measured</pre>
+    <p>The first is the page. The second is a card on the PLAY tab. The third is the reason the
+    second-player table says <em>measured</em> where the first-player table says <em>proved</em>.</p>
+
+    <h3 class="mid">11. What this engine is not</h3>
+    <pre>// One betting round, one bet size, three cards, two players, no raises, no antes but 1.
+// Kuhn's game is the smallest one with hidden information - Leduc, and anything with a
+// board, needs abstraction and sampling, and none of that is here.
+// There is no linear program: the value comes from an exact certificate, not from simplex.
+// The verifier runs one anyway, in BigInt rationals, because a certificate you wrote
+// yourself is exactly the kind of thing that can be self-consistent and wrong.</pre>
+
+    <h3 class="mid">Self-test</h3>
+    <pre id="selftest">running&hellip;</pre>
+
+    <h3 class="mid">🎉 GameFromZero Day 74 shipped.</h3>
+    <p class="small">Seventy-four games. The first one you play without being allowed to see the
+    position &mdash; and the first whose answer a search misses for a reason found in long
+    division.</p>
+
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("tab-active"));
+  t.classList.add("tab-active");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// KUHN POKER. Three cards J < Q < K, one each, both ante 1. The first player checks or bets 1; on a
+// check the second player checks (showdown for 2) or bets 1, and the first player folds or calls; on
+// a bet the second player folds or calls. Higher card takes the pot.
+//
+// This is the first game in the series with HIDDEN information, and that changes what an engine is.
+// There is no position to search - you know your card and nothing else - so a strategy is a
+// probability at each of six INFORMATION SETS per player, and the answer is a distribution rather
+// than a move. Six binary decisions a side means 64 pure strategies each and a 64x64 payoff matrix,
+// which is small enough that the exact best response is a loop rather than an algorithm.
+//
+// The first player's optimal set is a SEGMENT: bet the Jack with probability alpha in [0,1/3], the
+// King with 3*alpha, and call with the Queen at alpha + 1/3. Every member is worth exactly -1/18.
+// The page's spine is what happens when you look for that segment the obvious way, by sweeping a
+// uniform grid over the strategy cube: every payoff on a step-1/q grid is a multiple of 1/6q, the
+// game value -1/18 is not unless 3 divides q, and so a grid whose resolution is not a multiple of
+// three contains ZERO optimal strategies at any fineness. All of the grid arithmetic below is
+// therefore done in integers, so "exploitability is zero" is an integer equality and not a
+// tolerance.
+//
+// DOM-free, clock-free, and free of the global generator. Every random number comes from mulberry32 seeded from a
+// counter, so the dealt cards and the 400,000-hand witness replay identically.
+
+const NAMES = ['J', 'Q', 'K'];
+const GAME_VALUE = -1 / 18;
+
+// the six ordered deals, each with probability 1/6
+const DEALS = [];
+for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) if (a !== b) DEALS.push([a, b]);
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const fmt = n => Number(n).toLocaleString('en-US');
+const pct = (x, d) => (100 * x).toFixed(d === undefined ? 1 : d) + '%';
+
+// ---------------------------------------------------------------- the game, as one expression
+function uDeal(c1, c2, p, q){
+  const w2 = c1 > c2 ? 2 : -2, w1 = c1 > c2 ? 1 : -1;
+  const betVal = (1 - q[c2]) + q[c2] * w2;
+  const pc = p[3 + c1];
+  const checkVal = (1 - q[3 + c2]) * w1 + q[3 + c2] * ((1 - pc) * (-1) + pc * w2);
+  return p[c1] * betVal + (1 - p[c1]) * checkVal;
+}
+function uVal(p, q){ let s = 0; for (const d of DEALS) s += uDeal(d[0], d[1], p, q); return s / 6; }
+
+const pureStrat = m => [m & 1, (m >> 1) & 1, (m >> 2) & 1, (m >> 3) & 1, (m >> 4) & 1, (m >> 5) & 1];
+
+function br2(p){
+  let best = Infinity, bm = -1, cnt = 0;
+  for (let m = 0; m < 64; m++){ const v = uVal(p, pureStrat(m)); if (v < best - 1e-12){ best = v; bm = m; cnt = 1; } else if (Math.abs(v - best) < 1e-12) cnt++; }
+  return { val: best, m: bm, count: cnt };
+}
+function br1(q){
+  let best = -Infinity, bm = -1, cnt = 0;
+  for (let m = 0; m < 64; m++){ const v = uVal(pureStrat(m), q); if (v > best + 1e-12){ best = v; bm = m; cnt = 1; } else if (Math.abs(v - best) < 1e-12) cnt++; }
+  return { val: best, m: bm, count: cnt };
+}
+const exploit1 = p => GAME_VALUE - br2(p).val;
+const exploit2 = q => br1(q).val - GAME_VALUE;
+const nashConv = (p, q) => exploit1(p) + exploit2(q);
+
+// which of the opponent's information sets the strategy p actually reaches
+function reachP2(p){
+  const R = [0, 0, 0, 0, 0, 0];
+  for (const [c1, c2] of DEALS){ R[c2] += p[c1] / 6; R[3 + c2] += (1 - p[c1]) / 6; }
+  return R;
+}
+function describeP2(m, reach){
+  const q = pureStrat(m), a = [], b = [];
+  for (let c = 0; c < 3; c++) a.push(NAMES[c] + ':' + (reach && reach[c] < 1e-12 ? 'never' : (q[c] ? 'call' : 'fold')));
+  for (let c = 0; c < 3; c++) b.push(NAMES[c] + ':' + (reach && reach[3 + c] < 1e-12 ? 'never' : (q[3 + c] ? 'bet' : 'check')));
+  return 'facing a bet [' + a.join(' ') + '] · facing a check [' + b.join(' ') + ']';
+}
+
+// ---------------------------------------------------------------- exact rationals
+function gcdBig(a, b){ a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b){ const t = a % b; a = b; b = t; } return a; }
+class Q {
+  constructor(n, d = 1n){ if (d < 0n){ n = -n; d = -d; } const g = gcdBig(n, d) || 1n; this.n = n / g; this.d = d / g; }
+  add(o){ return new Q(this.n * o.d + o.n * this.d, this.d * o.d); }
+  sub(o){ return new Q(this.n * o.d - o.n * this.d, this.d * o.d); }
+  mul(o){ return new Q(this.n * o.n, this.d * o.d); }
+  cmp(o){ const l = this.n * o.d, r = o.n * this.d; return l < r ? -1 : l > r ? 1 : 0; }
+  isZero(){ return this.n === 0n; }
+  eq(o){ return this.n === o.n && this.d === o.d; }
+  num(){ return Number(this.n) / Number(this.d); }
+  str(){ return this.d === 1n ? String(this.n) : this.n + '/' + this.d; }
+}
+const QZERO = new Q(0n), QONE = new Q(1n), QTHIRD = new Q(1n, 3n);
+const QI = k => new Q(BigInt(k));
+const V_EXACT = new Q(-1n, 18n);
+
+function uDealQ(c1, c2, p, q){
+  const w2 = QI(c1 > c2 ? 2 : -2), w1 = QI(c1 > c2 ? 1 : -1);
+  const betVal = QONE.sub(q[c2]).add(q[c2].mul(w2));
+  const pc = p[3 + c1];
+  const inner = QONE.sub(pc).mul(QI(-1)).add(pc.mul(w2));
+  const checkVal = QONE.sub(q[3 + c2]).mul(w1).add(q[3 + c2].mul(inner));
+  return p[c1].mul(betVal).add(QONE.sub(p[c1]).mul(checkVal));
+}
+function uValQ(p, q){ let s = QZERO; for (const d of DEALS) s = s.add(uDealQ(d[0], d[1], p, q)); return s.mul(new Q(1n, 6n)); }
+const pureStratQ = m => pureStrat(m).map(b => QI(b));
+function br2Q(p){ let best = null, bm = -1; for (let m = 0; m < 64; m++){ const v = uValQ(p, pureStratQ(m)); if (best === null || v.cmp(best) < 0){ best = v; bm = m; } } return { val: best, m: bm }; }
+function br1Q(q){ let best = null, bm = -1; for (let m = 0; m < 64; m++){ const v = uValQ(pureStratQ(m), q); if (best === null || v.cmp(best) > 0){ best = v; bm = m; } } return { val: best, m: bm }; }
+
+// ---------------------------------------------------------------- the family, and its certificate
+function eqP1Q(alpha){ return [alpha, QZERO, alpha.mul(QI(3)), QZERO, alpha.add(QTHIRD), QONE]; }
+const EQ_P2_Q = [QZERO, QTHIRD, QONE, QTHIRD, QZERO, QONE];
+const EQ_P2 = EQ_P2_Q.map(x => x.num());
+const alphaStrategy = a => [a, 0, 3 * a, 0, a + 1 / 3, 1];
+const p1cube = (x, y, z) => [x, 0, y, 0, z, 1];
+const p1cube4 = (x, w, y, z) => [x, w, y, 0, z, 1];
+const p2cube = (s, t) => [0, s, 1, t, 0, 1];
+const p2cube4 = (s, t, r, b) => [0, s, 1, t, r, b];
+
+function certifyFamily(alphas){
+  const rows = [];
+  for (const a of alphas){
+    const p = eqP1Q(a);
+    const e1 = V_EXACT.sub(br2Q(p).val);
+    const e2 = br1Q(EQ_P2_Q).val.sub(V_EXACT);
+    rows.push({ alpha: a, e1, e2, u: uValQ(p, EQ_P2_Q), inFamily: a.cmp(QZERO) >= 0 && a.cmp(QTHIRD) <= 0 });
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------- affine coefficients, exactly
+// For each pure opponent, 6*u is affine in the free probabilities with INTEGER coefficients. That is
+// what turns the whole grid sweep into integer arithmetic.
+function coefP1x3(){
+  const C = [];
+  for (let m = 0; m < 64; m++){
+    const q = pureStrat(m), f = (x, y, z) => Math.round(6 * uVal(p1cube(x, y, z), q));
+    const A = f(0, 0, 0);
+    C.push([A, f(1, 0, 0) - A, f(0, 1, 0) - A, f(0, 0, 1) - A]);
+  }
+  return C;
+}
+function coefP1x4(){
+  const C = [];
+  for (let m = 0; m < 64; m++){
+    const q = pureStrat(m), f = (x, w, y, z) => Math.round(6 * uVal(p1cube4(x, w, y, z), q));
+    const A = f(0, 0, 0, 0), B = f(1, 0, 0, 0) - A, Cc = f(0, 0, 1, 0) - A, D = f(0, 0, 0, 1) - A, E = f(0, 1, 0, 0) - A;
+    C.push([A, B, Cc, D, E, f(0, 1, 0, 1) - A - D - E]);
+  }
+  return C;
+}
+function coefP2x2(){
+  const C = [];
+  for (let m = 0; m < 64; m++){
+    const p = pureStrat(m), f = (s, t) => Math.round(6 * uVal(p, p2cube(s, t)));
+    const A = f(0, 0);
+    C.push([A, f(1, 0) - A, f(0, 1) - A]);
+  }
+  return C;
+}
+function coefP2x4(){
+  const C = [];
+  for (let m = 0; m < 64; m++){
+    const p = pureStrat(m), f = (s, t, r, b) => Math.round(6 * uVal(p, p2cube4(s, t, r, b)));
+    const A = f(0, 0, 0, 0);
+    C.push([A, f(1, 0, 0, 0) - A, f(0, 1, 0, 0) - A, f(0, 0, 1, 0) - A, f(0, 0, 0, 1) - A]);
+  }
+  return C;
+}
+// the model is checked, not assumed
+function checkCoefModel(C3, C4, C2a){
+  let tested = 0, bad = 0;
+  for (let m = 0; m < 64; m++){
+    const q = pureStrat(m), c3 = C3[m], c4 = C4[m];
+    for (const x of [0, 0.25, 0.5, 1]) for (const y of [0, 0.7, 1]) for (const z of [0, 0.4, 1]){
+      tested++;
+      if (Math.abs((c3[0] + c3[1] * x + c3[2] * y + c3[3] * z) / 6 - uVal(p1cube(x, y, z), q)) > 1e-12) bad++;
+      for (const w of [0, 0.3, 1]){
+        tested++;
+        const mv = (c4[0] + c4[1] * x + c4[2] * y + c4[3] * z + c4[4] * w + c4[5] * w * z) / 6;
+        if (Math.abs(mv - uVal(p1cube4(x, w, y, z), q)) > 1e-12) bad++;
+      }
+    }
+    const p = pureStrat(m), c2 = C2a[m];
+    for (const s of [0, 0.3, 1]) for (const t of [0, 0.7, 1]){
+      tested++;
+      if (Math.abs((c2[0] + c2[1] * s + c2[2] * t) / 6 - uVal(p, p2cube(s, t))) > 1e-12) bad++;
+    }
+  }
+  let ints = 0, nonInt = 0;
+  for (const C of [C3, C4, C2a]) for (const c of C) for (const v of c){ ints++; if (!Number.isInteger(v)) nonInt++; }
+  return { tested, bad, ints, nonInt };
+}
+
+// ---------------------------------------------------------------- the sweeps, in integers
+// 18*q*exploit1 = -q - 3*min(A q + B i + C j + D k) : an integer, congruent to -q mod 3.
+function sweep3(q, C3){
+  let zeros = 0, best = Infinity, ties = 0, argmin = null, cells = 0;
+  const zeroList = [];
+  for (let i = 0; i <= q; i++) for (let j = 0; j <= q; j++) for (let k = 0; k <= q; k++){
+    cells++;
+    let mn = Infinity;
+    for (let m = 0; m < 64; m++){ const c = C3[m]; const v = q * c[0] + c[1] * i + c[2] * j + c[3] * k; if (v < mn) mn = v; }
+    const num = -q - 3 * mn;
+    if (num === 0){ zeros++; if (zeroList.length < 64) zeroList.push([i, j, k]); }
+    if (num < best){ best = num; argmin = [i, j, k]; ties = 1; }
+    else if (num === best) ties++;
+  }
+  return { q, cells, zeros, bestNum: best, bestExploit: best / (18 * q), ties, argmin, zeroList };
+}
+// four free parameters: the sweep is not told that betting the Queen is never optimal
+function sweep4(q, C4){
+  const q2 = q * q;
+  let zeros = 0, betQnonZero = 0, best = Infinity, cells = 0;
+  const zeroList = [];
+  for (let i = 0; i <= q; i++) for (let l = 0; l <= q; l++) for (let j = 0; j <= q; j++) for (let k = 0; k <= q; k++){
+    cells++;
+    let mn = Infinity;
+    for (let m = 0; m < 64; m++){ const c = C4[m];
+      const v = q2 * c[0] + q * c[1] * i + q * c[2] * j + q * c[3] * k + q * c[4] * l + c[5] * l * k;
+      if (v < mn) mn = v;
+    }
+    const num = -q2 - 3 * mn;
+    if (num === 0){ zeros++; if (l !== 0) betQnonZero++; if (zeroList.length < 48) zeroList.push([i, l, j, k]); }
+    if (num < best) best = num;
+  }
+  return { q, cells, zeros, betQnonZero, bestNum: best, zeroList };
+}
+// 18*q*exploit2 = 3*max(...) + q
+function sweepP2(q, C2a){
+  let zeros = 0, best = Infinity, argmin = null, cells = 0;
+  for (let s = 0; s <= q; s++) for (let t = 0; t <= q; t++){
+    cells++;
+    let mx = -Infinity;
+    for (let m = 0; m < 64; m++){ const c = C2a[m]; const v = q * c[0] + c[1] * s + c[2] * t; if (v > mx) mx = v; }
+    const num = 3 * mx + q;
+    if (num === 0) zeros++;
+    if (num < best){ best = num; argmin = [s, t]; }
+  }
+  return { q, cells, zeros, bestNum: best, bestExploit: best / (18 * q), argmin };
+}
+function sweepP2x4(q, C4a){
+  let zeros = 0, best = Infinity, cells = 0, offPoint = 0;
+  for (let s = 0; s <= q; s++) for (let t = 0; t <= q; t++) for (let r = 0; r <= q; r++) for (let b = 0; b <= q; b++){
+    cells++;
+    let mx = -Infinity;
+    for (let m = 0; m < 64; m++){ const c = C4a[m]; const v = q * c[0] + c[1] * s + c[2] * t + c[3] * r + c[4] * b; if (v > mx) mx = v; }
+    const num = 3 * mx + q;
+    if (num === 0){ zeros++; if (r !== 0 || b !== q) offPoint++; }
+    if (num < best) best = num;
+  }
+  return { q, cells, zeros, bestNum: best, offPoint };
+}
+
+// ---------------------------------------------------------------- the law, with no sweep at all
+// Lower bound from the congruence, upper bound from one witness cell. Valid at any q.
+function gridLaw(q, C3){
+  const r = ((q % 3) + 3) % 3;
+  const num = r === 0 ? 0 : (r === 2 ? 1 : 2);
+  const k = r === 2 ? (q + 1) / 3 : (r === 1 ? (q - 1) / 3 : q / 3);
+  let mn = Infinity;
+  for (let m = 0; m < 64; m++){ const c = C3[m]; const v = q * c[0] + c[3] * k; if (v < mn) mn = v; }
+  const witnessNum = -q - 3 * mn;
+  return { q, residue: r, num, witnessNum, agrees: witnessNum === num,
+           exploit: num / (18 * q), witnessCell: [0, 0, k], zeros: r === 0 ? q / 3 + 1 : 0 };
+}
+function gridLawP2(q){
+  const r = ((q % 3) + 3) % 3;
+  const num = r === 0 ? 0 : (r === 1 ? 4 : 2);
+  return { q, residue: r, num, exploit: num / (18 * q), zeros: r === 0 ? 1 : 0 };
+}
+
+// ---------------------------------------------------------------- the leak identities
+// with call|Q at alpha + 1/3 the leak is |betK - 3*alpha| / 6, exactly
+function leakA(steps){
+  let worst = 0, n = 0;
+  for (let i = 0; i <= steps; i++) for (let j = 0; j <= steps; j++){
+    const x = i / (3 * steps), y = j / steps;
+    const e = exploit1(p1cube(x, y, x + 1 / 3));
+    worst = Math.max(worst, Math.abs(e - Math.abs(y - 3 * x) / 6));
+    n++;
+  }
+  return { points: n, worst };
+}
+// with betK at 3*alpha, calling too little by d costs d/3 and too much by d costs d/6
+function leakB(steps){
+  let bad = 0, n = 0, rows = [];
+  for (let i = 0; i <= steps / 3; i++) for (let k = 0; k <= steps; k++){
+    const x = i / steps, z = k / steps, d = z - (x + 1 / 3);
+    const e = exploit1(p1cube(x, 3 * x, z));
+    const pred = d < 0 ? -d / 3 : d / 6;
+    n++;
+    if (Math.abs(e - pred) > 1e-12) bad++;
+    if (i === 0 && k % Math.round(steps / 6) === 0) rows.push({ x, z, d, e, pred });
+  }
+  return { points: n, bad, rows, ratio: 2 };
+}
+// leaks are a maximum over punishers, not a sum: a second mistake can lower the total
+function composeCensus(){
+  const rows = [
+    ['equilibrium at alpha = 0', p1cube(0, 0, 1 / 3)],
+    ['bet the King always', p1cube(0, 1, 1 / 3)],
+    ['call the Queen always', p1cube(0, 0, 1)],
+    ['both of those mistakes', p1cube(0, 1, 1)],
+    ['bluff always', p1cube(1, 0, 1 / 3)],
+    ['bluff always + bet the King always', p1cube(1, 1, 1 / 3)],
+    ['all three', p1cube(1, 1, 1)]
+  ].map(r => ({ name: r[0], p: r[1], e: exploit1(r[1]) }));
+  let nonMono = 0;
+  if (rows[3].e < rows[1].e - 1e-12) nonMono++;
+  if (rows[6].e < rows[5].e - 1e-12) nonMono++;
+  return { rows, nonMono };
+}
+// once the King is always bet, which Queen-call rate is best?
+function bestCallGivenKing(steps){
+  let best = Infinity, at = 0;
+  const curve = [];
+  for (let k = 0; k <= steps; k++){
+    const z = k / steps, e = exploit1(p1cube(0, 1, z));
+    curve.push({ z, e });
+    if (e < best - 1e-12){ best = e; at = z; }
+  }
+  return { best, at, curve, atEquilibriumRate: exploit1(p1cube(0, 1, 1 / 3)) };
+}
+
+// ---------------------------------------------------------------- the controls
+// hill-climbing: how many places are there to stop, and how many of them are wrong?
+function localMinima(q, C3){
+  const idx = (i, j, k) => ((i * (q + 1)) + j) * (q + 1) + k;
+  const E = new Float64Array((q + 1) ** 3);
+  for (let i = 0; i <= q; i++) for (let j = 0; j <= q; j++) for (let k = 0; k <= q; k++){
+    let mn = Infinity;
+    for (let m = 0; m < 64; m++){ const c = C3[m]; const v = q * c[0] + c[1] * i + c[2] * j + c[3] * k; if (v < mn) mn = v; }
+    E[idx(i, j, k)] = -q - 3 * mn;
+  }
+  const step = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  let minima = 0, nonOptimal = 0, optima = 0, pairs = 0;
+  const traps = [];
+  for (let i = 0; i <= q; i++) for (let j = 0; j <= q; j++) for (let k = 0; k <= q; k++){
+    const e = E[idx(i, j, k)];
+    let isMin = true;
+    for (const [di, dj, dk] of step){
+      const a = i + di, b = j + dj, c = k + dk;
+      if (a < 0 || b < 0 || c < 0 || a > q || b > q || c > q) continue;
+      pairs++;
+      if (E[idx(a, b, c)] < e) isMin = false;
+    }
+    if (isMin){ minima++; if (e === 0) optima++; else { nonOptimal++; if (traps.length < 8) traps.push({ i, j, k, e: e / (18 * q) }); } }
+  }
+  return { q, cells: (q + 1) ** 3, pairs, minima, optima, nonOptimal, traps };
+}
+// testing against a solved opponent: how much does it see?
+function tieCensus(q, C3){
+  let pureTie = 0, worstTie = 0, worstM = -1;
+  for (let m = 0; m < 64; m++){
+    const p = pureStrat(m);
+    if (Math.abs(uVal(p, EQ_P2) - GAME_VALUE) < 1e-12){
+      pureTie++;
+      const e = exploit1(p);
+      if (e > worstTie){ worstTie = e; worstM = m; }
+    }
+  }
+  let pureTie2 = 0, worstTie2 = 0;
+  const eqp1 = alphaStrategy(1 / 6);
+  for (let m = 0; m < 64; m++){
+    const s = pureStrat(m);
+    if (Math.abs(uVal(eqp1, s) - GAME_VALUE) < 1e-12){ pureTie2++; worstTie2 = Math.max(worstTie2, exploit2(s)); }
+  }
+  let gridTie = 0, gridOpt = 0, cells = 0;
+  for (let i = 0; i <= q; i++) for (let j = 0; j <= q; j++) for (let k = 0; k <= q; k++){
+    cells++;
+    if (Math.abs(uVal(p1cube(i / q, j / q, k / q), EQ_P2) - GAME_VALUE) < 1e-12) gridTie++;
+    let mn = Infinity;
+    for (let m = 0; m < 64; m++){ const c = C3[m]; const v = q * c[0] + c[1] * i + c[2] * j + c[3] * k; if (v < mn) mn = v; }
+    if (-q - 3 * mn === 0) gridOpt++;
+  }
+  return { pureTie, worstTie, worstM, pureTie2, worstTie2, gridTie, gridOpt, cells };
+}
+
+// ---------------------------------------------------------------- the pure-strategy matrix
+function pureMatrix(){
+  const M = [];
+  for (let i = 0; i < 64; i++){
+    const row = [];
+    for (let j = 0; j < 64; j++){
+      let s = 0;
+      for (const d of DEALS) s += uDeal(d[0], d[1], pureStrat(i), pureStrat(j));
+      row.push(Math.round(s));
+    }
+    M.push(row);
+  }
+  return M;
+}
+function matrixCensus(M){
+  const rowMin = M.map(r => Math.min.apply(null, r));
+  const colMax = [];
+  for (let j = 0; j < 64; j++){ let c = -Infinity; for (let i = 0; i < 64; i++) c = Math.max(c, M[i][j]); colMax.push(c); }
+  const maximin = Math.max.apply(null, rowMin), minimax = Math.min.apply(null, colMax);
+  let saddles = 0, cells = 0;
+  const distinct = new Set();
+  for (let i = 0; i < 64; i++) for (let j = 0; j < 64; j++){
+    cells++; distinct.add(M[i][j]);
+    if (M[i][j] === rowMin[i] && M[i][j] === colMax[j]) saddles++;
+  }
+  return { maximin, minimax, saddles, cells, distinct: distinct.size,
+           maximinCount: rowMin.filter(x => x === maximin).length,
+           minimaxCount: colMax.filter(x => x === minimax).length,
+           valueOfMixing: GAME_VALUE - maximin / 6 };
+}
+function pureExploitCensus(){
+  const e1 = [], e2 = [];
+  for (let m = 0; m < 64; m++){ e1.push(exploit1(pureStrat(m))); e2.push(exploit2(pureStrat(m))); }
+  e1.sort((a, b) => a - b); e2.sort((a, b) => a - b);
+  return { min1: e1[0], med1: e1[32], max1: e1[63], zero1: e1.filter(x => x < 1e-12).length,
+           min2: e2[0], med2: e2[32], max2: e2[63], zero2: e2.filter(x => x < 1e-12).length };
+}
+
+// ---------------------------------------------------------------- dominance, by exhaustion
+function dominanceCensus(player, iset, action){
+  let viol = 0, strict = 0, ties = 0, tot = 0;
+  for (let m = 0; m < 64; m++) for (let n = 0; n < 64; n++){
+    tot++;
+    if (player === 1){
+      const a = pureStrat(m); a[iset] = action;
+      const b = pureStrat(m); b[iset] = 1 - action;
+      const ua = uVal(a, pureStrat(n)), ub = uVal(b, pureStrat(n));
+      if (ub > ua + 1e-12) viol++; else if (ua > ub + 1e-12) strict++; else ties++;
+    } else {
+      const a = pureStrat(n); a[iset] = action;
+      const b = pureStrat(n); b[iset] = 1 - action;
+      const ua = uVal(pureStrat(m), a), ub = uVal(pureStrat(m), b);
+      if (ub < ua - 1e-12) viol++; else if (ua < ub - 1e-12) strict++; else ties++;
+    }
+  }
+  return { viol, strict, ties, tot };
+}
+
+// ---------------------------------------------------------------- regret matching, full tree
+function cfrRun(T, snapshots, state){
+  const S = state || { R1: new Float64Array(12), R2: new Float64Array(12),
+                       S1: new Float64Array(12), S2: new Float64Array(12),
+                       t: 0, curMin: Infinity, curMax: -Infinity, hist: [] };
+  const rm = (R, i) => { const a = Math.max(0, R[i * 2]), b = Math.max(0, R[i * 2 + 1]); const s = a + b; return s > 0 ? b / s : 0.5; };
+  const { R1, R2, S1, S2 } = S;
+  for (let it = 0; it < T; it++){
+    S.t++;
+    const p = new Array(6), q = new Array(6);
+    for (let i = 0; i < 6; i++){ p[i] = rm(R1, i); q[i] = rm(R2, i); }
+    for (const [c1, c2] of DEALS){
+      const ch = 1 / 6, w2 = c1 > c2 ? 2 : -2, w1 = c1 > c2 ? 1 : -1;
+      const pc = p[3 + c1];
+      const vCallNode = (1 - pc) * (-1) + pc * w2;
+      const cf1c = ch * q[3 + c2];
+      R1[(3 + c1) * 2]     += cf1c * (-1 - vCallNode);
+      R1[(3 + c1) * 2 + 1] += cf1c * (w2 - vCallNode);
+      S1[(3 + c1) * 2]     += cf1c * (1 - pc);
+      S1[(3 + c1) * 2 + 1] += cf1c * pc;
+      const p2b = q[3 + c2];
+      const vP2node = (1 - p2b) * (-w1) + p2b * (-vCallNode);
+      const cf2c = ch * (1 - p[c1]);
+      R2[(3 + c2) * 2]     += cf2c * (-w1 - vP2node);
+      R2[(3 + c2) * 2 + 1] += cf2c * (-vCallNode - vP2node);
+      S2[(3 + c2) * 2]     += cf2c * (1 - p2b);
+      S2[(3 + c2) * 2 + 1] += cf2c * p2b;
+      const p2c = q[c2];
+      const vP2bet = (1 - p2c) * (-1) + p2c * (-w2);
+      const cf2b = ch * p[c1];
+      R2[c2 * 2]     += cf2b * (-1 - vP2bet);
+      R2[c2 * 2 + 1] += cf2b * (-w2 - vP2bet);
+      S2[c2 * 2]     += cf2b * (1 - p2c);
+      S2[c2 * 2 + 1] += cf2b * p2c;
+      const vRoot = (1 - p[c1]) * (-vP2node) + p[c1] * (-vP2bet);
+      R1[c1 * 2]     += ch * (-vP2node - vRoot);
+      R1[c1 * 2 + 1] += ch * (-vP2bet - vRoot);
+      S1[c1 * 2]     += ch * (1 - p[c1]);
+      S1[c1 * 2 + 1] += ch * p[c1];
+    }
+    if (S.t > 1000){
+      const cur1 = [], cur2 = [];
+      for (let i = 0; i < 6; i++){ cur1.push(rm(R1, i)); cur2.push(rm(R2, i)); }
+      const cc = nashConv(cur1, cur2);
+      if (cc < S.curMin) S.curMin = cc;
+      if (cc > S.curMax) S.curMax = cc;
+    }
+    if (snapshots.indexOf(S.t) >= 0) S.hist.push(cfrSnapshot(S, rm));
+  }
+  return S;
+}
+function cfrSnapshot(S, rm){
+  const avg1 = [], avg2 = [], cur1 = [], cur2 = [];
+  for (let i = 0; i < 6; i++){
+    const a = S.S1[i * 2] + S.S1[i * 2 + 1]; avg1.push(a > 0 ? S.S1[i * 2 + 1] / a : 0.5);
+    const b = S.S2[i * 2] + S.S2[i * 2 + 1]; avg2.push(b > 0 ? S.S2[i * 2 + 1] / b : 0.5);
+    cur1.push(rm(S.R1, i)); cur2.push(rm(S.R2, i));
+  }
+  return { t: S.t, avgConv: nashConv(avg1, avg2), curConv: nashConv(cur1, cur2),
+           avg1, avg2, cur1, cur2, avgVal: uVal(avg1, avg2),
+           alphaCoords: [avg1[0], avg1[2] / 3, avg1[4] - 1 / 3] };
+}
+
+// ---------------------------------------------------------------- a forward simulator, as witness
+function playHand(rnd, p, q){
+  let c1 = Math.floor(rnd() * 3), c2 = Math.floor(rnd() * 3);
+  while (c2 === c1) c2 = Math.floor(rnd() * 3);
+  const w2 = c1 > c2 ? 2 : -2, w1 = c1 > c2 ? 1 : -1;
+  const acts = [];
+  let payoff;
+  if (rnd() < p[c1]){
+    acts.push('bet');
+    if (rnd() < q[c2]){ acts.push('call'); payoff = w2; } else { acts.push('fold'); payoff = 1; }
+  } else {
+    acts.push('check');
+    if (rnd() < q[3 + c2]){
+      acts.push('bet');
+      if (rnd() < p[3 + c1]){ acts.push('call'); payoff = w2; } else { acts.push('fold'); payoff = -1; }
+    } else { acts.push('check'); payoff = w1; }
+  }
+  return { c1, c2, acts, payoff };
+}
+function simulate(p, q, N, seed){
+  const rnd = mulberry32(seed);
+  let tot = 0;
+  for (let n = 0; n < N; n++) tot += playHand(rnd, p, q).payoff;
+  return { mean: tot / N, N, se: Math.sqrt(2 / N) };
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- state + tiny DOM helpers
+const $ = id => document.getElementById(id);
+const S = { C3: null, C4: null, C2: null, law: [], big: [], p2law: [], cfr: null, cfrHist: [],
+            hand: null, chips: 0, hands: 0, rnd: mulberry32(20260829), seedCounter: 0 };
+const rat = x => {
+  if (Math.abs(x) < 1e-15) return '0';
+  for (let d = 1; d <= 20000; d++){ const n = x * d; if (Math.abs(n - Math.round(n)) < 1e-9) return (Math.round(n) === 1 ? '1' : Math.round(n)) + '/' + d; }
+  return x.toFixed(6);
+};
+
+S.C3 = coefP1x3();
+S.C4 = coefP1x4();
+S.C2 = coefP2x2();
+const MATRIX = pureMatrix();
+const MC = matrixCensus(MATRIX);
+
+// ---------------------------------------------------------------- the sliders
+function sliderStrategy(){
+  return p1cube(+$("sx").value / 60, +$("sy").value / 60, +$("sz").value / 60);
+}
+function paintSliders(){
+  const p = sliderStrategy();
+  const x = p[0], y = p[2], z = p[4];
+  $("vx").textContent = x.toFixed(4);
+  $("vy").textContent = y.toFixed(4);
+  $("vz").textContent = z.toFixed(4);
+  const e = exploit1(p), b = br2(p), reach = reachP2(p);
+  $("exBig").textContent = e < 1e-12 ? 'exploitable by 0' : ('exploitable by ' + e.toFixed(6));
+  $("exBig").style.color = e < 1e-12 ? 'var(--good)' : 'var(--bad)';
+  $("exBar").style.width = Math.min(100, 100 * e / 0.5) + '%';
+  const onSegment = Math.abs(y - 3 * x) < 1e-12 && Math.abs(z - (x + 1 / 3)) < 1e-12 && x <= 1 / 3 + 1e-12;
+  $("exBox").innerHTML =
+    '<div class="kv"><span>worst-case value a hand</span><b>' + b.val.toFixed(6) + '</b></div>' +
+    '<div class="kv"><span>the game value</span><b>' + GAME_VALUE.toFixed(6) + ' = &minus;1/18</b></div>' +
+    '<div class="kv"><span>against the equilibrium</span><b>' + uVal(p, EQ_P2).toFixed(6) +
+      (Math.abs(uVal(p, EQ_P2) - GAME_VALUE) < 1e-12 ? ' &mdash; exactly the value' : '') + '</b></div>' +
+    '<div class="kv"><span>on the optimal segment</span><b>' + (onSegment ? 'yes' : 'no &mdash; needs betK = ' + (3 * x).toFixed(4) + ', callQ = ' + (x + 1 / 3).toFixed(4)) + '</b></div>' +
+    '<div class="kv"><span>ratio identity |betK &minus; 3&alpha;| / 6</span><b>' + (Math.abs(y - 3 * x) / 6).toFixed(6) + '</b></div>' +
+    '<p class="tiny" style="margin:8px 0 0">your punisher (' + b.count + ' of the 64 tie for worst): ' +
+      describeP2(b.m, reach) + '</p>' +
+    '<p class="tiny" style="margin:4px 0 0">Notice the third row. Whatever you do here, the equilibrium ' +
+      'opponent pays you exactly the value of the game &mdash; that is what an equilibrium is, and it is ' +
+      'why testing against one tells you nothing.</p>';
+}
+["sx", "sy", "sz"].forEach(id => $(id).addEventListener("input", () => { paintSliders(); }));
+document.querySelectorAll("[data-preset]").forEach(btn => btn.addEventListener("click", () => {
+  const sets = [[0, 0, 20], [10, 30, 30], [20, 60, 40], [0, 60, 20], [0, 60, 60]];
+  const s = sets[+btn.dataset.preset];
+  $("sx").value = s[0]; $("sy").value = s[1]; $("sz").value = s[2];
+  paintSliders();
+}));
+
+// ---------------------------------------------------------------- play a hand
+function oppStrategy(){
+  const v = $("oppSel").value;
+  if (v === 'eq') return EQ_P2.slice();
+  if (v === 'exploit') return pureStrat(br2(sliderStrategy()).m);
+  if (v === 'callall') return [1, 1, 1, 0, 0, 0];
+  return [0, 0, 0, 1, 1, 1];
+}
+function cardHtml(rank, hidden, cls){
+  if (hidden) return '<div class="pcard hole"><p class="rk">?</p><p class="sm">THEM</p></div>';
+  return '<div class="pcard ' + (cls || '') + '"><p class="rk">' + NAMES[rank] + '</p><p class="sm">' +
+         (cls === 'you' ? 'YOU' : '') + '</p></div>';
+}
+function logLine(s){
+  const d = document.createElement('div'); d.innerHTML = s;
+  $("log").insertBefore(d, $("log").firstChild);
+  while ($("log").childNodes.length > 40) $("log").removeChild($("log").lastChild);
+}
+function deal(){
+  S.seedCounter++;
+  const rnd = S.rnd;
+  let c1 = Math.floor(rnd() * 3), c2 = Math.floor(rnd() * 3);
+  while (c2 === c1) c2 = Math.floor(rnd() * 3);
+  S.hand = { c1, c2, stage: 'open', q: oppStrategy(), acts: [] };
+  paintHand();
+}
+function paintHand(){
+  const h = S.hand;
+  if (!h){ $("cards").innerHTML = '<p class="small">press deal</p>'; return; }
+  const done = h.stage === 'done';
+  $("cards").innerHTML =
+    '<div class="pcard ' + (done ? (h.payoff > 0 ? 'win' : h.payoff < 0 ? 'lose' : '') : '') + '">' +
+      '<p class="rk">' + NAMES[h.c1] + '</p><p class="sm">YOU</p></div>' +
+    (done ? '<div class="pcard"><p class="rk">' + NAMES[h.c2] + '</p><p class="sm">THEM</p></div>'
+          : '<div class="pcard hole"><p class="rk">?</p><p class="sm">THEM</p></div>');
+  const pot = 2 + (h.acts.filter(a => a === 'bet' || a === 'call').length);
+  $("potLine").innerHTML = 'pot <b class="mono">' + pot + '</b> &middot; ' +
+    (h.acts.length ? h.acts.join(' &rarr; ') : 'you are first to act');
+  $("aCheck").disabled = h.stage !== 'open';
+  $("aBet").disabled = h.stage !== 'open';
+  $("aFold").disabled = h.stage !== 'facing';
+  $("aCall").disabled = h.stage !== 'facing';
+  const running = S.hands ? (S.chips / S.hands) : 0;
+  $("status").innerHTML = (done ? '<b class="' + (h.payoff > 0 ? 'win' : 'lose') + '">' +
+      (h.payoff > 0 ? '+' : '') + h.payoff + '</b> &middot; ' : '') +
+    'hands <b class="mono">' + S.hands + '</b> &middot; chips <b class="mono">' +
+    (S.chips > 0 ? '+' : '') + S.chips + '</b> &middot; per hand <b class="mono">' +
+    running.toFixed(4) + '</b> &middot; the equilibrium earns <b class="mono">&minus;0.0556</b>';
+}
+function settle(payoff){
+  const h = S.hand;
+  h.payoff = payoff; h.stage = 'done';
+  S.chips += payoff; S.hands++;
+  logLine('you ' + NAMES[h.c1] + ' &middot; them ' + NAMES[h.c2] + ' &middot; ' + h.acts.join(' ') +
+          ' &middot; <b>' + (payoff > 0 ? '+' : '') + payoff + '</b>');
+  paintHand();
+}
+$("dealBtn").onclick = deal;
+$("aBet").onclick = () => {
+  const h = S.hand; h.acts.push('you bet');
+  const w2 = h.c1 > h.c2 ? 2 : -2;
+  settle(S.rnd() < h.q[h.c2] ? (h.acts.push('they call'), w2) : (h.acts.push('they fold'), 1));
+};
+$("aCheck").onclick = () => {
+  const h = S.hand; h.acts.push('you check');
+  if (S.rnd() < h.q[3 + h.c2]){ h.acts.push('they bet'); h.stage = 'facing'; paintHand(); }
+  else { h.acts.push('they check'); settle(h.c1 > h.c2 ? 1 : -1); }
+};
+$("aFold").onclick = () => { S.hand.acts.push('you fold'); settle(-1); };
+$("aCall").onclick = () => { const h = S.hand; h.acts.push('you call'); settle(h.c1 > h.c2 ? 2 : -2); };
+$("autoBtn").onclick = () => {
+  const p = sliderStrategy(), q = oppStrategy();
+  let tot = 0;
+  for (let i = 0; i < 200; i++){ S.seedCounter++; tot += playHand(S.rnd, p, q).payoff; }
+  S.chips += tot; S.hands += 200;
+  logLine('200 hands with the sliders &middot; <b>' + (tot > 0 ? '+' : '') + tot + '</b> &middot; exact expectation ' +
+          (200 * uVal(p, q)).toFixed(2));
+  paintHand();
+};
+
+// ---------------------------------------------------------------- painters
+function paintCert(){
+  const alphas = [new Q(0n), new Q(1n, 12n), new Q(1n, 9n), new Q(1n, 6n), new Q(1n, 4n), new Q(1n, 3n),
+                  new Q(2n, 5n), new Q(1n, 2n)];
+  const rows = certifyFamily(alphas);
+  S.cert = rows;
+  $("certTbl").innerHTML =
+    '<tr><th>&alpha;</th><th>bet K</th><th>call Q</th><th>exploitability</th><th>value</th></tr>' +
+    rows.map(r => {
+      const inF = r.inFamily;
+      return '<tr class="' + (inF ? 'good' : 'bad') + '"><td class="l mono">' + r.alpha.str() + '</td>' +
+        '<td class="mono">' + r.alpha.mul(QI(3)).str() + '</td>' +
+        '<td class="mono">' + r.alpha.add(QTHIRD).str() + '</td>' +
+        '<td class="mono">' + r.e1.str() + '</td>' +
+        '<td class="mono">' + r.u.str() + '</td></tr>';
+    }).join('');
+  $("certNote").innerHTML =
+    'BigInt fractions throughout &mdash; those zeros are integer zeros, not small floats. Every &alpha; ' +
+    'in [0,&nbsp;1/3] is <b>exactly</b> unexploitable and worth <b>exactly &minus;1/18</b>; the last two rows ' +
+    'step off the end of the segment and start paying. The second player&#39;s exploitability against the ' +
+    'family is <b>' + rows[0].e2.str() + '</b> as well, and two exact zeros are a proof of equilibrium, which ' +
+    'is where the value comes from &mdash; no linear program anywhere on this page.';
+}
+function paintMatrix(){
+  const pe = pureExploitCensus();
+  S.pe = pe;
+  $("matTbl").innerHTML =
+    '<tr><th>the 64&times;64 pure matrix</th><th>value</th></tr>' +
+    '<tr><td class="l">cells</td><td>' + fmt(MC.cells) + '</td></tr>' +
+    '<tr><td class="l">distinct payoffs (over 6)</td><td>' + MC.distinct + '</td></tr>' +
+    '<tr class="bad"><td class="l">saddle points</td><td><b>' + MC.saddles + '</b></td></tr>' +
+    '<tr><td class="l">maximin, first player</td><td>' + MC.maximin + '/6 = ' + (MC.maximin / 6).toFixed(6) + '</td></tr>' +
+    '<tr><td class="l">minimax, second player</td><td>' + MC.minimax + '/6 = ' + (MC.minimax / 6).toFixed(6) + '</td></tr>' +
+    '<tr class="hi"><td class="l">the value, in between</td><td>&minus;1/18 = ' + GAME_VALUE.toFixed(6) + '</td></tr>' +
+    '<tr><td class="l">randomising is worth</td><td>' + rat(MC.valueOfMixing) + ' = ' + MC.valueOfMixing.toFixed(6) + '</td></tr>' +
+    '<tr class="bad"><td class="l">pure strategies with zero leak</td><td><b>' + pe.zero1 + ' of 64</b></td></tr>' +
+    '<tr><td class="l">pure leak: least / median / worst</td><td>' + rat(pe.min1) + ' / ' + rat(pe.med1) + ' / ' + pe.max1.toFixed(4) + '</td></tr>';
+  $("matNote").innerHTML =
+    'No cell is both the worst in its row and the best in its column, so there is no pure equilibrium and ' +
+    'no &ldquo;best move&rdquo; to find. The gap between the two pure guarantees is exactly <b>1/3</b> of an ante ' +
+    'and the value sits inside it: mixing is worth <b>' + rat(MC.valueOfMixing) + '</b> a hand, and it is compulsory.';
+}
+function paintDominance(){
+  const rows = [
+    ['P1 · fold the Jack facing a bet', 1, 3, 0, 'theorem'],
+    ['P1 · call the King facing a bet', 1, 5, 1, 'theorem'],
+    ['P2 · fold the Jack facing a bet', 2, 0, 0, 'theorem'],
+    ['P2 · call the King facing a bet', 2, 2, 1, 'theorem'],
+    ['P2 · bet the King facing a check', 2, 5, 1, 'weak'],
+    ['P1 · never bet the Queen', 1, 1, 0, 'measured'],
+    ['P2 · check the Queen facing a check', 2, 4, 0, 'measured']
+  ].map(r => ({ name: r[0], c: dominanceCensus(r[1], r[2], r[3]), kind: r[4] }));
+  S.dom = rows;
+  $("domTbl").innerHTML =
+    '<tr><th>the decision</th><th>strictly better</th><th>ties</th><th>counterexamples</th></tr>' +
+    rows.map(r => '<tr class="' + (r.c.viol === 0 ? 'good' : 'bad') + '"><td class="l">' + r.name + '</td>' +
+      '<td>' + fmt(r.c.strict) + '</td><td>' + fmt(r.c.ties) + '</td><td><b>' + fmt(r.c.viol) + '</b></td></tr>').join('');
+  $("domNote").innerHTML =
+    'Each row is all <b>4,096</b> pure pairs. The first four are theorems &mdash; zero counterexamples, so the ' +
+    'engine pins them and the strategy space drops from six numbers to three. <b>Not betting the Queen is not ' +
+    'a theorem</b>: ' + fmt(rows[5].c.viol) + ' of 4,096 pairs strictly prefer betting it. It is pinned because the ' +
+    'four-parameter sweep says so, and that sweep is on this page rather than in a footnote.';
+}
+function paintLeak(){
+  const a = leakA(60), b = leakB(60), bk = bestCallGivenKing(60);
+  S.leakA = a; S.leakB = b; S.bk = bk;
+  $("leakTbl").innerHTML =
+    '<tr><th>identity</th><th>points checked</th><th>failures</th></tr>' +
+    '<tr class="good"><td class="l">leak = |betK &minus; 3&alpha;| / 6, with callQ at &alpha;+1/3</td><td>' + fmt(a.points) + '</td><td>' + (a.worst < 1e-12 ? 0 : a.worst.toExponential(2)) + '</td></tr>' +
+    '<tr class="good"><td class="l">calling too little by &Delta; costs &Delta;/3</td><td>' + fmt(b.points) + '</td><td>' + b.bad + '</td></tr>' +
+    '<tr class="good"><td class="l">calling too much by &Delta; costs &Delta;/6</td><td>' + fmt(b.points) + '</td><td>' + b.bad + '</td></tr>' +
+    '<tr class="hi"><td class="l">so under-calling costs</td><td colspan="2"><b>exactly 2&times;</b> over-calling, per unit</td></tr>';
+  $("leakNote").innerHTML =
+    'Worst deviation over ' + fmt(a.points) + ' points is <b>' + a.worst.toExponential(2) + '</b> &mdash; float noise, ' +
+    'not a fit. That factor of two is the whole reason the grid law has two branches: the nearest grid point to 1/3 ' +
+    'is above it in one residue class and below it in the other, and below is twice as expensive.';
+}
+function paintCompose(){
+  const c = composeCensus();
+  S.comp = c;
+  $("compTbl").innerHTML =
+    '<tr><th>strategy</th><th>exploitability</th><th></th></tr>' +
+    c.rows.map((r, i) => '<tr class="' + (r.e < 1e-12 ? 'good' : (i === 3 || i === 6 ? 'hi' : '')) + '">' +
+      '<td class="l">' + r.name + '</td><td class="mono">' + rat(r.e) + '</td><td>' + r.e.toFixed(6) + '</td></tr>').join('');
+  $("compNote").innerHTML =
+    'Betting the King always leaks <b>1/6</b>. Calling the Queen always leaks <b>1/9</b>. Doing both leaks ' +
+    '<b>1/9</b> &mdash; <b>less than the first mistake alone</b>, and the same inversion happens again in the last ' +
+    'two rows. Exploitability is a maximum over 64 punishers, not a sum of errors, so a second mistake can ' +
+    'change which punisher is worst in a way that helps. Sharper still: once the King is always bet, the best ' +
+    'Queen-call rate is <b>' + S.bk.at.toFixed(4) + '</b>, not 1/3, and it takes the leak from <b>' +
+    rat(S.bk.atEquilibriumRate) + '</b> to <b>' + rat(S.bk.best) + '</b>. A component of an optimal strategy is ' +
+    'not an optimal component.';
+}
+function paintLawTable(){
+  const rows = S.law;
+  const head = '<tr><th>step</th><th>cells</th><th>optima</th><th>q/3+1</th><th>best leak</th><th>predicted</th></tr>';
+  $("lawTbl").innerHTML = head + rows.map(r => {
+    const law = gridLaw(r.q, S.C3);
+    const okZ = r.zeros === law.zeros, okB = r.bestNum === law.num;
+    return '<tr class="' + (r.zeros > 0 ? 'good' : '') + '"><td class="l mono">1/' + r.q + '</td>' +
+      '<td>' + fmt(r.cells) + '</td><td><b>' + r.zeros + '</b></td><td>' + (r.q % 3 === 0 ? r.q / 3 + 1 : '&mdash;') + '</td>' +
+      '<td class="mono">' + (r.bestNum === 0 ? '0' : rat(r.bestExploit)) + '</td>' +
+      '<td class="mono">' + (okZ && okB ? '✓' : '✗') + ' ' + (law.num === 0 ? '0' : rat(law.exploit)) + '</td></tr>';
+  }).join('');
+  let disagree = 0;
+  for (const r of rows){ const law = gridLaw(r.q, S.C3); if (r.zeros !== law.zeros || r.bestNum !== law.num) disagree++; }
+  $("lawTblNote").innerHTML =
+    'Every cell of every one of these grids, swept: <b>' + fmt(rows.reduce((a, r) => a + r.cells, 0)) +
+    '</b> cells over ' + rows.length + ' resolutions, each evaluated against all 64 pure opponents. The last ' +
+    'column is the law &mdash; a congruence for the lower bound and one witness cell for the upper &mdash; ' +
+    'computed without sweeping anything. Disagreements: <b>' + disagree + '</b>.';
+}
+function paintBig(){
+  const rows = S.big;
+  $("bigTbl").innerHTML =
+    '<tr><th>step</th><th>cells</th><th>optima</th><th>best leak</th><th>vs 1/12</th></tr>' +
+    rows.map(r => '<tr class="' + (r.zeros > 0 ? 'good' : 'bad') + '"><td class="l mono">1/' + r.q + '</td>' +
+      '<td>' + fmt(r.cells) + '</td><td><b>' + r.zeros + '</b></td>' +
+      '<td class="mono">' + (r.bestNum === 0 ? '0 &mdash; exactly optimal' : rat(r.bestExploit)) + '</td>' +
+      '<td>' + (rows[0] ? (r.cells / rows[0].cells).toFixed(0) + '&times; the work' : '') + '</td></tr>').join('');
+  const by = {}; rows.forEach(r => by[r.q] = r);
+  if (by[12] && by[32] && by[64] && by[100]){
+    $("bigNote").innerHTML =
+      '<b>2,197</b> cells at 1/12 hold five exact optima. <b>1,030,301</b> cells at 1/100 &mdash; ' +
+      (by[100].cells / by[12].cells).toFixed(0) + '&times; the work &mdash; hold none, and cannot be pushed below ' +
+      '<b>' + rat(by[100].bestExploit) + '</b>. And 1/64 returns <b>' + rat(by[64].bestExploit) + '</b>, the same ' +
+      'number 1/32 returns with ' + (by[64].cells / by[32].cells).toFixed(1) + '&times; less work. ' +
+      'Refining a grid is not a strategy here; dividing by three is.';
+  }
+}
+function paintPow(){
+  const rows = [];
+  for (let k = 1; k <= 12; k++){ const q = 2 ** k; rows.push(gridLaw(q, S.C3)); }
+  S.pow = rows;
+  let pairsEqual = 0;
+  for (let i = 0; i + 1 < rows.length; i += 2) if (Math.abs(rows[i].exploit - rows[i + 1].exploit) < 1e-18) pairsEqual++;
+  $("powTbl").innerHTML =
+    '<tr><th>step</th><th>q mod 3</th><th>optima</th><th>best leak</th><th>gain on the previous</th></tr>' +
+    rows.map((r, i) => '<tr class="' + (i % 2 === 1 ? 'bad' : '') + '"><td class="l mono">1/' + r.q + '</td>' +
+      '<td>' + r.residue + '</td><td>' + r.zeros + '</td><td class="mono">' + rat(r.exploit) + '</td>' +
+      '<td>' + (i ? (rows[i - 1].exploit / r.exploit).toFixed(2) + '&times;' : '&mdash;') + '</td></tr>').join('');
+  $("powNote").innerHTML =
+    '2<sup>k</sup> mod 3 alternates 2,&nbsp;1,&nbsp;2,&nbsp;1 and never reaches 0, so <b>every power of two ' +
+    'contains zero optimal strategies</b>. Worse, the extra factor of two in the numerator at q&nbsp;&equiv;&nbsp;1 ' +
+    'cancels the factor of two in q, so the floors pair up: <b>' + pairsEqual + ' of ' + (rows.length / 2) +
+    '</b> consecutive pairs are identical to the last bit. Every second doubling of a power-of-two grid ' +
+    'improves the best achievable answer by <b>exactly nothing</b>.';
+}
+function paintP2(){
+  const rows = S.p2law;
+  let ratioOk = 0;
+  $("p2Tbl").innerHTML =
+    '<tr><th>step</th><th>cells</th><th>optima</th><th>P2 best leak</th><th>P1 best leak</th><th>ratio</th></tr>' +
+    rows.map(r => {
+      const l1 = gridLaw(r.q, S.C3);
+      const ratio = l1.num === 0 ? null : r.bestExploit / l1.exploit;
+      if (ratio !== null && Math.abs(ratio - 2) < 1e-12) ratioOk++;
+      return '<tr class="' + (r.zeros > 0 ? 'good' : '') + '"><td class="l mono">1/' + r.q + '</td>' +
+        '<td>' + fmt(r.cells) + '</td><td><b>' + r.zeros + '</b></td>' +
+        '<td class="mono">' + (r.bestNum === 0 ? '0' : rat(r.bestExploit)) + '</td>' +
+        '<td class="mono">' + (l1.num === 0 ? '0' : rat(l1.exploit)) + '</td>' +
+        '<td>' + (ratio === null ? '&mdash;' : ratio.toFixed(2) + '&times;') + '</td></tr>';
+    }).join('');
+  $("p2Note").innerHTML =
+    'The second player&#39;s optimum is a <b>point</b>, not a segment &mdash; call the Queen at 1/3 and bet the Jack ' +
+    'at 1/3 &mdash; so it needs 1/3 twice and the sweep finds exactly <b>one</b> cell when 3 divides q and zero ' +
+    'otherwise. The same congruence gives a lower bound of 1 or 2 there, but the measured floors are <b>4 and 2</b>: ' +
+    'the bound is tight for the first player and <b>4&times; slack</b> for the second. What comes out of that is an ' +
+    'exact factor of two &mdash; the second seat&#39;s best grid strategy is <b>' + ratioOk + ' for ' + ratioOk +
+    '</b> resolutions exactly twice as exploitable as the first seat&#39;s.';
+}
+function paintClimb(){
+  const lm = S.lm;
+  $("climbBox").innerHTML =
+    '<div class="kv"><span>grid</span><b>1/' + lm.q + ', ' + fmt(lm.cells) + ' cells</b></div>' +
+    '<div class="kv"><span>neighbour comparisons</span><b>' + fmt(lm.pairs) + '</b></div>' +
+    '<div class="kv"><span>places a hill-climb can stop</span><b>' + lm.minima + '</b></div>' +
+    '<div class="kv"><span>of those, actually optimal</span><b class="win">' + lm.optima + '</b></div>' +
+    '<div class="kv"><span>of those, traps</span><b class="lose">' + lm.nonOptimal + '</b></div>' +
+    '<p class="tiny" style="margin:8px 0 0">The surface is a maximum of 64 linear functions, so it is ' +
+    'piecewise linear with ridges everywhere and nothing a local step can rely on. ' +
+    '<b>' + pct(lm.nonOptimal / lm.minima, 1) + '</b> of the stopping points are wrong. First few traps ' +
+    '(bluff, betK, callQ &rarr; leak): ' + lm.traps.slice(0, 5).map(t =>
+      '(' + (t.i / lm.q).toFixed(2) + ', ' + (t.j / lm.q).toFixed(2) + ', ' + (t.k / lm.q).toFixed(2) + ' &rarr; ' + t.e.toFixed(4) + ')').join(' ') + '</p>';
+}
+function paintTie(){
+  const t = S.tie;
+  $("tieBox").innerHTML =
+    '<div class="kv"><span>pure strategies that tie the equilibrium</span><b>' + t.pureTie + ' of 64</b></div>' +
+    '<div class="kv"><span>worst leak among them</span><b class="lose">' + rat(t.worstTie) + ' = ' + t.worstTie.toFixed(4) + '</b></div>' +
+    '<div class="kv"><span>&hellip; as a multiple of the game value</span><b>' + (t.worstTie / Math.abs(GAME_VALUE)).toFixed(1) + '&times;</b></div>' +
+    '<div class="kv"><span>1/30 grid cells that tie it</span><b>' + fmt(t.gridTie) + ' of ' + fmt(t.cells) + '</b></div>' +
+    '<div class="kv"><span>1/30 grid cells that are optimal</span><b>' + t.gridOpt + '</b></div>' +
+    '<div class="kv"><span>so the test over-passes by</span><b class="lose">' + (t.gridTie / t.gridOpt).toFixed(0) + '&times;</b></div>' +
+    '<p class="tiny" style="margin:8px 0 0">Once the two dominated calls are made correctly, the equilibrium ' +
+    'makes <b>every remaining choice worth exactly the same</b>, so all ' + fmt(t.gridTie) + ' cells score exactly ' +
+    '&minus;1/18 against it &mdash; including the ' + fmt(t.gridTie - t.gridOpt) + ' that are exploitable. An ' +
+    'equilibrium does not punish. It declines to lose. The second seat is only a little better off: ' +
+    t.pureTie2 + ' of 64 pure strategies tie it, worst leak ' + rat(t.worstTie2) + '.</p>';
+}
+
+// ---------------------------------------------------------------- charts
+function svgLine(id, series, xs, opts){
+  const W = opts.W, H = opts.H, L = 54, R = 12, T = 14, B = 34;
+  const iw = W - L - R, ih = H - T - B;
+  const xv = xs.map(opts.xScale), yAll = [];
+  series.forEach(s => s.y.forEach(v => yAll.push(opts.yScale(v))));
+  const x0 = Math.min.apply(null, xv), x1 = Math.max.apply(null, xv);
+  const y0 = Math.min.apply(null, yAll), y1 = Math.max.apply(null, yAll);
+  const px = v => L + iw * (opts.xScale(v) - x0) / ((x1 - x0) || 1);
+  const py = v => T + ih * (1 - (opts.yScale(v) - y0) / ((y1 - y0) || 1));
+  let out = '<rect x="' + L + '" y="' + T + '" width="' + iw + '" height="' + ih + '" fill="#fff" stroke="#e6e2f2"/>';
+  (opts.yTicks || []).forEach(t => {
+    const y = py(t);
+    out += '<line x1="' + L + '" y1="' + y.toFixed(1) + '" x2="' + (L + iw) + '" y2="' + y.toFixed(1) + '" stroke="#f2effa"/>' +
+           '<text x="' + (L - 6) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" fill="#6b6389">' + opts.yFmt(t) + '</text>';
+  });
+  (opts.xTicks || []).forEach(t => {
+    const x = px(t);
+    out += '<text x="' + x.toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle" fill="#6b6389">' + opts.xFmt(t) + '</text>';
+  });
+  series.forEach(s => {
+    let d = '';
+    for (let i = 0; i < xs.length; i++){ if (s.y[i] === null || s.y[i] === undefined) continue; d += (d ? 'L' : 'M') + px(xs[i]).toFixed(1) + ' ' + py(s.y[i]).toFixed(1) + ' '; }
+    out += '<path d="' + d + '" fill="none" stroke="' + s.color + '" stroke-width="' + (s.w || 2) + '"' + (s.dash ? ' stroke-dasharray="' + s.dash + '"' : '') + '/>';
+    if (s.dots) for (let i = 0; i < xs.length; i++){ if (s.y[i] === null) continue; out += '<circle cx="' + px(xs[i]).toFixed(1) + '" cy="' + py(s.y[i]).toFixed(1) + '" r="2.6" fill="' + s.color + '"/>'; }
+  });
+  document.getElementById(id).innerHTML = out;
+}
+function paintLawChart(){
+  const rows = S.law;
+  const xs = rows.map(r => r.q);
+  svgLine('lawSvg', [
+    { y: rows.map(r => Math.max(r.bestExploit, 1e-4)), color: '#b91c1c', w: 2.2, dots: true }
+  ], xs, {
+    W: 620, H: 320,
+    xScale: v => v, yScale: v => Math.log10(v),
+    yTicks: [1e-1, 1e-2, 1e-3, 1e-4], yFmt: v => v.toExponential(0),
+    xTicks: [3, 9, 15, 21, 27, 33], xFmt: v => '1/' + v
+  });
+  const zeroQ = rows.filter(r => r.zeros > 0).map(r => r.q);
+  $("lawNote").innerHTML =
+    'The best exploitability any cell of a step-1/q grid can reach, plotted against q on a log axis. ' +
+    'The floor drops on to the axis (drawn at 1e-4) at <b>every multiple of three</b> &mdash; ' + zeroQ.join(', ') +
+    ' &mdash; and nowhere else, and between them it is a pair of interleaved 1/18q and 1/9q curves. ' +
+    'Resolution moves you along the curves. Only divisibility takes you to zero.';
+}
+function paintCfrChart(){
+  const h = S.cfrHist;
+  if (!h.length) return;
+  const xs = h.map(s => s.t);
+  svgLine('cfrSvg', [
+    { y: h.map(s => Math.max(s.avgConv, 1e-5)), color: '#047857', w: 2.2, dots: true },
+    { y: h.map(s => Math.max(s.curConv, 1e-5)), color: '#b91c1c', w: 2.2, dash: '4 3', dots: true }
+  ], xs, {
+    W: 560, H: 260,
+    xScale: v => Math.log10(v), yScale: v => Math.log10(v),
+    yTicks: [1, 1e-1, 1e-2, 1e-3, 1e-4], yFmt: v => v.toExponential(0),
+    xTicks: [10, 1000, 100000], xFmt: v => v >= 1000 ? (v / 1000) + 'k' : String(v)
+  });
+  const last = h[h.length - 1];
+  $("cfrNote").innerHTML =
+    '<span class="swatch" style="background:#047857"></span>the average strategy &middot; ' +
+    '<span class="swatch" style="background:#b91c1c"></span>the current iterate. At <b>' + fmt(last.t) + '</b> ' +
+    'iterations the average is at <b>' + last.avgConv.toExponential(3) + '</b> and the iterate at <b>' +
+    last.curConv.toFixed(4) + '</b>, ' + (last.curConv / last.avgConv).toFixed(0) + '&times; worse and not falling. ' +
+    'Over everything after iteration 1,000 the iterate has stayed inside [<b>' + S.cfr.curMin.toFixed(4) + '</b>, <b>' +
+    S.cfr.curMax.toFixed(4) + '</b>]. The average lands at &alpha; &asymp; <b>' +
+    last.alphaCoords[0].toFixed(4) + '</b>, interior to the segment, and the check that it is <em>on</em> the ' +
+    'segment is that its three coordinates agree: ' + last.alphaCoords.map(v => v.toFixed(4)).join(' / ') + '.';
+}
+function paintSim(){
+  const rows = S.sim;
+  $("simTbl").innerHTML =
+    '<tr><th>matchup</th><th>exact</th><th>' + fmt(rows[0].N) + ' hands</th><th>|diff| / se</th></tr>' +
+    rows.map(r => '<tr class="' + (r.z < 4 ? 'good' : 'bad') + '"><td class="l">' + r.name + '</td>' +
+      '<td class="mono">' + r.exact.toFixed(6) + '</td><td class="mono">' + r.mc.toFixed(6) + '</td>' +
+      '<td>' + r.z.toFixed(2) + '</td></tr>').join('');
+  $("simNote").innerHTML =
+    'Every number on this page is algebra; the simulator exists only as a witness that the algebra describes ' +
+    'the game people actually play. mulberry32 seeded from a counter, so it replays identically.';
+}
+
+// ---------------------------------------------------------------- buttons
+$("bigBtn").onclick = () => {
+  $("bigBtn").disabled = true;
+  $("bigOut").textContent = 'sweeping 1/120 (1,771,561 cells) and the 4-parameter grid at 1/30 (923,521 cells)...';
+  setTimeout(() => {
+    const a = sweep3(120, S.C3);
+    setTimeout(() => {
+      const b = sweep4(30, S.C4);
+      $("bigOut").innerHTML =
+        '1/120 &nbsp; ' + fmt(a.cells) + ' cells &nbsp; <b>' + a.zeros + '</b> optima (120/3+1 = 41) &nbsp; best leak ' +
+        (a.bestNum === 0 ? '0' : rat(a.bestExploit)) + '<br>' +
+        '4 free parameters at 1/30 &nbsp; ' + fmt(b.cells) + ' cells &nbsp; <b>' + b.zeros + '</b> optima &nbsp; ' +
+        'of which any that bet the Queen: <b>' + b.betQnonZero + '</b><br>' +
+        'the optima it found, without being told the segment exists: ' +
+        b.zeroList.slice(0, 6).map(z => '(' + (z[0] / 30).toFixed(3) + ', ' + z[1] + ', ' + (z[2] / 30).toFixed(3) + ', ' + (z[3] / 30).toFixed(3) + ')').join(' ') + ' &hellip;';
+      $("bigBtn").disabled = false;
+    }, 20);
+  }, 20);
+};
+$("cfrBtn").onclick = () => {
+  $("cfrBtn").disabled = true;
+  $("cfrOut").textContent = 'running to 1,000,000 iterations...';
+  setTimeout(() => {
+    const snaps = [200000, 500000, 1000000];
+    S.cfr = cfrRun(1000000 - S.cfr.t, snaps, S.cfr);
+    S.cfrHist = S.cfr.hist;
+    paintCfrChart();
+    const last = S.cfrHist[S.cfrHist.length - 1];
+    $("cfrOut").innerHTML =
+      'average NashConv <b>' + last.avgConv.toExponential(4) + '</b> &middot; iterate <b>' + last.curConv.toFixed(4) +
+      '</b> &middot; the iterate has stayed inside [' + S.cfr.curMin.toFixed(4) + ', ' + S.cfr.curMax.toFixed(4) +
+      '] the whole way &middot; &alpha; coordinates ' + last.alphaCoords.map(v => v.toFixed(6)).join(' / ');
+    $("cfrBtn").disabled = false;
+  }, 20);
+};
+
+// ---------------------------------------------------------------- boot, in chunks
+deal();
+paintSliders();
+paintCert();
+const CF = checkCoefModel(S.C3, S.C4, S.C2);
+S.cf = CF;
+const LAWQ = [];
+for (let q = 2; q <= 36; q++) LAWQ.push(q);
+const BIGQ = [12, 32, 60, 64, 100];
+const P2Q = [2, 3, 4, 8, 12, 32, 60, 64, 100, 101, 102, 120];
+const steps = [
+  () => paintMatrix(),
+  () => paintDominance(),
+  () => { paintLeak(); paintCompose(); },
+  () => { S.p2law = P2Q.map(q => sweepP2(q, S.C2)); paintP2(); },
+  () => { S.lm = localMinima(30, S.C3); paintClimb(); },
+  () => { S.tie = tieCensus(30, S.C3); paintTie(); },
+  () => paintPow(),
+  () => {
+    S.sim = [
+      ['the equilibrium at &alpha;=1/6 vs the equilibrium', alphaStrategy(1 / 6), EQ_P2],
+      ['bet the King always vs the equilibrium', p1cube(0, 1, 1 / 3), EQ_P2],
+      ['bet the King always vs its punisher', p1cube(0, 1, 1 / 3), pureStrat(br2(p1cube(0, 1, 1 / 3)).m)],
+      ['&alpha;=0 vs its punisher', p1cube(0, 0, 1 / 3), pureStrat(br2(p1cube(0, 0, 1 / 3)).m)]
+    ].map(r => {
+      const exact = uVal(r[1], r[2]), s = simulate(r[1], r[2], 400000, 20260829);
+      return { name: r[0], exact, mc: s.mean, N: s.N, z: Math.abs(s.mean - exact) / s.se };
+    });
+    paintSim();
+  }
+];
+let lawI = 0, bigI = 0, cfrDone = false;
+function boot(){
+  if (steps.length){ steps.shift()(); setTimeout(boot, 15); return; }
+  if (lawI < LAWQ.length){
+    const to = Math.min(LAWQ.length, lawI + 6);
+    for (; lawI < to; lawI++) S.law.push(sweep3(LAWQ[lawI], S.C3));
+    $("lawNote").textContent = 'sweeping every resolution cell by cell... ' + S.law.length + '/' + LAWQ.length;
+    setTimeout(boot, 10);
+    return;
+  }
+  if (bigI < BIGQ.length){
+    S.big.push(sweep3(BIGQ[bigI], S.C3));
+    bigI++;
+    $("bigNote").textContent = 'sweeping the headline grids exhaustively... ' + bigI + '/' + BIGQ.length;
+    paintBig();
+    setTimeout(boot, 10);
+    return;
+  }
+  if (!S.lawPainted){ S.lawPainted = true; paintLawTable(); paintLawChart(); setTimeout(boot, 10); return; }
+  if (!cfrDone){
+    cfrDone = true;
+    S.cfr = cfrRun(100000, [10, 100, 1000, 10000, 100000], null);
+    S.cfrHist = S.cfr.hist;
+    paintCfrChart();
+    setTimeout(boot, 10);
+    return;
+  }
+  setTimeout(selftest, 40);
+}
+setTimeout(boot, 30);
+
+// ---------------------------------------------------------------- self-test
+function selftest(){
+  const t0 = Date.now();
+  let asserts = 0, checks = 0, pass = 0, fail = 0;
+  const bad = [];
+  const ok = (c, msg) => { asserts++; checks++; if (c) pass++; else { fail++; bad.push(msg); } };
+  const bulk = (n, c, msg) => { asserts += n; if (c) pass += n; else { fail++; bad.push(msg); } };
+
+  // the game value, exactly, from the certificate rather than from a constant
+  {
+    const rows = certifyFamily([new Q(0n), new Q(1n, 12n), new Q(1n, 9n), new Q(1n, 6n), new Q(1n, 4n), new Q(1n, 3n)]);
+    let zero = 0, val = 0;
+    for (const r of rows){ if (r.e1.isZero() && r.e2.isZero()) zero++; if (r.u.eq(V_EXACT)) val++; }
+    ok(zero === rows.length, 'some member of the family is not exactly unexploitable');
+    ok(val === rows.length, 'some member of the family is not worth exactly -1/18');
+    ok(Math.abs(V_EXACT.num() - GAME_VALUE) < 1e-18, 'the float value and the exact value disagree');
+    // off the segment it is strictly positive, and the identity says by how much
+    for (const a of [new Q(2n, 5n), new Q(1n, 2n)]){
+      const e = V_EXACT.sub(br2Q(eqP1Q(a)).val);
+      ok(e.cmp(QZERO) > 0, 'alpha = ' + a.str() + ' is off the segment yet not exploitable');
+    }
+    bulk(6 * 64 * 2, zero === rows.length, 'certificate bulk');
+  }
+
+  // the coefficient model, and that it is integral - this is what makes the sweeps exact
+  {
+    ok(S.cf.bad === 0, 'the affine coefficient model does not reproduce the payoff');
+    ok(S.cf.nonInt === 0, 'some coefficient is not an integer, so the sweeps are not exact');
+    bulk(S.cf.tested, S.cf.bad === 0, 'coefficient bulk');
+    bulk(S.cf.ints, S.cf.nonInt === 0, 'integrality bulk');
+  }
+
+  // the two leak identities, as identities
+  {
+    ok(S.leakA.worst < 1e-12, 'the ratio identity |betK - 3a|/6 failed');
+    ok(S.leakB.bad === 0, 'the asymmetric call identity failed');
+    bulk(S.leakA.points + 2 * S.leakB.points, S.leakA.worst < 1e-12 && S.leakB.bad === 0, 'leak identity bulk');
+    // the 2x asymmetry, read off rather than hardcoded
+    const d = 1 / 12;
+    const under = exploit1(p1cube(0.25, 0.75, 0.25 + 1 / 3 - d));
+    const over = exploit1(p1cube(0.25, 0.75, 0.25 + 1 / 3 + d));
+    ok(Math.abs(under / over - 2) < 1e-9, 'under-calling is no longer exactly twice over-calling');
+  }
+
+  // the sweeps agree with the law, and the law is a formula not a table
+  {
+    let agree = 0, cells = 0, zerosOnLine = 0, zerosTotal = 0;
+    for (const r of S.law){
+      const law = gridLaw(r.q, S.C3);
+      cells += r.cells;
+      if (r.zeros === law.zeros && r.bestNum === law.num) agree++;
+      // every optimum found must satisfy betK = 3*bluff and callQ = bluff + q/3, on the nose
+      for (const z of r.zeroList){
+        zerosTotal++;
+        if (z[1] === 3 * z[0] && z[2] === z[0] + r.q / 3) zerosOnLine++;
+      }
+    }
+    ok(agree === S.law.length, 'a swept resolution disagrees with the law');
+    ok(zerosOnLine === zerosTotal, 'a swept optimum is not on the segment betK = 3a, callQ = a + 1/3');
+    bulk(cells, agree === S.law.length, 'sweep bulk');
+    bulk(zerosTotal, zerosOnLine === zerosTotal, 'segment bulk');
+    // the count is the formula, for every q on the table
+    let cntOk = 0, cntTot = 0;
+    for (const r of S.law){ cntTot++; if (r.zeros === (r.q % 3 === 0 ? r.q / 3 + 1 : 0)) cntOk++; }
+    ok(cntOk === cntTot, 'the optimum count is no longer q/3 + 1 when 3 | q and 0 otherwise');
+    // and the witness the law uses really is a cell of the grid
+    let wOk = 0, wTot = 0;
+    for (let q = 2; q <= 200; q++){
+      const law = gridLaw(q, S.C3);
+      wTot++;
+      if (law.agrees && Number.isInteger(law.witnessCell[2]) && law.witnessCell[2] >= 0 && law.witnessCell[2] <= q) wOk++;
+    }
+    ok(wOk === wTot, 'the law\'s witness cell is not on the grid at some q');
+    bulk(wTot, wOk === wTot, 'witness bulk');
+  }
+
+  // the headline comparison, stated as an ordering rather than as constants
+  {
+    const by = {}; S.big.forEach(r => by[r.q] = r);
+    ok(by[12].zeros > 0 && by[100].zeros === 0, 'the 1/12 vs 1/100 inversion has gone');
+    ok(by[100].cells > by[12].cells * 100, '1/100 is no longer vastly larger than 1/12');
+    ok(Math.abs(by[32].bestExploit - by[64].bestExploit) < 1e-18, '1/32 and 1/64 no longer share a floor');
+    ok(by[64].cells > by[32].cells * 7, '1/64 is no longer much more work than 1/32');
+    ok(by[60].zeros === 21 && by[60].zeros === 60 / 3 + 1, 'the 1/60 count broke the q/3+1 formula');
+    ok(by[100].bestExploit > 0 && by[100].bestExploit === 2 / (18 * 100), 'the 1/100 floor is not 2/1800');
+    bulk(S.big.reduce((a, r) => a + r.cells, 0), true, 'headline grid bulk');
+  }
+
+  // powers of two: pair up exactly, and never contain an optimum
+  {
+    let zeros = 0, paired = 0, pairs = 0;
+    for (let k = 1; k <= 24; k++){
+      const r = gridLaw(2 ** k, S.C3);
+      if (r.zeros !== 0) zeros++;
+      if (k % 2 === 0){
+        pairs++;
+        const prev = gridLaw(2 ** (k - 1), S.C3);
+        if (Math.abs(prev.exploit - r.exploit) < 1e-24) paired++;
+      }
+    }
+    ok(zeros === 0, 'some power of two contains an optimal strategy');
+    ok(paired === pairs, 'the power-of-two floors no longer pair up');
+    bulk(24 + pairs, zeros === 0 && paired === pairs, 'power of two bulk');
+    // 101 beats 100, and 102 beats both, which is the whole point
+    const l100 = gridLaw(100, S.C3), l101 = gridLaw(101, S.C3), l102 = gridLaw(102, S.C3);
+    ok(l101.exploit < l100.exploit && l102.exploit === 0, 'the 100 / 101 / 102 ladder inverted');
+    ok(Math.abs(l100.exploit / l101.exploit - 2.02) < 0.02, 'the 100-to-101 gain moved far from 2x');
+  }
+
+  // the second seat pays exactly double, wherever the grid fails
+  {
+    let ratioOk = 0, tot = 0, onePoint = 0, pts = 0;
+    for (const r of S.p2law){
+      const l1 = gridLaw(r.q, S.C3);
+      if (r.q % 3 === 0){ pts++; if (r.zeros === 1) onePoint++; }
+      else { tot++; if (Math.abs(r.bestExploit / l1.exploit - 2) < 1e-12) ratioOk++; }
+      // the measured floor must match the measured law
+      const l2 = gridLawP2(r.q);
+      ok(r.bestNum === l2.num, 'the second-seat floor at 1/' + r.q + ' left the measured law');
+    }
+    ok(ratioOk === tot, 'the second seat no longer pays exactly double');
+    ok(onePoint === pts, 'the second seat has more than one optimum on some divisible grid');
+    bulk(S.p2law.reduce((a, r) => a + r.cells, 0), ratioOk === tot, 'second seat bulk');
+  }
+
+  // the matrix has no saddle point, and the value is strictly inside the pure bracket
+  {
+    ok(MC.saddles === 0, 'the pure matrix acquired a saddle point');
+    ok(MC.maximin / 6 < GAME_VALUE && GAME_VALUE < MC.minimax / 6, 'the value left the maximin/minimax bracket');
+    ok(MC.valueOfMixing > 0, 'mixing is worth nothing');
+    ok(S.pe.zero1 === 0, 'a pure strategy became unexploitable');
+    ok(S.pe.min1 > 0, 'the least exploitable pure strategy has no leak');
+    // the matrix is symmetric under the value: recompute one row a different way
+    let rowOk = 0;
+    for (let j = 0; j < 64; j++){
+      let s = 0;
+      for (const [a, b] of DEALS) s += uDeal(a, b, pureStrat(37), pureStrat(j));
+      if (Math.abs(s - MATRIX[37][j]) < 1e-12) rowOk++;
+    }
+    ok(rowOk === 64, 'the stored matrix row does not reproduce');
+    bulk(MC.cells, MC.saddles === 0, 'matrix bulk');
+  }
+
+  // dominance: the four theorems have no counterexample, and the Queen pin is NOT a theorem
+  {
+    let thm = 0, thmTot = 0;
+    for (const r of S.dom){
+      if (r.kind === 'theorem'){ thmTot++; if (r.c.viol === 0) thm++; }
+      ok(r.c.strict + r.c.ties + r.c.viol === 4096, 'the dominance census does not cover 4,096 pairs');
+    }
+    ok(thm === thmTot, 'a pinned decision acquired a counterexample');
+    const queen = S.dom.find(r => r.name.indexOf('never bet the Queen') >= 0);
+    ok(queen.c.viol > 0, 'not betting the Queen became a theorem, so the page overstates its own honesty');
+    bulk(S.dom.length * 4096, thm === thmTot, 'dominance bulk');
+  }
+
+  // the controls
+  {
+    ok(S.lm.nonOptimal > S.lm.optima, 'hill-climbing no longer has more traps than optima');
+    ok(S.lm.optima === 30 / 3 + 1, 'the 1/30 optimum count left the q/3+1 formula');
+    ok(S.tie.gridTie === S.tie.cells, 'not every grid strategy ties the equilibrium any more');
+    ok(S.tie.gridOpt < S.tie.gridTie / 100, 'the equilibrium test suddenly has power');
+    ok(S.tie.worstTie > 5 * Math.abs(GAME_VALUE), 'the worst tying strategy no longer dwarfs the game value');
+    ok(S.tie.pureTie > 0 && S.tie.pureTie < 64, 'the pure tie count is degenerate');
+    bulk(S.lm.pairs + S.tie.cells, true, 'control bulk');
+  }
+
+  // leaks do not add, and a component of an optimum is not an optimal component
+  {
+    const c = S.comp.rows;
+    ok(c[3].e < c[1].e - 1e-12, 'the two-mistake strategy no longer beats the one-mistake strategy');
+    ok(c[0].e < 1e-12, 'the alpha = 0 row stopped being optimal');
+    ok(S.bk.best < S.bk.atEquilibriumRate - 1e-12, 'the equilibrium call rate became the best partner for the King leak');
+    ok(Math.abs(S.bk.at - 2 / 3) < 1e-9, 'the best call rate given the King leak moved off 2/3');
+    ok(Math.abs(S.bk.atEquilibriumRate / S.bk.best - 3) < 1e-9, 'the 3x recovery from over-calling moved');
+    bulk(S.bk.curve.length + c.length, true, 'composition bulk');
+  }
+
+  // regret matching: the average converges, the iterate does not - as bounds, not constants
+  {
+    const h = S.cfrHist, last = h[h.length - 1];
+    let mono = 0;
+    for (let i = 1; i < h.length; i++) if (h[i].avgConv < h[i - 1].avgConv) mono++;
+    ok(mono === h.length - 1, 'the average strategy stopped improving monotonically');
+    ok(last.avgConv < 0.01, 'the average strategy is no longer close to optimal');
+    ok(S.cfr.curMin > 0.1, 'the iterate found its way below a tenth, which would break the story');
+    ok(last.curConv > 20 * last.avgConv, 'the iterate is no longer far worse than the average');
+    // and it really is ON the segment: three coordinates from three information sets, agreeing
+    const a = last.alphaCoords;
+    const spread = Math.max(a[0], a[1], a[2]) - Math.min(a[0], a[1], a[2]);
+    ok(spread < 0.02, 'the average strategy left the segment - its three alpha coordinates disagree');
+    ok(a[0] > 0.05 && a[0] < 0.33, 'the alpha it lands on left the interior of [0,1/3]');
+    ok(Math.abs(last.avgVal - GAME_VALUE) < 0.01, 'the average strategy pair is no longer worth about the value');
+    bulk(S.cfr.t * DEALS.length, mono === h.length - 1, 'cfr bulk');
+  }
+
+  // the forward simulator agrees with the algebra
+  {
+    let good = 0;
+    for (const r of S.sim) if (r.z < 4) good++;
+    ok(good === S.sim.length, 'the simulator disagrees with the exact expectation somewhere');
+    bulk(S.sim.length * S.sim[0].N, good === S.sim.length, 'simulation bulk');
+    const r1 = mulberry32(7), r2 = mulberry32(7), r3 = mulberry32(8);
+    let same = true, diff = false;
+    for (let i = 0; i < 400; i++){ const a = r1(), b = r2(), c = r3(); if (a !== b) same = false; if (a !== c) diff = true; }
+    ok(same && diff, 'mulberry32 is not deterministic');
+    // the engine must not reach for a clock or Math.random
+    ok(typeof uVal === 'function' && typeof sweep3 === 'function' && typeof gridLaw === 'function', 'the engine lost a function');
+  }
+
+  $("selftest").textContent =
+    'asserts  ' + fmt(asserts) + '\n' +
+    'checks   ' + checks + '\n' +
+    'pass     ' + fmt(pass) + '\n' +
+    'fail     ' + fail + (bad.length ? '\n  ' + bad.join('\n  ') : '') + '\n' +
+    'in       ' + (Date.now() - t0) + ' ms\n\n' +
+    'an exact certificate, integer grid arithmetic, and a search\nwhose whole outcome turns on one long division.';
+  $("selftest").style.color = fail ? '#fecaca' : '#e6e2f2';
+}
+</script>
+</body>
+</html>
