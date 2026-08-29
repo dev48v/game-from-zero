@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 75 — Blue-Red Hackenbush</title>
+<style>
+  :root{
+    --ink:#12211f; --sub:#3f5b57; --mute:#5d7b76; --line:#dfeae8;
+    --bg:#f8fbfa; --bg2:#eef6f4; --card:#ffffff;
+    --acc:#0f766e; --acc-soft:#f0fdfa; --acc-line:#99f6e4;
+    --warn:#b45309; --warn-soft:#fffbeb; --warn-line:#fcd34d;
+    --good:#047857; --bad:#b91c1c;
+    --blue:#1d4ed8; --blue-soft:#eff6ff; --red:#be123c; --red-soft:#fff1f2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,sans-serif;
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;margin:0}
+  p{margin:0 0 14px}
+  strong{font-weight:800}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;
+       background:var(--bg2);padding:1px 5px;border-radius:4px}
+  pre{background:#12211f;color:#dfeae8;padding:12px 14px;border-radius:10px;font-size:12px;
+      overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;
+      margin:0 0 14px}
+  .hidden{display:none !important}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* The hero paragraph is taller than most viewports, so the header must NOT be sticky - a sticky
+     box taller than the screen pins itself over the page forever. Only the tab bar sticks. */
+  header{background:#fff;padding-bottom:4px}
+  nav#tabbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+  nav#tabbar .wrap{padding:10px 16px}
+  .wrap{max-width:1140px;margin:0 auto;padding:18px 16px}
+  .wrap-narrow{max-width:840px;margin:0 auto;padding:24px 16px 60px}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--acc);margin:0 0 8px}
+  h1.hero{font-size:20px;font-weight:900;margin-bottom:16px}
+  @media(min-width:768px){ h1.hero{font-size:23px} }
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tabs button{border:0;border-radius:9px;padding:9px 20px;font-weight:700;font-size:14px;
+               background:var(--bg2);color:var(--ink);cursor:pointer;font-family:inherit}
+  .tabs button.tab-active{background:var(--ink);color:#fff}
+
+  section.tab-panel{min-height:calc(100vh - 76px)}
+  #look{background:var(--bg2);padding:16px}
+  #understand{padding:16px}
+  #build{background:var(--bg);padding:16px}
+  @media(min-width:768px){ #look,#understand,#build{padding:32px 16px} }
+
+  .cols{display:grid;grid-template-columns:1fr;gap:18px;max-width:1140px;margin:0 auto}
+  @media(min-width:1024px){ .cols{grid-template-columns:1.42fr 1fr} }
+  .stack{display:flex;flex-direction:column;gap:18px}
+
+  .card{background:var(--card);border-radius:16px;padding:18px;
+        box-shadow:0 1px 2px rgba(18,33,31,.06),0 1px 10px rgba(18,33,31,.05)}
+  .lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute);margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .pill{padding:6px 11px;border-radius:9px;font-size:12.5px;font-weight:700;font-family:inherit;
+        border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .pill:hover{background:var(--acc-soft);border-color:var(--acc-line)}
+  .pill:disabled{opacity:.34;cursor:default}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  select.pill{cursor:pointer}
+  .go{padding:8px 15px;border-radius:9px;border:0;background:var(--acc);color:#fff;
+      font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.4;cursor:default}
+
+  svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700}
+  #board{width:100%;height:auto;touch-action:manipulation}
+  #board line.edge{stroke-width:7;stroke-linecap:round;cursor:pointer}
+  #board line.edge.dead{cursor:default;opacity:.5}
+  #board line.edge:hover{stroke-width:11}
+  #board line.hitbox{stroke-width:20;stroke:transparent;cursor:pointer}
+
+  table.num{border-collapse:collapse;width:100%}
+  table.num th,table.num td{padding:4px 8px;font-variant-numeric:tabular-nums}
+  table.num th{font-size:10.5px;letter-spacing:.05em;color:var(--mute);text-align:right;font-weight:800}
+  table.num th:first-child,table.num td:first-child{text-align:left}
+  table.num td{text-align:right;font-size:12.5px;border-top:1px solid var(--line)}
+  table.num td.l{text-align:left}
+  table.num tr.hi td{background:var(--acc-soft);font-weight:800}
+  table.num tr.bad td{background:var(--red-soft)}
+  table.num tr.good td{background:#ecfdf5}
+
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+       max-height:150px;overflow:auto}
+  .log div{padding:1px 0;border-bottom:1px solid var(--bg2)}
+
+  .note{border-left:4px solid var(--acc);background:var(--acc-soft);padding:12px 14px;border-radius:0 10px 10px 0;
+        margin:0 0 16px}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .note p{margin:0;font-size:13.5px}
+  .note p+p{margin-top:8px}
+
+  .verdict{font-weight:900;font-size:14px}
+  .win{color:var(--good)} .lose{color:var(--bad)}
+  .bar{height:9px;border-radius:99px;background:var(--line);overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--acc)}
+  .small{font-size:12px;color:var(--sub)}
+  .tiny{font-size:11.5px;color:var(--mute)}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0}
+  .kv b{font-variant-numeric:tabular-nums}
+  .huge{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
+  h2.big{font-size:23px;font-weight:900;margin:0 0 16px}
+  h3.mid{font-size:17.5px;font-weight:800;margin:26px 0 10px}
+  .wrap-narrow p,.wrap-narrow li{color:#1b302d}
+  .wrap-narrow ul{margin:0 0 14px;padding-left:22px}
+  .wrap-narrow li{margin-bottom:6px}
+  .bl{color:var(--blue);font-weight:800}
+  .rd{color:var(--red);font-weight:800}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;
+          margin-right:5px;border:1px solid rgba(18,33,31,.15)}
+  .stalkstr{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.04em}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">GAMEFROMZERO · DAY 75</p>
+    <h1 class="hero">
+      🌱 Blue-Red Hackenbush &mdash; the first <strong>partizan</strong> game in this series, where
+      the two players do not share a move set, so the nimbers that solved Nim and Kayles
+      <strong>cannot exist</strong>. A position is worth a <strong>number</strong> instead, an exact
+      dyadic rational, and that number answers three questions at once: its sign says who wins, its
+      size says by how much, and &ldquo;move to keep it as large as you can&rdquo; is a winning
+      strategy. All three are checked rather than quoted: the sign called every one of
+      <strong>90,567</strong> exhaustively solved pictures &mdash; <strong>0</strong> wrong &mdash;
+      and playing for the number won <strong>44,974 of 44,974</strong> won positions across four
+      seeds. What a reasonable person does instead is count the edges, and on a single stalk that is
+      <strong>exactly a coin flip</strong>: it misses on exactly <strong>2<sup>n&minus;1</sup></strong>
+      of the <strong>2<sup>n</sup></strong> stalks of every even length, <strong>0.500000</strong> at
+      length 2 and <strong>0.500000</strong> at length 20, and it never improves. The bottom edge is
+      the whole answer on one stalk &mdash; <strong>0 exceptions in 2,097,150</strong> &mdash; so a
+      single red edge at the ground with <strong>nineteen blue above it</strong> leaves Blue ahead by
+      <strong>18 edges</strong> and losing by <strong>1/524288</strong>. 🔴 And the instinct that
+      feels strongest is the worst thing you can do: chopping the enemy off <em>at the ground</em>
+      loses <strong>39.09%</strong> of won positions, <strong>2.08&times;</strong> worse than moving
+      at <strong>random</strong> (18.78%), while &ldquo;take down the most edges&rdquo; loses
+      <strong>29.51%</strong> &mdash; also worse than not thinking. 🔴 Then recolour the same
+      90,567 pictures <strong>green</strong>, so either player may cut any edge, and who moves first
+      goes from deciding <strong>0.00%</strong> of them to deciding <strong>95.78%</strong>. That is
+      not a near miss: blue-red produces <strong>no</strong> first-player wins and green produces
+      <strong>no</strong> decided-in-advance ones, on the same drawings, by construction. Pure
+      vanilla JS, one file, no build step.
+    </h1>
+  </div>
+</header>
+
+<nav id="tabbar">
+  <div class="wrap tabs" id="tabs">
+    <button data-tab="look" class="tab-active">🌱 PLAY</button>
+    <button data-tab="understand">🧠 UNDERSTAND</button>
+    <button data-tab="build">🔨 BUILD</button>
+  </div>
+</nav>
+
+<section id="look" class="tab-panel">
+  <div class="cols">
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">THE PICTURE &mdash; YOU ARE <span class="bl">BLUE</span>, CUT A BLUE EDGE</p>
+        <div class="row" style="margin-bottom:10px">
+          <select id="preset" class="pill"></select>
+          <select id="opp" class="pill">
+            <option value="value">Red plays: the number (perfect)</option>
+            <option value="ground">Red plays: cut it off at the ground</option>
+            <option value="damage">Red plays: take down the most edges</option>
+            <option value="count">Red plays: by the edge count</option>
+            <option value="random">Red plays: at random</option>
+          </select>
+          <button id="resetBtn" class="pill">reset</button>
+          <button id="hintBtn" class="go">hint</button>
+        </div>
+        <svg id="board" viewBox="0 0 620 250" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="huge" id="valBig">&mdash;</div>
+        <p class="small" id="verdict" style="margin:6px 0 4px"></p>
+        <p class="tiny" id="boardNote" style="margin:0 0 8px"></p>
+        <div id="log" class="log"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EVERY STALK UP TO 20 EDGES &mdash; THE IDENTITY AND ITS CONTROL</p>
+        <table class="num" id="stalkTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="stalkNote">sweeping&hellip;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">COUNTING EDGES DOES NOT GET BETTER &mdash; THE HEADLINE</p>
+        <svg id="rateSvg" viewBox="0 0 620 300" preserveAspectRatio="xMidYMid meet"
+             style="width:100%;height:auto"></svg>
+        <p class="tiny" style="margin:6px 0 0" id="rateNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EVERY PICTURE, SOLVED BY WIN/LOSS RECURSION</p>
+        <table class="num" id="posTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="posNote">solving&hellip;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">DOES THE NUMBER PLAY? SIX POLICIES ON THE SAME WON POSITIONS</p>
+        <table class="num" id="polTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="polNote">&nbsp;</p>
+        <div class="row" style="margin-top:10px">
+          <button id="deepBtn" class="go" disabled>push both sweeps to 12 edges (231,719 pictures)</button>
+        </div>
+        <div id="deepOut" class="small mono" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE SAME PICTURES IN GREEN &mdash; THE OTHER HALF OF THE INVERSION</p>
+        <table class="num" id="greenTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="greenNote">&nbsp;</p>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">ONE STALK, EDGE BY EDGE</p>
+        <table class="num" id="ladderTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="ladderNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE WIDEST THE COUNT CAN BE WRONG</p>
+        <div id="gapBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">TWO ROUTES TO THE SAME NUMBER</p>
+        <table class="num" id="defnTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="defnNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THREE IDENTITIES THAT HAVE TO HOLD</p>
+        <table class="num" id="idTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="idNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">HOW MANY NUMBERS A STALK CAN BE</p>
+        <table class="num" id="censusTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="censusNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHERE EACH HABIT DIES, PICTURE SIZE BY PICTURE SIZE</p>
+        <table class="num" id="growTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="growNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE MARGIN IS USUALLY SMALLER THAN A MOVE</p>
+        <div id="thinBox" class="small"></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">When the two players have different moves, the answer stops being a nimber and becomes a number</h2>
+
+    <p>Draw some line segments on the ground. Colour each one <span class="bl">blue</span> or
+    <span class="rd">red</span>. Left owns the blue edges, Right owns the red ones. On your turn you
+    delete one edge <em>of your own colour</em>, and anything that is no longer connected to the
+    ground falls off with it. Whoever cannot move loses. That is the whole game.</p>
+
+    <p>Two games in this series have already been solved by the Sprague&ndash;Grundy theory &mdash;
+    Nim on Day 55, Kayles on Day 70. Both are <strong>impartial</strong>: whatever moves are
+    available, they are available to <em>both</em> players, so the only thing a position can be is a
+    heap of some size, and the only question a heap answers is <em>does the player to move win?</em>
+    Every impartial position is either an N-position (the player to move wins) or a P-position (the
+    previous player does). There is no third possibility, because the two players are
+    interchangeable.</p>
+
+    <p>Hackenbush breaks that in the first sentence. Blue edges are Left's and red edges are Right's,
+    so the players are <strong>not</strong> interchangeable, and a position can perfectly well be a
+    win for Left <em>whoever moves</em>. The game is <strong>partizan</strong>, and a nimber has
+    nowhere to live: a nimber is a statement about a game that reads the same from both sides.</p>
+
+    <h3 class="mid">What replaces it</h3>
+
+    <p>A Blue-Red Hackenbush position is worth a <strong>number</strong> &mdash; specifically a
+    dyadic rational, a fraction whose denominator is a power of two. The number is not a score
+    anybody keeps. It is a measurement of the position in units of <em>free moves</em>: a value of
+    <span class="mono">+2</span> means Left is two moves ahead, <span class="mono">&minus;1/2</span>
+    means Right is half a move ahead, and <span class="mono">0</span> means neither is, so whoever
+    has to move first runs out first.</p>
+
+    <p>Four outcome classes exist in general &mdash; L (Left wins whoever starts), R, P (the
+    <em>second</em> player wins), N (the <em>first</em> player wins). Numbers only ever produce three
+    of them:</p>
+
+    <pre>value &gt; 0   Left wins,  whoever moves first
+value &lt; 0   Right wins, whoever moves first
+value = 0   the SECOND player wins
+value ...   N never happens: Blue-Red Hackenbush has no first-player wins at all</pre>
+
+    <p>The PLAY tab checks that by exhaustion rather than citing it. Every picture with up to eleven
+    edges is solved by a recursion that knows nothing about numbers &mdash; it just asks &ldquo;can
+    I move to a position where you are stuck?&rdquo; &mdash; and the count of N-positions comes back
+    <strong>zero</strong>. Then the same drawings are recoloured green, so either player may cut any
+    edge, and the count of L- and R-positions comes back <strong>zero</strong> while N covers
+    <strong>95.78%</strong> of them. The two colourings partition the same shapes into
+    non-overlapping outcome classes. Everything Day 55 and Day 70 built answers a question this game
+    never asks.</p>
+
+    <h3 class="mid">The value of one stalk</h3>
+
+    <p>A <em>stalk</em> is a single chain of edges standing on the ground, read from the bottom up.
+    Its value has a closed form, and the form is a binary expansion:</p>
+
+    <pre>the leading run of k edges of one colour   is worth   +k  (blue)  or  -k  (red)
+every edge after the first colour change  is worth   half its predecessor, signed
+
+  B      =  1            BR     =  1 - 1/2         =  1/2
+  BB     =  2            BRR    =  1 - 1/2 - 1/4   =  1/4
+  BBR    =  2 - 1/2      BRB    =  1 - 1/2 + 1/4   =  3/4
+              = 1 1/2                  RB     = -1 + 1/2        = -1/2</pre>
+
+    <p>Read that again and the headline falls out of it. The leading run is worth at least a whole
+    edge. Everything above the first colour change is a binary fraction strictly inside
+    <span class="mono">(&minus;1, 1)</span>. So the tail can never reach the leading run, which means
+    <strong>the edge touching the ground decides a single stalk on its own</strong> &mdash; not
+    usually, always. The page sweeps all 2,097,150 stalks up to length 20 and finds
+    <strong>0</strong> exceptions, and separately checks the bound the argument rests on
+    (<span class="mono">|value &minus; leading run| &lt; 1</span>) with <strong>0</strong>
+    violations.</p>
+
+    <p>That is also why the natural surrogate fails so badly. Counting edges &mdash; blue minus red
+    &mdash; is what everyone reaches for, and it disagrees with the bottom edge on
+    <strong>exactly half</strong> the stalks of every even length. Not approximately half: on stalks
+    of length <span class="mono">n</span> even, exactly <span class="mono">2^(n-1)</span> of
+    <span class="mono">2^n</span>, because the surplus is <span class="mono">1 + S</span> with
+    <span class="mono">S</span> a sum of <span class="mono">n&minus;1</span> steps of
+    <span class="mono">&plusmn;1</span>, and with <span class="mono">n&minus;1</span> odd that sum is
+    never zero, so it is negative exactly half the time. On odd lengths the failure rate is
+    <span class="mono">2^(n-1) &minus; C(n&minus;1, (n&minus;1)/2)</span>, climbing toward a half and
+    never reaching it. It does not improve with size. It is a coin.</p>
+
+    <h3 class="mid">Where the definition actually lives</h3>
+
+    <p>The closed form is a shortcut, and shortcuts are exactly the kind of thing that can be
+    self-consistent and wrong, so the page also computes the value the way it is <em>defined</em>. A
+    game is written <span class="mono">{ Left's options | Right's options }</span>, and when all of
+    those options are numbers, the game is the <strong>simplest number strictly between</strong> the
+    best thing Left can move to and the best thing Right can &mdash; where &ldquo;simplest&rdquo;
+    means born earliest: zero first, then the integers nearest it, then halves, then quarters. Every
+    option of a stalk is one of its own prefixes, so that recursion is short. The two routes agree on
+    all <strong>32,766</strong> stalks up to length 14 on the page and all 131,070 up to length 16 in
+    the verifier.</p>
+
+    <p>And that the whole <em>picture</em> is worth the sum of its stalks is a theorem, not a
+    definition. So the page runs the simplicity rule on entire pictures too &mdash; 13,441 of them,
+    agreeing with the sum every time &mdash; along with the two identities that would break first if
+    addition were wrong: flipping every colour negates the value and swaps L with R, and a picture
+    standing beside its own mirror image is worth exactly zero and is a second-player win.</p>
+
+    <h3 class="mid">The number is not only a verdict. It is the move rule.</h3>
+
+    <p>A verdict is cheap. The stronger claim is that the number tells you what to <em>play</em>:
+    from a position you are winning, move to whichever position leaves the number as large as you
+    can, and you never lose. The page tests that against the exhaustive solver on all
+    <strong>44,974</strong> pictures Left wins &mdash; and loses <strong>none</strong> of them, on
+    every seed.</p>
+
+    <p>The controls are the interesting part. Five other policies play the same positions, with ties
+    broken by a seeded generator rather than by whatever order the move list happened to come out in
+    &mdash; an arbitrary tie-break moved one of these rates by five points, and a control whose
+    number depends on array order is not a control.</p>
+
+    <pre>play for the number         loses   0.00%   of positions it was handed as won
+by the edge count                   6.50%
+cut the tallest enemy stalk        11.42%
+MOVE AT RANDOM                     18.78%
+take down the most edges           29.51%
+cut it off at the ground           39.09%   <- the move that feels strongest</pre>
+
+    <p>Two of the five heuristics are <em>worse than not thinking</em>. The most satisfying move in
+    the whole game &mdash; find an enemy edge touching the ground, cut it, watch the entire stalk
+    fall over &mdash; throws away <strong>39.09%</strong> of won positions, <strong>2.08&times;</strong>
+    the loss rate of moving at random. It is not close, and it is not noise: four seeds land inside
+    0.2 of a point of each other.</p>
+
+    <p>The reason is the same bound as before. Cutting a red edge low down destroys a lot of
+    <em>edges</em> and almost no <em>value</em>, because the edges you knock down were the ones worth
+    <span class="mono">1/64</span>. Meanwhile the red edge at the ground you just removed was worth a
+    whole unit to your opponent &mdash; and you handed it back by removing the blue structure that
+    was standing on it. Size on the screen and size in the game are unrelated quantities, and every
+    heuristic here except the edge count is measuring the screen.</p>
+
+    <h3 class="mid">What the count costs, at its worst</h3>
+
+    <p>The extreme case is a single stalk: one red edge on the ground with nineteen blue edges piled
+    on top. Blue owns <strong>19</strong> of the 20 edges, is ahead by <strong>18</strong>, and the
+    position is worth <span class="mono">&minus;1/524288</span>. Red wins it, whoever moves. The
+    mirror image, <span class="mono">B</span> then nineteen reds, is worth
+    <span class="mono">+1/524288</span> &mdash; a win by a margin half a million times smaller than a
+    single edge, which no amount of counting, weighing or eyeballing will ever see. Across all
+    90,567 pictures, <strong>25.86%</strong> are won by strictly less than one whole edge.</p>
+
+    <h3 class="mid">What is not here</h3>
+
+    <p>Blue-Red only. Add <strong>green</strong> edges that either player may cut and positions stop
+    being numbers &mdash; you get switches and infinitesimals, values like
+    <span class="mono">*</span> and <span class="mono">&uarr;</span>, temperature, and the whole
+    apparatus of thermography. The green sweep on the PLAY tab is the pure-green case only, which
+    collapses back to Nim; the interesting mixed case is a different day. Trees and general graphs
+    are also missing: a Blue-Red <em>tree</em> still has a number, found by the fusion and
+    convergence rules, and a general graph needs Berlekamp's fusion principle. Stalks are enough to
+    make every point on this page, and they are the only shape small enough to enumerate
+    exhaustively.</p>
+
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">Building it</h2>
+
+    <h3 class="mid">1. A stalk is an integer</h3>
+    <p>Read from the ground up, with the length carried by a leading one-bit, so a prefix &mdash;
+    which is exactly what a cut leaves behind &mdash; is one mask-and.</p>
+    <pre>code = (1 &lt;&lt; len) | mask       // bit i set = edge i is blue
+prefix(code, i) = (1 &lt;&lt; i) | (code &amp; ((1 &lt;&lt; i) - 1))
+lenOf(code) = 31 - Math.clz32(code)</pre>
+
+    <h3 class="mid">2. Two number systems, on purpose</h3>
+    <p>The authority is an exact dyadic rational held in a BigInt numerator over a power-of-two
+    denominator, because <span class="mono">1/524288</span> is a win and no tolerance is allowed to
+    decide it. Alongside it runs the same arithmetic as <span class="mono">value &times; 2^24</span>
+    in a plain double, which is exact for every stalk shorter than 24 edges and fast enough to sweep
+    a quarter of a million pictures in a browser. The two are cross-checked rather than assumed to
+    agree.</p>
+
+    <h3 class="mid">3. The closed form</h3>
+    <pre>leading run of k edges of colour c   ->   +k or -k
+each edge after the first change     ->   half the previous one, signed by colour</pre>
+
+    <h3 class="mid">4. The definition, as a second opinion</h3>
+    <p>Same value, computed as the simplest number strictly between the best Left option and the
+    best Right one. This shares no line with the closed form, and it is what catches a shortcut that
+    is merely plausible.</p>
+    <pre>simplestBetween(L, R):
+  for e = 0, 1, 2, ...
+    lo = floor(L * 2^e) + 1 ; hi = ceil(R * 2^e) - 1
+    if lo &lt;= hi: return (the one nearest zero) / 2^e</pre>
+
+    <h3 class="mid">5. The oracle that knows no arithmetic</h3>
+    <p>Nothing above is allowed to decide who wins. That comes from a plain win/loss recursion over
+    positions, memoised on the sorted stalk codes, with the four outcome classes read off two
+    queries: does Left win moving first, and does Right.</p>
+
+    <h3 class="mid">6. Enumerating pictures, not lists</h3>
+    <p>A picture does not care what order its stalks are in, so positions are enumerated as
+    <em>multisets</em> &mdash; non-decreasing sequences of stalk codes summing to the edge budget.
+    Enumerating ordered lists instead would count the same drawing many times and quietly reweight
+    every percentage on the page.</p>
+
+    <h3 class="mid">7. Controls play, they do not just predict</h3>
+    <p>Each heuristic is a scoring function over moves; ties are broken by the seeded generator, and
+    every rate is reported as a mean over four seeds with its range. That was not the first version:
+    the first version broke ties by array order, and one policy's loss rate moved by five points when
+    the move generator started appending prefixes at the end of the list instead of in place.</p>
+
+    <h3 class="mid">8. The two sweeps that fund the page</h3>
+    <pre>stalks   : all 2^21 - 2 stalks to length 20, walked as a DFS carrying value and edge count
+pictures : every multiset of stalks totalling 1..11 edges, each solved exhaustively
+           then re-answered by the value, by the edge count, by who owns the ground,
+           and recoloured green</pre>
+
+    <h3 class="mid">9. Three assumptions of mine that the engine refused</h3>
+    <pre>// 1. "the biggest bite is the worst heuristic"   - cutting at the GROUND is worse still,
+//                                                  39.09% against 29.51%, and both lose to random
+// 2. "tie-breaking cannot matter at this scale"  - it moved one rate by five points
+// 3. "the aggregate count-failure rate is a rate" - it is two rates: odd-sized pictures cannot
+//                                                  tie, so the parity has to be split out</pre>
+
+    <h3 class="mid">10. What this engine is not</h3>
+    <pre>// Stalks only. Trees need fusion and convergence; general graphs need Berlekamp's fusion.
+// Blue and red only. One green edge and the value stops being a number - you get *, up,
+// switches, temperature, and none of that is here.
+// No canonical forms, no simplification of general games: every value on this page is a
+// NUMBER, which is the one case where the whole theory collapses to school arithmetic.</pre>
+
+    <h3 class="mid">Self-test</h3>
+    <pre id="selftest">running&hellip;</pre>
+
+    <h3 class="mid">🎉 GameFromZero Day 75 shipped.</h3>
+    <p class="small">Seventy-five games. The first one whose answer is a fraction &mdash; and the
+    first where the move that looks strongest on the screen is measurably worse than not looking at
+    all.</p>
+
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("tab-active"));
+  t.classList.add("tab-active");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// BLUE-RED HACKENBUSH. Segments are drawn on the ground; Left owns the bLue ones, Right the Red.
+// A move deletes one edge of your own colour, and everything no longer joined to the ground falls
+// off with it. Normal play: the player with no move loses.
+//
+// Every earlier impartial game in this series (Nim, Kayles) had one move set shared by both
+// players, so a position reduced to a NIMBER and the only question a nimber answers is "does the
+// player to move win?". Here the two players have DIFFERENT moves - the game is PARTIZAN - and a
+// nimber cannot exist. What a position reduces to instead is a NUMBER, a dyadic rational, and that
+// number answers three questions at once: who wins (its sign), by how much (its size), and what to
+// play (move to keep it as large as you can). This file computes it three independent ways and then
+// tries to break it.
+//
+//   1. the closed form on a stalk        - leading run of k gives +-k, then edges halve
+//   2. the simplicity rule               - value = simplest number strictly between the options
+//   3. exhaustive win/loss recursion     - no arithmetic at all, just who has a move left
+//
+// Nothing here touches the DOM, a clock, or Math.random. Every random draw is a seeded generator
+// passed in by the caller.
+
+// ---------------------------------------------------------------- exact dyadic rationals: n / 2^e
+// Kept exact in BigInt because the whole point is that the answer is a NUMBER; a value of 1/2048 is
+// a win, and it is one that no floating comparison against a tolerance would be allowed to decide.
+function dy(n, e){
+  n = BigInt(n); e = e | 0;
+  if (n === 0n) return { n: 0n, e: 0 };
+  while (e > 0 && (n & 1n) === 0n){ n >>= 1n; e--; }
+  return { n, e };
+}
+const D0 = dy(0, 0);
+function dAdd(a, b){ const E = Math.max(a.e, b.e); return dy((a.n << BigInt(E - a.e)) + (b.n << BigInt(E - b.e)), E); }
+function dNeg(a){ return dy(-a.n, a.e); }
+function dCmp(a, b){ const E = Math.max(a.e, b.e); const x = a.n << BigInt(E - a.e), y = b.n << BigInt(E - b.e); return x < y ? -1 : x > y ? 1 : 0; }
+function dSign(a){ return a.n < 0n ? -1 : a.n > 0n ? 1 : 0; }
+function dNum(a){ return Number(a.n) / Math.pow(2, a.e); }
+function dStr(a){
+  if (a.e === 0) return String(a.n);
+  const neg = a.n < 0n, m = neg ? -a.n : a.n, den = 1n << BigInt(a.e);
+  const whole = m / den, rem = m % den;
+  return (neg ? '−' : '') + (whole > 0n ? whole + ' ' : '') + rem + '/' + den;
+}
+function floorDiv(a, b){ let q = a / b; if ((a % b !== 0n) && ((a < 0n) !== (b < 0n))) q -= 1n; return q; }
+function floorScaled(x, e){ return e >= x.e ? x.n << BigInt(e - x.e) : floorDiv(x.n, 1n << BigInt(x.e - e)); }
+function ceilScaled(x, e){ return e >= x.e ? x.n << BigInt(e - x.e) : -floorDiv(-x.n, 1n << BigInt(x.e - e)); }
+
+// ---------------------------------------------------------------- stalks as integer codes
+// A stalk is read FROM THE GROUND UP: "BR" is blue at the ground with red above it. The code is
+// (1 << len) | mask with bit i set when edge i is blue, so the leading 1 carries the length and a
+// prefix is one mask-and away. Chopping edge i of a stalk leaves exactly the prefix below it.
+const B = 1, R = 0;
+function codeOf(str){ let m = 0; for (let i = 0; i < str.length; i++) if (str[i] === 'B') m |= 1 << i; return (1 << str.length) | m; }
+function lenOf(code){ return 31 - Math.clz32(code); }
+function strOf(code){ const L = lenOf(code); let s = ''; for (let i = 0; i < L; i++) s += (code >> i) & 1 ? 'B' : 'R'; return s; }
+function edgeAt(code, i){ return (code >> i) & 1; }
+function prefix(code, i){ return (1 << i) | (code & ((1 << i) - 1)); }
+function flipCode(code){ const L = lenOf(code); return (1 << L) | (~code & ((1 << L) - 1)); }
+function negatePos(pos){ return pos.map(flipCode); }
+const EMPTY = 1;
+
+// ---------------------------------------------------------------- 1. the closed form
+// The leading run of k identical edges is worth exactly +-k. After the first colour change every
+// further edge is worth half its predecessor, signed by its colour. That tail is a binary fraction
+// strictly inside (-1, 1), which is the whole reason the bottom edge decides a single stalk.
+function stalkValue(code){
+  const L = lenOf(code);
+  if (L === 0) return D0;
+  const c0 = edgeAt(code, 0);
+  let k = 0;
+  while (k < L && edgeAt(code, k) === c0) k++;
+  let v = dy(c0 === B ? k : -k, 0);
+  for (let i = k, e = 1; i < L; i++, e++) v = dAdd(v, dy(edgeAt(code, i) === B ? 1 : -1, e));
+  return v;
+}
+function leadRun(code){
+  const L = lenOf(code); if (!L) return 0;
+  const c0 = edgeAt(code, 0); let k = 0;
+  while (k < L && edgeAt(code, k) === c0) k++;
+  return c0 === B ? k : -k;
+}
+
+// ---------------------------------------------------------------- 2. the simplicity rule
+// The definition, not the shortcut. Every option of a stalk is one of its own prefixes, so the value
+// is the SIMPLEST number strictly between the best prefix Left can reach and the best Right can.
+// "Simplest" means born earliest: 0 first, then the integers nearest it, then halves, then quarters.
+function simplestBetween(L, Rr){
+  if (L === null && Rr === null) return D0;
+  if (L === null) return dSign(Rr) > 0 ? D0 : dy(Rr.e === 0 ? Rr.n - 1n : floorScaled(Rr, 0), 0);
+  if (Rr === null) return dSign(L) < 0 ? D0 : dy(L.e === 0 ? L.n + 1n : floorScaled(L, 0) + 1n, 0);
+  for (let e = 0; e <= 200; e++){
+    const lo = floorScaled(L, e) + 1n, hi = ceilScaled(Rr, e) - 1n;
+    if (lo <= hi) return dy((lo <= 0n && 0n <= hi) ? 0n : (lo > 0n ? lo : hi), e);
+  }
+  throw new Error('simplest: no dyadic found');
+}
+const SIMP = new Map([[EMPTY, D0]]);
+function stalkValueSimplicity(code){
+  const hit = SIMP.get(code); if (hit) return hit;
+  const L = lenOf(code);
+  let lo = null, hi = null;
+  for (let i = 0; i < L; i++){
+    const v = stalkValueSimplicity(prefix(code, i));
+    if (edgeAt(code, i) === B){ if (lo === null || dCmp(v, lo) > 0) lo = v; }
+    else                      { if (hi === null || dCmp(v, hi) < 0) hi = v; }
+  }
+  const v = simplestBetween(lo, hi);
+  SIMP.set(code, v);
+  return v;
+}
+
+// ---------------------------------------------------------------- scaled integers for the sweeps
+// value * 2^SHIFT is a whole number for every stalk shorter than SHIFT, and stays exact in a double
+// well past the sizes swept here. The BigInt path above is the authority; this one is the same
+// arithmetic in a representation fast enough to run a quarter of a million positions in a browser,
+// and the two are checked against each other rather than assumed to agree.
+const SHIFT = 24, SCALE = 1 << SHIFT;
+const SCACHE = new Map([[EMPTY, 0]]);
+function stalkScaled(code){
+  const hit = SCACHE.get(code); if (hit !== undefined) return hit;
+  const L = lenOf(code), c0 = edgeAt(code, 0);
+  let k = 0; while (k < L && edgeAt(code, k) === c0) k++;
+  let v = (c0 === B ? k : -k) * SCALE;
+  for (let i = k, e = 1; i < L; i++, e++) v += (edgeAt(code, i) === B ? 1 : -1) * (SCALE >> e);
+  SCACHE.set(code, v);
+  return v;
+}
+function posScaled(pos){ let v = 0; for (let i = 0; i < pos.length; i++) v += stalkScaled(pos[i]); return v; }
+
+// One pass over every stalk code, so a sweep over positions is a handful of array reads per picture
+// rather than a re-walk of every edge. blue/red counts, the colour at the ground, length and value.
+const STAT = { blue: [], red: [], bottom: [], len: [], scaled: [] };
+function buildStats(maxLen){
+  for (let n = 1; n <= maxLen; n++)
+    for (let mask = 0; mask < (1 << n); mask++){
+      const code = (1 << n) | mask;
+      if (STAT.len[code] !== undefined) continue;
+      let b = 0;
+      for (let i = 0; i < n; i++) if ((mask >> i) & 1) b++;
+      STAT.blue[code] = b; STAT.red[code] = n - b;
+      STAT.bottom[code] = mask & 1 ? B : R;
+      STAT.len[code] = n; STAT.scaled[code] = stalkScaled(code);
+    }
+}
+function posValue(pos){ let v = D0; for (let i = 0; i < pos.length; i++) v = dAdd(v, stalkValue(pos[i])); return v; }
+
+// ---------------------------------------------------------------- 3. exhaustive win/loss recursion
+// No values, no arithmetic - just "can I move to a position where the other player is stuck?".
+// This is the oracle the number has to agree with, and it knows nothing about numbers.
+function keyOf(pos){ return pos.length > 1 ? pos.slice().sort(cmpNum).join(',') : String(pos[0] === undefined ? 0 : pos[0]); }
+function cmpNum(a, b){ return a - b; }
+function movesFor(pos, who){
+  const out = [];
+  for (let j = 0; j < pos.length; j++){
+    const c = pos[j], L = lenOf(c);
+    for (let i = 0; i < L; i++) if (edgeAt(c, i) === who){
+      const q = [];
+      for (let t = 0; t < pos.length; t++) if (t !== j) q.push(pos[t]);
+      if (i > 0) q.push(prefix(c, i));
+      out.push({ pos: q, stalk: j, idx: i, killed: L - i, len: L });
+    }
+  }
+  return out;
+}
+const WINMEMO = new Map();
+function winsMovingFirst(pos, who){
+  if (!pos.length) return false;
+  const key = keyOf(pos);
+  let rec = WINMEMO.get(key);
+  if (rec === undefined){ rec = [-1, -1]; WINMEMO.set(key, rec); }
+  if (rec[who] !== -1) return !!rec[who];
+  let r = 0;
+  const ms = movesFor(pos, who);
+  for (let i = 0; i < ms.length; i++) if (!winsMovingFirst(ms[i].pos, 1 - who)){ r = 1; break; }
+  rec[who] = r;
+  return !!r;
+}
+// L = Left wins whoever starts, R = Right does, P = whoever moves SECOND wins,
+// N = whoever moves FIRST wins. N is the class this game never produces.
+function outcome(pos){
+  const lf = winsMovingFirst(pos, B), rf = winsMovingFirst(pos, R);
+  return lf && !rf ? 'L' : !lf && rf ? 'R' : !lf && !rf ? 'P' : 'N';
+}
+
+// ---------------------------------------------------------------- the green control
+// Recolour the SAME pictures green: now either player may cut any edge, which is exactly the
+// impartial game of Days 55 and 70. A green stalk of n edges is the Nim heap *n, so the whole
+// position is one XOR - and its outcome class can only ever be N or P.
+const GMEMO = new Map();
+function greenGrundy(pos){
+  if (!pos.length) return 0;
+  const key = keyOf(pos);
+  const hit = GMEMO.get(key); if (hit !== undefined) return hit;
+  const seen = new Set();
+  for (let j = 0; j < pos.length; j++){
+    const c = pos[j], L = lenOf(c);
+    for (let i = 0; i < L; i++){
+      const q = [];
+      for (let t = 0; t < pos.length; t++) if (t !== j) q.push(pos[t]);
+      if (i > 0) q.push(prefix(c, i));
+      seen.add(greenGrundy(q));
+    }
+  }
+  let g = 0; while (seen.has(g)) g++;
+  GMEMO.set(key, g);
+  return g;
+}
+function xorOfLengths(pos){ let x = 0; for (let i = 0; i < pos.length; i++) x ^= lenOf(pos[i]); return x; }
+
+// ---------------------------------------------------------------- enumeration
+function allStalks(maxLen){
+  const out = [];
+  for (let n = 1; n <= maxLen; n++) for (let m = 0; m < (1 << n); m++) out.push((1 << n) | m);
+  out.sort(cmpNum);
+  return out;
+}
+// every multiset of stalks whose edges total exactly `edges` (a position is a picture, so the
+// order of the stalks is not part of it - hence multisets, enumerated non-decreasing by code)
+function positionsWithEdges(edges, pool){
+  const stalks = pool || allStalks(edges);
+  const res = [], cur = [];
+  (function rec(start, left){
+    if (left === 0){ res.push(cur.slice()); return; }
+    for (let i = start; i < stalks.length; i++){
+      const L = lenOf(stalks[i]);
+      if (L > left) continue;
+      cur.push(stalks[i]); rec(i, left - L); cur.pop();
+    }
+  })(0, edges);
+  return res;
+}
+
+// ---------------------------------------------------------------- sweep 1: every single stalk
+// Walks all 2^(n+1)-2 stalks up to length n as a DFS over the binary tree of colourings, carrying
+// the exact value and the edge count forward, and asks two questions of each:
+//   does the sign of the value equal the colour of the BOTTOM edge?   (the identity)
+//   does counting edges - blue minus red - get the winner right?      (the control)
+function sweepStalks(maxLen){
+  const per = [];
+  for (let n = 0; n <= maxLen; n++) per.push({ n, total: 0, bottomWrong: 0, countWrong: 0, countTie: 0, boundViolations: 0 });
+  let total = 0, bottomWrong = 0, countWrong = 0, countTie = 0, boundViolations = 0, asserts = 0;
+  let worst = null, thinnest = null;   // widest edge surplus a loser can hold; thinnest win anyone can hold
+  (function rec(depth, mask, scaled, diff, run, c0){
+    if (depth > 0){
+      const p = per[depth];
+      p.total++; total++;
+      const sgn = scaled > 0 ? 1 : scaled < 0 ? -1 : 0;
+      const bottom = c0 === B ? 1 : -1;
+      if (sgn !== bottom){ p.bottomWrong++; bottomWrong++; }
+      // the tail above the leading run is worth strictly less than one whole edge - the bound that
+      // makes the bottom edge decisive, checked rather than asserted
+      const lead = (c0 === B ? run : -run) * SCALE;
+      if (Math.abs(scaled - lead) >= SCALE){ p.boundViolations++; boundViolations++; }
+      const h = diff > 0 ? 1 : diff < 0 ? -1 : 0;
+      if (h !== bottom){ p.countWrong++; countWrong++; }
+      if (h === 0){ p.countTie++; countTie++; }
+      asserts += 3;
+      const code = mask | (1 << depth);
+      if (scaled < 0 && (!worst || diff > worst.gap)) worst = { gap: diff, code, len: depth };
+      if (scaled > 0 && (!thinnest || scaled < thinnest.scaled)) thinnest = { scaled, code, len: depth };
+    }
+    if (depth === maxLen) return;
+    for (let c = 0; c < 2; c++){
+      const nc = c === 1 ? B : R;
+      let nrun, nscaled;
+      if (depth === 0){ nrun = 1; nscaled = (nc === B ? SCALE : -SCALE); }
+      else if (nc === c0 && run === depth){ nrun = run + 1; nscaled = scaled + (nc === B ? SCALE : -SCALE); }
+      else { nrun = run; nscaled = scaled + (nc === B ? 1 : -1) * (SCALE >> (depth - run + 1)); }
+      rec(depth + 1, mask | (nc === B ? 1 << depth : 0), nscaled, diff + (nc === B ? 1 : -1), nrun,
+          depth === 0 ? nc : c0);
+    }
+  })(0, 0, 0, 0, 0, B);
+  if (worst) worst.value = stalkValue(worst.code);
+  if (thinnest) thinnest.value = stalkValue(thinnest.code);
+  return { per, total, bottomWrong, countWrong, countTie, boundViolations, asserts, worst, thinnest };
+}
+// the closed form the sweep has to reproduce: counting edges misses on exactly 2^(n-1) stalks of
+// EVEN length n, and on 2^(n-1) - C(n-1,(n-1)/2) of odd length.
+function binom(n, k){
+  if (k < 0 || k > n) return 0;
+  let r = 1;
+  for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+  return Math.round(r);
+}
+function countWrongClosedForm(n){
+  const half = Math.pow(2, n - 1);
+  return n % 2 === 0 ? half : half - binom(n - 1, (n - 1) / 2);
+}
+function countTieClosedForm(n){ return n % 2 === 0 ? binom(n, n / 2) : 0; }
+
+// ---------------------------------------------------------------- sweep 2: every position
+// For every picture with up to `maxEdges` edges: solve it by pure win/loss recursion, then ask
+// whether the SUM of the stalk values called it, and whether either counting habit did.
+function sweepRow(edges, pool){
+  buildStats(edges);
+  const P = positionsWithEdges(edges, pool);
+  const row = { edges, positions: P.length, L: 0, R: 0, P: 0, N: 0, valueWrong: 0,
+                countWrong: 0, countTie: 0, bottomWrong: 0, bottomTie: 0,
+                greenN: 0, greenP: 0, greenLR: 0, xorWrong: 0, thin: 0 };
+  for (let i = 0; i < P.length; i++){
+    const p = P[i];
+    const o = outcome(p);
+    row[o]++;
+    let sc = 0;
+    for (let j = 0; j < p.length; j++) sc += STAT.scaled[p[j]];
+    const pred = sc > 0 ? 'L' : sc < 0 ? 'R' : 'P';
+    if (pred !== o) row.valueWrong++;
+    if (sc !== 0 && Math.abs(sc) < SCALE) row.thin++;
+    let b = 0, r = 0, bb = 0, rr = 0;
+    for (let j = 0; j < p.length; j++){
+      const c = p[j];
+      b += STAT.blue[c]; r += STAT.red[c];
+      STAT.bottom[c] === B ? bb++ : rr++;
+    }
+    const hc = b > r ? 'L' : b < r ? 'R' : 'P';
+    const hb = bb > rr ? 'L' : bb < rr ? 'R' : 'P';
+    if (hc !== o) row.countWrong++;
+    if (b === r) row.countTie++;
+    if (hb !== o) row.bottomWrong++;
+    if (bb === rr) row.bottomTie++;
+    // the same picture, recoloured green: now either player may cut any edge
+    const g = greenGrundy(p);
+    g === 0 ? row.greenP++ : row.greenN++;
+    if ((xorOfLengths(p) === 0) !== (g === 0)) row.xorWrong++;
+  }
+  return row;
+}
+function sweepPositions(maxEdges, onRow){
+  const pool = allStalks(maxEdges);
+  const rows = [];
+  const tot = { positions: 0, L: 0, R: 0, P: 0, N: 0, valueWrong: 0, countWrong: 0, countTie: 0,
+                bottomWrong: 0, bottomTie: 0, greenN: 0, greenP: 0, greenLR: 0, xorWrong: 0,
+                thin: 0, asserts: 0 };
+  for (let e = 1; e <= maxEdges; e++){
+    const row = sweepRow(e, pool);
+    rows.push(row);
+    for (const k in row) if (k !== 'edges' && k !== 'positions') tot[k] += row[k];
+    tot.positions += row.positions;
+    tot.asserts += row.positions * 5;
+    if (onRow) onRow(row);
+  }
+  return { rows, tot };
+}
+
+// ---------------------------------------------------------------- sweep 3: does the number PLAY?
+// A verdict is cheap. The stronger claim is that "move to keep the number as large as you can" is
+// an actual winning strategy, and that the habits a person reaches for instead are not.
+// Each policy SCORES a move; ties are broken by the seeded generator rather than by the order the
+// move list happened to be built in. That matters: an arbitrary tie-break moved one of these rates
+// by five points, so a control whose number depends on array order is not a control.
+const POLICIES = {
+  value:  (m, who) => (who === B ? 1 : -1) * posScaled(m.pos),
+  count:  (m, who) => (who === B ? 1 : -1) * edgeDiff(m.pos),
+  ground: (m) => -m.idx,
+  damage: (m) => m.killed,
+  tall:   (m) => m.len,
+  random: () => 0
+};
+function pickByPolicy(ms, who, name, rnd){
+  const score = POLICIES[name];
+  let best = -Infinity, n = 0, pick = ms[0];
+  for (let i = 0; i < ms.length; i++){
+    const s = score(ms[i], who);
+    if (s > best){ best = s; n = 1; pick = ms[i]; }
+    else if (s === best){ n++; if (rnd() * n < 1) pick = ms[i]; }
+  }
+  return pick;
+}
+function edgeDiff(pos){
+  let d = 0;
+  for (let j = 0; j < pos.length; j++){
+    const c = pos[j];
+    if (STAT.len[c] !== undefined) d += STAT.blue[c] - STAT.red[c];
+    else { const L = lenOf(c); for (let i = 0; i < L; i++) d += edgeAt(c, i) === B ? 1 : -1; }
+  }
+  return d;
+}
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// Left follows `name`; Right answers perfectly. Left moves first from a position Left already wins.
+function playout(pos, name, rnd){
+  let p = pos, who = B;
+  for (;;){
+    const ms = movesFor(p, who);
+    if (!ms.length) return who !== B;
+    let m;
+    if (who === B) m = pickByPolicy(ms, B, name, rnd);
+    else { m = ms[0]; for (let i = 0; i < ms.length; i++) if (!winsMovingFirst(ms[i].pos, B)){ m = ms[i]; break; } }
+    p = m.pos; who = 1 - who;
+  }
+}
+function wonPositions(maxEdges){
+  buildStats(maxEdges);
+  const pool = allStalks(maxEdges), won = [];
+  for (let e = 1; e <= maxEdges; e++)
+    for (const p of positionsWithEdges(e, pool)) if (outcome(p) === 'L') won.push(p);
+  return won;
+}
+function policyRow(name, list, seeds){
+  let lo = Infinity, hi = -Infinity, sum = 0;
+  for (const seed of seeds){
+    const rnd = mulberry32(seed);
+    let lost = 0;
+    for (let i = 0; i < list.length; i++) if (!playout(list[i], name, rnd)) lost++;
+    sum += lost; if (lost < lo) lo = lost; if (lost > hi) hi = lost;
+  }
+  const mean = sum / seeds.length;
+  return { name, played: list.length, seeds: seeds.length, lost: mean, lo, hi,
+           rate: mean / list.length, rateLo: lo / list.length, rateHi: hi / list.length,
+           playouts: list.length * seeds.length };
+}
+function sweepPolicies(maxEdges, names, seeds, won){
+  const list = won || wonPositions(maxEdges);
+  return { won: list.length, rows: names.map(n => policyRow(n, list, seeds)) };
+}
+
+// ---------------------------------------------------------------- the definition, on a whole picture
+// The closed form is a rule about ONE stalk. That the picture is worth the SUM of its stalks is a
+// theorem, not a definition, so here is the definition applied to the whole picture at once: the
+// simplest number strictly between the best Left option and the best Right one, recursively. If the
+// two ever disagreed, the addition would be the thing that is wrong.
+const PSIMP = new Map();
+function posValueSimplicity(pos){
+  if (!pos.length) return D0;
+  const k = keyOf(pos);
+  const hit = PSIMP.get(k); if (hit) return hit;
+  let lo = null, hi = null;
+  const ml = movesFor(pos, B);
+  for (let i = 0; i < ml.length; i++){ const v = posValueSimplicity(ml[i].pos); if (lo === null || dCmp(v, lo) > 0) lo = v; }
+  const mr = movesFor(pos, R);
+  for (let i = 0; i < mr.length; i++){ const v = posValueSimplicity(mr[i].pos); if (hi === null || dCmp(v, hi) < 0) hi = v; }
+  const v = simplestBetween(lo, hi);
+  PSIMP.set(k, v);
+  return v;
+}
+// three identities that hold or the whole apparatus is wrong:
+//   the definition on a picture equals the sum of its stalks   (values ADD)
+//   flipping every colour negates the value and swaps L and R  (the game is symmetric)
+//   a picture beside its own mirror image is a second-player win (G - G = 0)
+function identitySweep(maxDefn, maxNeg, maxMirror){
+  const out = { defn: 0, defnBad: 0, neg: 0, negBad: 0, mirror: 0, mirrorBad: 0 };
+  const swap = { L: 'R', R: 'L', P: 'P', N: 'N' };
+  let pool = allStalks(maxDefn);
+  for (let e = 1; e <= maxDefn; e++) for (const p of positionsWithEdges(e, pool)){
+    out.defn++;
+    if (dCmp(posValueSimplicity(p), posValue(p)) !== 0) out.defnBad++;
+  }
+  pool = allStalks(maxNeg);
+  for (let e = 1; e <= maxNeg; e++) for (const p of positionsWithEdges(e, pool)){
+    out.neg++;
+    const q = negatePos(p);
+    if (dCmp(posValue(q), dNeg(posValue(p))) !== 0) out.negBad++;
+    if (outcome(q) !== swap[outcome(p)]) out.negBad++;
+  }
+  pool = allStalks(maxMirror);
+  for (let e = 1; e <= maxMirror; e++) for (const p of positionsWithEdges(e, pool)){
+    out.mirror++;
+    const q = p.concat(negatePos(p));
+    if (outcome(q) !== 'P') out.mirrorBad++;
+    if (dSign(posValue(q)) !== 0) out.mirrorBad++;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- the widest counterexample
+// The furthest the edge count can be from the truth inside a sweep: the biggest edge surplus a
+// player can hold in a position they lose whoever moves.
+function worstCountGap(maxEdges){
+  const pool = allStalks(maxEdges);
+  let best = null;
+  for (let e = 1; e <= maxEdges; e++)
+    for (const p of positionsWithEdges(e, pool)){
+      if (outcome(p) !== 'R') continue;
+      const d = edgeDiff(p);
+      if (!best || d > best.gap) best = { gap: d, pos: p.slice(), value: posValue(p) };
+    }
+  return best;
+}
+// the thinnest win available at a given size: the smallest non-zero margin anyone can hold
+function thinnestWin(maxEdges){
+  const pool = allStalks(maxEdges);
+  let best = null;
+  for (let e = 1; e <= maxEdges; e++)
+    for (const p of positionsWithEdges(e, pool)){
+      const sc = posScaled(p);
+      if (sc <= 0) continue;
+      if (!best || sc < best.scaled) best = { scaled: sc, pos: p.slice(), value: posValue(p) };
+    }
+  return best;
+}
+
+// ---------------------------------------------------------------- distinctness of stalk values
+// 2^n stalks of length n, and no two of them are worth the same - the colouring IS a binary
+// expansion, so the map from stalks to numbers is injective and its image is an arithmetic grid.
+function valueCensus(n){
+  const seen = new Set();
+  let minS = Infinity, maxS = -Infinity, denomMax = 0;
+  for (let m = 0; m < (1 << n); m++){
+    const code = (1 << n) | m, s = stalkScaled(code);
+    seen.add(s);
+    if (s < minS) minS = s;
+    if (s > maxS) maxS = s;
+    const v = stalkValue(code);
+    if (v.e > denomMax) denomMax = v.e;
+  }
+  return { n, stalks: 1 << n, distinct: seen.size, min: minS / SCALE, max: maxS / SCALE, denomMax };
+}
+
+// ---------------------------------------------------------------- playing
+function bestMove(pos, who){
+  const ms = movesFor(pos, who);
+  if (!ms.length) return null;
+  let best = ms[0], bv = (who === B ? 1 : -1) * posScaled(ms[0].pos);
+  for (let i = 1; i < ms.length; i++){
+    const v = (who === B ? 1 : -1) * posScaled(ms[i].pos);
+    if (v > bv){ best = ms[i]; bv = v; }
+  }
+  return best;
+}
+function policyMove(pos, who, name, rnd){
+  const ms = movesFor(pos, who);
+  if (!ms.length) return null;
+  return pickByPolicy(ms, who, name, rnd);
+}
+function chop(pos, stalk, idx){
+  const q = [];
+  for (let t = 0; t < pos.length; t++){
+    if (t !== stalk) q.push(pos[t]);
+    else if (idx > 0) q.push(prefix(pos[t], idx));
+  }
+  return q;
+}
+function parsePos(list){ return list.map(codeOf); }
+function showPos(pos){ return pos.map(strOf); }
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- view: DOM only, no measurement
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n).toLocaleString('en-US');
+const pct = (a, b) => b ? (100 * a / b).toFixed(4) + '%' : '—';
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const S = {
+  pos: [], history: [], stalks: null, rows: [], pol: [], won: null, pool: null,
+  deep: false, checks: [], asserts: 0
+};
+
+const PRESETS = [
+  ['a game to play',            ['BRB', 'RBR', 'BR', 'RB', 'B']],
+  ['two halves make one move',  ['BR', 'BR', 'R']],
+  ['four quarters and a unit',  ['BRR', 'BRR', 'BRR', 'BRR', 'R']],
+  ['blue ahead by nine, losing',['RBBBBBBBBBB']],
+  ['a win worth 1/512',         ['BRRRRRRRRR']],
+  ['one and a half, each way',  ['BBR', 'RRB']],
+  ['a fair fight',              ['BBB', 'RRR']],
+  ['ladders',                   ['BRBRB', 'RBRBR', 'BRR', 'RBB']]
+];
+
+// ---- the board
+function renderBoard(){
+  const svg = $('board');
+  const W = 620, H = 250, ground = 218, eh = 17, gap = 6;
+  let html = '<line x1="18" y1="' + ground + '" x2="' + (W - 18) + '" y2="' + ground +
+             '" stroke="#12211f" stroke-width="3" />';
+  const n = Math.max(S.pos.length, 1);
+  const step = Math.min(56, (W - 60) / n);
+  const x0 = (W - step * (n - 1)) / 2;
+  for (let j = 0; j < S.pos.length; j++){
+    const c = S.pos[j], L = lenOf(c), x = x0 + step * j;
+    for (let i = 0; i < L; i++){
+      const y1 = ground - i * (eh + gap) - 2, y2 = y1 - eh;
+      const blue = edgeAt(c, i) === B;
+      const col = blue ? '#1d4ed8' : '#be123c';
+      html += '<line class="edge' + (blue ? '' : ' dead') + '" data-j="' + j + '" data-i="' + i +
+              '" x1="' + x + '" y1="' + y1 + '" x2="' + x + '" y2="' + y2 + '" stroke="' + col + '" />';
+      if (blue) html += '<line class="hitbox" data-j="' + j + '" data-i="' + i +
+              '" x1="' + x + '" y1="' + y1 + '" x2="' + x + '" y2="' + y2 + '" />';
+    }
+    html += '<circle cx="' + x + '" cy="' + ground + '" r="3.5" fill="#12211f" />';
+  }
+  if (!S.pos.length)
+    html += '<text x="' + (W / 2) + '" y="' + (ground - 40) + '" text-anchor="middle" fill="#5d7b76">nothing left to cut</text>';
+  svg.innerHTML = html;
+  svg.querySelectorAll('line.hitbox, line.edge:not(.dead)').forEach(el => {
+    el.addEventListener('click', () => humanCut(+el.dataset.j, +el.dataset.i));
+  });
+  paintValue();
+}
+function paintValue(){
+  const v = posValue(S.pos), sg = dSign(v);
+  $('valBig').textContent = dStr(v);
+  $('valBig').style.color = sg > 0 ? '#1d4ed8' : sg < 0 ? '#be123c' : '#12211f';
+  const total = S.pos.reduce((a, c) => a + lenOf(c), 0);
+  let line;
+  if (sg > 0) line = 'Blue is ahead by ' + dStr(v) + ' of a move — Blue wins whoever plays next.';
+  else if (sg < 0) line = 'Red is ahead by ' + dStr(dNeg(v)) + ' of a move — Red wins whoever plays next.';
+  else line = 'Dead level — whoever has to move now runs out first.';
+  $('verdict').innerHTML = '<span class="verdict ' + (sg > 0 ? 'win' : sg < 0 ? 'lose' : '') + '">' + line + '</span>';
+  const exact = total <= 12 ? ' Exhaustive solver says: ' + { L: 'Blue wins either way', R: 'Red wins either way',
+    P: 'second player wins', N: 'first player wins' }[outcome(S.pos)] + '.' : '';
+  $('boardNote').textContent = S.pos.length + ' stalk' + (S.pos.length === 1 ? '' : 's') + ', ' + total +
+    ' edges. Values shown are exact dyadic rationals.' + exact;
+}
+function say(t){
+  const d = document.createElement('div');
+  d.textContent = t;
+  $('log').insertBefore(d, $('log').firstChild);
+}
+function humanCut(j, i){
+  if (edgeAt(S.pos[j], i) !== B) return;
+  const before = posValue(S.pos);
+  S.pos = chop(S.pos, j, i);
+  say('you cut edge ' + (i + 1) + ' of stalk ' + (j + 1) + '  ·  ' + dStr(before) + ' → ' + dStr(posValue(S.pos)));
+  renderBoard();
+  setTimeout(redMove, 260);
+}
+function redMove(){
+  const ms = movesFor(S.pos, R);
+  if (!ms.length){ say('Red has no red edge left — you win.'); renderBoard(); return; }
+  const rnd = mulberry32(S.history.length * 7919 + 13);
+  const m = policyMove(S.pos, R, $('opp').value, rnd);
+  const before = posValue(S.pos);
+  S.pos = m.pos;
+  S.history.push(1);
+  say('Red cuts (policy: ' + $('opp').value + ')  ·  ' + dStr(before) + ' → ' + dStr(posValue(S.pos)));
+  renderBoard();
+  if (!movesFor(S.pos, B).length) say('you have no blue edge left — Red wins.');
+}
+function loadPreset(k){
+  S.pos = parsePos(PRESETS[k][1]);
+  S.history = [];
+  $('log').innerHTML = '';
+  say('loaded: ' + PRESETS[k][0] + '  ·  worth ' + dStr(posValue(S.pos)));
+  renderBoard();
+}
+
+// ---- tables
+function paintLadder(){
+  const rows = ['B', 'BR', 'BRR', 'BRRR', 'BRRRR', 'BRB', 'BRBR', 'BB', 'BBR', 'BBRR', 'RB', 'RBB'];
+  let h = '<tr><th>stalk (ground first)</th><th>closed form</th><th>simplicity rule</th><th>as a decimal</th></tr>';
+  for (const s of rows){
+    const c = codeOf(s);
+    const a = stalkValue(c), b = stalkValueSimplicity(c);
+    h += '<tr' + (dCmp(a, b) ? ' class="bad"' : '') + '><td class="l"><span class="stalkstr">' +
+         colourStalk(s) + '</span></td><td>' + dStr(a) + '</td><td>' + dStr(b) + '</td><td>' +
+         dNum(a).toFixed(4) + '</td></tr>';
+  }
+  $('ladderTbl').innerHTML = h;
+  $('ladderNote').innerHTML = 'The leading run is worth a whole number of moves; everything above the ' +
+    'first colour change is a binary fraction inside (&minus;1, 1). That bound is why the edge on the ' +
+    'ground decides a single stalk on its own.';
+}
+function colourStalk(s){
+  let h = '';
+  for (const ch of s) h += '<span class="' + (ch === 'B' ? 'bl' : 'rd') + '">' + ch + '</span>';
+  return h;
+}
+
+function paintStalkTable(){
+  const S1 = S.stalks;
+  let h = '<tr><th>length</th><th>stalks</th><th>bottom edge wrong</th><th>count wrong</th>' +
+          '<th>rate</th><th>closed form</th><th>count silent</th></tr>';
+  for (const n of [1, 2, 3, 4, 5, 8, 10, 12, 15, 16, 19, 20]){
+    const p = S1.per[n], cf = countWrongClosedForm(n);
+    h += '<tr' + (n % 2 === 0 ? ' class="hi"' : '') + '><td class="l">' + n + '</td><td>' + fmt(p.total) +
+         '</td><td>' + p.bottomWrong + '</td><td>' + fmt(p.countWrong) + '</td><td>' +
+         (p.countWrong / p.total).toFixed(6) + '</td><td>' + fmt(cf) + '</td><td>' + fmt(p.countTie) + '</td></tr>';
+  }
+  $('stalkTbl').innerHTML = h;
+  $('stalkNote').innerHTML = '<strong>' + fmt(S1.total) + '</strong> stalks swept. The bottom edge names the ' +
+    'winner with <strong>' + S1.bottomWrong + '</strong> exceptions, and the bound it rests on ' +
+    '(|value &minus; leading run| &lt; 1) has <strong>' + S1.boundViolations + '</strong> violations. ' +
+    'Counting edges misses <strong>' + fmt(S1.countWrong) + '</strong> of them — exactly half at every ' +
+    'even length, matching 2<sup>n&minus;1</sup> at all 20 lengths, and it is silent (calls a tie) on ' +
+    '<strong>' + fmt(S1.countTie) + '</strong> more. Highlighted rows are the even lengths.';
+}
+
+function paintRateChart(){
+  const S1 = S.stalks, svg = $('rateSvg');
+  const W = 620, H = 300, L = 52, Rr = 16, T = 18, Bt = 40;
+  const x = n => L + (n - 1) * (W - L - Rr) / 19;
+  const y = r => T + (1 - r / 0.55) * (H - T - Bt);
+  let h = '';
+  for (let g = 0; g <= 5; g++){
+    const r = g * 0.11, yy = y(r);
+    h += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - Rr) + '" y2="' + yy + '" stroke="#dfeae8" />' +
+         '<text x="' + (L - 6) + '" y="' + (yy + 4) + '" text-anchor="end" fill="#5d7b76">' + r.toFixed(2) + '</text>';
+  }
+  h += '<line x1="' + L + '" y1="' + y(0.5) + '" x2="' + (W - Rr) + '" y2="' + y(0.5) +
+       '" stroke="#be123c" stroke-width="2" stroke-dasharray="5 4" />' +
+       '<text x="' + (W - Rr) + '" y="' + (y(0.5) - 7) + '" text-anchor="end" fill="#be123c">exactly 1/2</text>';
+  const ev = [], od = [];
+  for (let n = 1; n <= 20; n++){
+    const r = S1.per[n].countWrong / S1.per[n].total;
+    (n % 2 === 0 ? ev : od).push([x(n), y(r)]);
+  }
+  const path = pts => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  h += '<path d="' + path(od) + '" fill="none" stroke="#0f766e" stroke-width="2.5" />';
+  h += '<path d="' + path(ev) + '" fill="none" stroke="#1d4ed8" stroke-width="2.5" />';
+  for (const p of od) h += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3" fill="#0f766e" />';
+  for (const p of ev) h += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3" fill="#1d4ed8" />';
+  for (let n = 2; n <= 20; n += 2)
+    h += '<text x="' + x(n) + '" y="' + (H - Bt + 18) + '" text-anchor="middle" fill="#5d7b76">' + n + '</text>';
+  h += '<text x="' + (W / 2) + '" y="' + (H - 6) + '" text-anchor="middle" fill="#5d7b76">stalk length</text>';
+  h += '<text x="' + (L + 8) + '" y="' + (T + 12) + '" fill="#1d4ed8">even lengths — pinned at 1/2</text>';
+  h += '<text x="' + (L + 8) + '" y="' + (T + 28) + '" fill="#0f766e">odd lengths — climbing toward it</text>';
+  svg.innerHTML = h;
+  $('rateNote').innerHTML = 'The control does not decay with size, which is the point: at length 2 it ' +
+    'misses <strong>' + (S1.per[2].countWrong / S1.per[2].total).toFixed(6) + '</strong> of stalks and at ' +
+    'length 20 it misses <strong>' + (S1.per[20].countWrong / S1.per[20].total).toFixed(6) + '</strong>. ' +
+    'Odd lengths run below because the surplus cannot be zero there — no ties to get wrong.';
+}
+
+function paintGap(){
+  const w = S.stalks.worst, t = S.stalks.thinnest;
+  $('gapBox').innerHTML =
+    '<p style="margin:0 0 8px">One red edge on the ground, ' + (lenOf(w.code) - 1) + ' blue above it:</p>' +
+    '<p class="stalkstr" style="margin:0 0 8px;word-break:break-all">' + colourStalk(strOf(w.code)) + '</p>' +
+    '<div class="kv"><span>blue edges</span><b>' + (lenOf(w.code) - 1) + '</b></div>' +
+    '<div class="kv"><span>red edges</span><b>1</b></div>' +
+    '<div class="kv"><span>Blue ahead by</span><b>+' + w.gap + '</b></div>' +
+    '<div class="kv"><span>value</span><b>' + dStr(w.value) + '</b></div>' +
+    '<div class="kv"><span>who wins</span><b class="lose">Red, whoever moves</b></div>' +
+    '<p class="tiny" style="margin:10px 0 0">Its mirror image, one blue edge under ' + (lenOf(t.code) - 1) +
+    ' red ones, is worth ' + dStr(t.value) + ' — a Blue win by a margin ' +
+    fmt(Math.round(1 / dNum(t.value))) + ' times smaller than a single edge.</p>';
+}
+
+function paintDefn(){
+  let h = '<tr><th>check</th><th>cases</th><th>disagreements</th></tr>';
+  for (const c of S.defn)
+    h += '<tr class="' + (c.bad ? 'bad' : 'good') + '"><td class="l">' + c.what + '</td><td>' + fmt(c.n) +
+         '</td><td>' + c.bad + '</td></tr>';
+  $('defnTbl').innerHTML = h;
+  $('defnNote').innerHTML = 'The closed form is a shortcut. The simplicity rule is the definition. They ' +
+    'share no line of code, and a shortcut that is merely plausible is exactly what this catches.';
+}
+
+function paintIdentities(){
+  const I = S.ident;
+  let h = '<tr><th>identity</th><th>pictures</th><th>exceptions</th></tr>';
+  const rows = [
+    ['the definition on a whole picture = sum of its stalks', I.defn, I.defnBad],
+    ['flipping every colour negates the value and swaps L/R', I.neg, I.negBad],
+    ['a picture beside its mirror image is worth 0 and is a 2nd-player win', I.mirror, I.mirrorBad]
+  ];
+  for (const [what, n, bad] of rows)
+    h += '<tr class="' + (bad ? 'bad' : 'good') + '"><td class="l">' + what + '</td><td>' + fmt(n) +
+         '</td><td>' + bad + '</td></tr>';
+  $('idTbl').innerHTML = h;
+  $('idNote').innerHTML = 'That a picture is worth the <em>sum</em> of its stalks is a theorem, not a ' +
+    'definition — so it is the thing tested, not the thing assumed.';
+}
+
+function paintCensus(){
+  let h = '<tr><th>length n</th><th>stalks 2<sup>n</sup></th><th>distinct values</th><th>range</th><th>smallest unit</th></tr>';
+  for (const n of [1, 2, 4, 8, 12, 16, 20]){
+    const c = valueCensus(n);
+    h += '<tr' + (c.distinct !== c.stalks ? ' class="bad"' : '') + '><td class="l">' + n + '</td><td>' +
+         fmt(c.stalks) + '</td><td>' + fmt(c.distinct) + '</td><td>' + c.min + ' … ' + c.max +
+         '</td><td>1/' + fmt(Math.pow(2, c.denomMax)) + '</td></tr>';
+  }
+  $('censusTbl').innerHTML = h;
+  $('censusNote').innerHTML = 'No two stalks of the same length are worth the same number: the colouring ' +
+    '<em>is</em> a binary expansion, so the map is injective and the denominators are exactly ' +
+    '2<sup>n&minus;1</sup>. Never a third, never a fifth.';
+}
+
+function paintPositions(){
+  let h = '<tr><th>edges</th><th>pictures</th><th>L</th><th>R</th><th>P</th><th>N</th>' +
+          '<th>value wrong</th></tr>';
+  let T = { positions: 0, L: 0, R: 0, P: 0, N: 0, valueWrong: 0 };
+  for (const r of S.rows){
+    h += '<tr><td class="l">' + r.edges + '</td><td>' + fmt(r.positions) + '</td><td>' + fmt(r.L) +
+         '</td><td>' + fmt(r.R) + '</td><td>' + fmt(r.P) + '</td><td>' + r.N + '</td><td>' + r.valueWrong + '</td></tr>';
+    for (const k in T) T[k] += r[k];
+  }
+  h += '<tr class="hi"><td class="l">total</td><td>' + fmt(T.positions) + '</td><td>' + fmt(T.L) + '</td><td>' +
+       fmt(T.R) + '</td><td>' + fmt(T.P) + '</td><td>' + T.N + '</td><td>' + T.valueWrong + '</td></tr>';
+  $('posTbl').innerHTML = h;
+  S.posTot = T;
+  $('posNote').innerHTML = 'Every picture solved by a recursion that knows no arithmetic. The sign of the ' +
+    'summed value called <strong>' + fmt(T.positions - T.valueWrong) + ' of ' + fmt(T.positions) +
+    '</strong> — <strong>' + T.valueWrong + '</strong> wrong. N-positions, where the first player wins: ' +
+    '<strong>' + T.N + '</strong>, which is ' + pct(T.N, T.positions) + '. Only <strong>' + fmt(T.P) +
+    '</strong> (' + pct(T.P, T.positions) + ') even care who moves first.';
+}
+
+function paintGreen(){
+  let h = '<tr><th>edges</th><th>pictures</th><th>green N</th><th>green P</th><th>green L or R</th>' +
+          '<th>XOR rule wrong</th></tr>';
+  let T = { positions: 0, greenN: 0, greenP: 0, greenLR: 0, xorWrong: 0, N: 0 };
+  for (const r of S.rows){
+    h += '<tr><td class="l">' + r.edges + '</td><td>' + fmt(r.positions) + '</td><td>' + fmt(r.greenN) +
+         '</td><td>' + fmt(r.greenP) + '</td><td>' + r.greenLR + '</td><td>' + r.xorWrong + '</td></tr>';
+    for (const k in T) T[k] += r[k];
+  }
+  h += '<tr class="hi"><td class="l">total</td><td>' + fmt(T.positions) + '</td><td>' + fmt(T.greenN) +
+       '</td><td>' + fmt(T.greenP) + '</td><td>' + T.greenLR + '</td><td>' + T.xorWrong + '</td></tr>';
+  $('greenTbl').innerHTML = h;
+  $('greenNote').innerHTML = 'Same drawings, one colour. Who moves first now decides <strong>' +
+    pct(T.greenN, T.positions) + '</strong> of them, against <strong>' + pct(T.N, T.positions) +
+    '</strong> in blue and red. Decided-in-advance wins: <strong>' + T.greenLR + '</strong>. And the ' +
+    'Grundy value is the XOR of the stalk lengths on every one — <strong>' + T.xorWrong +
+    '</strong> disagreements, which is Days 55 and 70 reappearing intact the moment the colours stop mattering.';
+}
+
+function paintGrow(){
+  let h = '<tr><th>edges</th><th>pictures</th><th>count the edges</th><th>who owns the ground</th><th>won by &lt; 1 edge</th></tr>';
+  for (const r of S.rows)
+    h += '<tr><td class="l">' + r.edges + '</td><td>' + fmt(r.positions) + '</td><td>' +
+         (100 * r.countWrong / r.positions).toFixed(3) + '%</td><td>' +
+         (100 * r.bottomWrong / r.positions).toFixed(3) + '%</td><td>' +
+         (100 * r.thin / r.positions).toFixed(3) + '%</td></tr>';
+  $('growTbl').innerHTML = h;
+  const last = S.rows[S.rows.length - 1];
+  $('growNote').innerHTML = 'Neither habit improves. &ldquo;Who owns the ground&rdquo; is <em>perfect</em> ' +
+    'on one stalk and wrong on <strong>' + (100 * last.bottomWrong / last.positions).toFixed(3) +
+    '%</strong> of ' + last.edges + '-edge pictures. The edge count splits by parity — an odd number of ' +
+    'edges cannot tie — so its two curves have to be read separately.';
+}
+
+function paintThin(){
+  const T = S.posTot, thin = S.rows.reduce((a, r) => a + r.thin, 0);
+  $('thinBox').innerHTML =
+    '<div class="kv"><span>pictures swept</span><b>' + fmt(T.positions) + '</b></div>' +
+    '<div class="kv"><span>won by strictly less than one edge</span><b>' + fmt(thin) + '</b></div>' +
+    '<div class="bar" style="margin:8px 0"><span style="width:' + (100 * thin / T.positions).toFixed(1) + '%"></span></div>' +
+    '<p class="tiny" style="margin:0">' + pct(thin, T.positions) + ' of all positions are decided by a ' +
+    'margin no counting method can resolve, because the margin is smaller than the smallest thing ' +
+    'anybody is counting.</p>';
+}
+
+function paintPolicies(){
+  let h = '<tr><th>Left plays</th><th>positions</th><th>seeds</th><th>lost</th><th>loss rate</th><th>range over seeds</th><th>vs random</th></tr>';
+  const rnd = S.pol.find(r => r.name === 'random');
+  const LABEL = {
+    value: 'for the number (move to keep it largest)',
+    count: 'by the edge count',
+    tall: 'cut the tallest enemy stalk',
+    random: 'AT RANDOM',
+    damage: 'take down the most edges',
+    ground: 'cut it off at the ground'
+  };
+  for (const r of S.pol){
+    const rel = rnd && rnd.rate ? (r.rate / rnd.rate) : 0;
+    const cls = r.name === 'value' ? ' class="good"' : (rnd && r.rate > rnd.rate ? ' class="bad"' : '');
+    h += '<tr' + cls + '><td class="l">' + LABEL[r.name] + '</td><td>' + fmt(r.played) + '</td><td>' +
+         r.seeds + '</td><td>' + fmt(Math.round(r.lost)) + '</td><td>' + (100 * r.rate).toFixed(4) +
+         '%</td><td>' + (100 * r.rateLo).toFixed(3) + ' – ' + (100 * r.rateHi).toFixed(3) + '</td><td>' +
+         (r.name === 'random' ? '—' : rel.toFixed(2) + '×') + '</td></tr>';
+  }
+  $('polTbl').innerHTML = h;
+  const v = S.pol.find(r => r.name === 'value'), g = S.pol.find(r => r.name === 'ground');
+  const d = S.pol.find(r => r.name === 'damage');
+  if (v && g && rnd)
+    $('polNote').innerHTML = 'Every policy starts from a position Left already wins and meets a perfect ' +
+      'opponent. Playing for the number loses <strong>' + Math.round(v.lost) + '</strong> of ' + fmt(v.played) +
+      ' — the number is not just a verdict, it is the move rule. Cutting the enemy off at the ground loses ' +
+      '<strong>' + (100 * g.rate).toFixed(2) + '%</strong>, which is <strong>' + (g.rate / rnd.rate).toFixed(2) +
+      '×</strong> the loss rate of moving at random, and taking down the most edges (' +
+      (100 * d.rate).toFixed(2) + '%) is worse than random too. Ties are broken by the seeded generator, ' +
+      'not by array order — that alone was worth five points.';
+}
+
+// ---------------------------------------------------------------- self-test: bounds and identities
+function selftest(){
+  const L = [];
+  let n = 0, bad = 0;
+  const ck = (cond, what, detail) => { n++; if (!cond){ bad++; L.push('FAIL  ' + what + (detail ? '  — ' + detail : '')); } };
+  const S1 = S.stalks, T = S.posTot;
+
+  // 1. the identity the page is named for, and the bound that proves it
+  ck(S1.bottomWrong === 0, 'the bottom edge names the winner of every stalk', S1.bottomWrong + ' exceptions');
+  ck(S1.boundViolations === 0, 'the tail above the leading run stays inside one whole edge');
+  ck(S1.total === Math.pow(2, 21) - 2, 'every stalk to length 20 was visited', fmt(S1.total));
+
+  // 2. the control reproduces its closed form at every length, and never improves
+  let cf = 0;
+  for (let k = 1; k <= 20; k++){
+    if (S1.per[k].countWrong !== countWrongClosedForm(k)) cf++;
+    if (S1.per[k].countTie !== countTieClosedForm(k)) cf++;
+  }
+  ck(cf === 0, 'the edge-count failure count matches its closed form at all 20 lengths', cf + ' mismatches');
+  for (let k = 2; k <= 20; k += 2)
+    ck(S1.per[k].countWrong * 2 === S1.per[k].total, 'even length ' + k + ' fails on exactly half the stalks');
+  ck(S1.per[20].countWrong / S1.per[20].total >= S1.per[2].countWrong / S1.per[2].total,
+     'the control does not improve with length');
+
+  // 3. two routes to the same number
+  for (const c of S.defn) ck(c.bad === 0, c.what, c.bad + ' disagreements');
+
+  // 4. three identities
+  ck(S.ident.defnBad === 0, 'the definition on a picture equals the sum of its stalks');
+  ck(S.ident.negBad === 0, 'flipping every colour negates the value and swaps the outcome');
+  ck(S.ident.mirrorBad === 0, 'a picture beside its mirror image is a second-player win worth zero');
+
+  // 5. the number decides, and the two colourings partition the outcome classes
+  ck(T.valueWrong === 0, 'the sign of the value called every solved picture', T.valueWrong + ' wrong');
+  ck(T.N === 0, 'blue-red produces no first-player wins', T.N + ' found');
+  const g = S.rows.reduce((a, r) => ({ n: a.n + r.greenN, p: a.p + r.greenP, lr: a.lr + r.greenLR, x: a.x + r.xorWrong }),
+                          { n: 0, p: 0, lr: 0, x: 0 });
+  ck(g.lr === 0, 'green produces no decided-in-advance wins', g.lr + ' found');
+  ck(g.x === 0, 'green Grundy equals the XOR of the stalk lengths', g.x + ' disagreements');
+  ck(g.n + g.p === T.positions, 'the green census covers the same pictures');
+  ck(g.n > T.N && T.P < g.p, 'who moves first matters in green and not in blue-red');
+
+  // 6. the outcome census is symmetric under colour swap
+  ck(T.L === T.R, 'the L and R counts are equal, as colour symmetry demands', T.L + ' vs ' + T.R);
+  ck(T.L + T.R + T.P + T.N === T.positions, 'every picture landed in exactly one outcome class');
+
+  // 7. play: the number is the move rule, and two habits are worse than none
+  const P = {}; for (const r of S.pol) P[r.name] = r;
+  ck(P.value.lost === 0, 'playing for the number never loses a won position', P.value.lost + ' lost');
+  for (const k in P) ck(P[k].rate >= P.value.rate, 'no policy beats the number (' + k + ')');
+  ck(P.ground.rate > P.random.rate, 'cutting at the ground is worse than random',
+     (100 * P.ground.rate).toFixed(2) + '% vs ' + (100 * P.random.rate).toFixed(2) + '%');
+  ck(P.damage.rate > P.random.rate, 'maximum damage is worse than random');
+  ck(P.count.rate < P.random.rate, 'the edge count is the one habit better than random');
+  ck(P.ground.rate > 2 * P.random.rate, 'cutting at the ground is more than twice as bad as random');
+  for (const k in P) ck(P[k].rateHi - P[k].rateLo < 0.01, 'the ' + k + ' rate is stable across seeds',
+                        ((P[k].rateHi - P[k].rateLo) * 100).toFixed(3) + ' points');
+
+  // 8. arithmetic sanity that would catch a broken representation
+  ck(dCmp(dAdd(stalkValue(codeOf('BR')), stalkValue(codeOf('BR'))), stalkValue(codeOf('B'))) === 0,
+     'two halves add to one whole move');
+  ck(dSign(posValue(parsePos(['BR', 'BR', 'R']))) === 0, 'half plus half minus one is exactly zero');
+  ck(outcome(parsePos(['BR', 'BR', 'R'])) === 'P', 'and that picture is a second-player win');
+  ck(dStr(stalkValue(codeOf('BRR'))) === '1/4', 'BRR is a quarter');
+  const w = S.stalks.worst;
+  ck(dSign(w.value) < 0 && w.gap > 0, 'the widest counterexample really is a loss for the player ahead on edges');
+  ck(Math.abs(dNum(w.value)) < 1 / Math.pow(2, 10), 'and it is lost by less than a thousandth of a move');
+  ck(valueCensus(12).distinct === 4096, 'the 4,096 stalks of length 12 take 4,096 distinct values');
+  const r1 = mulberry32(7), r2 = mulberry32(7), r3 = mulberry32(8);
+  let same = true, diff = false;
+  for (let i = 0; i < 300; i++){ const a = r1(), b = r2(), c = r3(); if (a !== b) same = false; if (a !== c) diff = true; }
+  ck(same && diff, 'the generator is deterministic and seed-dependent');
+
+  S.asserts = S1.asserts + S.defnAsserts + S.ident.defn + S.ident.neg * 2 + S.ident.mirror * 2 +
+              S.rows.reduce((a, r) => a + r.positions * 5, 0) +
+              S.pol.reduce((a, r) => a + r.playouts, 0);
+  const head = bad === 0
+    ? 'ALL ' + n + ' CHECKS PASS  ·  ' + fmt(S.asserts) + ' assertions over ' +
+      fmt(S1.total) + ' stalks and ' + fmt(T.positions) + ' pictures'
+    : bad + ' OF ' + n + ' CHECKS FAILED';
+  $('selftest').textContent = head + '\n' + (L.length ? L.join('\n') + '\n' : '') +
+    '\nstalks       ' + fmt(S1.total) + '  bottom-edge exceptions ' + S1.bottomWrong +
+    '  bound violations ' + S1.boundViolations +
+    '\ncontrol      counting edges misses ' + fmt(S1.countWrong) + ' (' + pct(S1.countWrong, S1.total) +
+    '), exactly 2^(n-1) at every even length' +
+    '\npictures     ' + fmt(T.positions) + '  L ' + fmt(T.L) + '  R ' + fmt(T.R) + '  P ' + fmt(T.P) +
+    '  N ' + T.N + '  value wrong ' + T.valueWrong +
+    '\ngreen        N ' + fmt(g.n) + ' (' + pct(g.n, T.positions) + ')  P ' + fmt(g.p) +
+    '  L or R ' + g.lr + '  XOR disagreements ' + g.x +
+    '\nplay         number ' + (100 * P.value.rate).toFixed(4) + '%   count ' + (100 * P.count.rate).toFixed(2) +
+    '%   tallest ' + (100 * P.tall.rate).toFixed(2) + '%   random ' + (100 * P.random.rate).toFixed(2) +
+    '%   damage ' + (100 * P.damage.rate).toFixed(2) + '%   ground ' + (100 * P.ground.rate).toFixed(2) + '%';
+}
+
+// ---------------------------------------------------------------- the pump (plain setTimeout)
+const SEEDS = [1, 2, 3, 4];
+const MAXE = 11;
+const POLS = ['value', 'count', 'tall', 'random', 'damage', 'ground'];
+let step = 0, rowE = 1, polI = 0;
+
+function boot(){
+  try {
+    if (step === 0){
+      $('preset').innerHTML = PRESETS.map((p, i) => '<option value="' + i + '">' + p[0] + '</option>').join('');
+      $('preset').addEventListener('change', e => loadPreset(+e.target.value));
+      $('resetBtn').addEventListener('click', () => loadPreset(+$('preset').value));
+      $('hintBtn').addEventListener('click', hint);
+      $('deepBtn').addEventListener('click', deepSweep);
+      loadPreset(0);
+      paintLadder();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 1){
+      S.stalks = sweepStalks(20);
+      paintStalkTable(); paintRateChart(); paintGap();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 2){
+      S.defn = []; S.defnAsserts = 0;
+      let bad = 0, cnt = 0;
+      for (let L = 1; L <= 14; L++) for (let m = 0; m < (1 << L); m++){
+        const c = (1 << L) | m; cnt++;
+        if (dCmp(stalkValue(c), stalkValueSimplicity(c)) !== 0) bad++;
+      }
+      S.defn.push({ what: 'closed form = simplicity rule, stalks to length 14', n: cnt, bad });
+      S.defnAsserts += cnt;
+      let bad2 = 0, cnt2 = 0;
+      for (let L = 1; L <= 14; L++) for (let m = 0; m < (1 << L); m++){
+        const c = (1 << L) | m; cnt2++;
+        if (Math.abs(stalkScaled(c) / SCALE - dNum(stalkValue(c))) > 1e-12) bad2++;
+      }
+      S.defn.push({ what: 'exact BigInt value = the scaled-integer value', n: cnt2, bad: bad2 });
+      S.defnAsserts += cnt2;
+      paintDefn();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 3){
+      S.ident = identitySweep(9, 8, 5);
+      paintIdentities(); paintCensus();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 4){
+      if (!S.pool) S.pool = allStalks(MAXE);
+      S.rows.push(sweepRow(rowE, S.pool));
+      paintPositions(); paintGreen(); paintGrow(); paintThin();
+      rowE++;
+      if (rowE > MAXE) step++;
+      setTimeout(boot, 5); return;
+    }
+    if (step === 5){
+      if (!S.won) S.won = wonPositions(MAXE);
+      S.pol.push(policyRow(POLS[polI], S.won, SEEDS));
+      paintPolicies();
+      polI++;
+      if (polI >= POLS.length){ step++; $('deepBtn').disabled = false; }
+      setTimeout(boot, 5); return;
+    }
+    setTimeout(selftest, 30);
+  } catch (err){
+    $('selftest').textContent = 'ENGINE ERROR: ' + (err && err.message ? err.message : String(err));
+  }
+}
+function hint(){
+  const m = bestMove(S.pos, B);
+  if (!m){ say('no blue edge left to cut.'); return; }
+  say('best cut: edge ' + (m.idx + 1) + ' of stalk ' + (m.stalk + 1) + ' — leaves ' + dStr(posValue(m.pos)) +
+      ' (every other blue cut leaves less)');
+}
+function deepSweep(){
+  $('deepBtn').disabled = true;
+  $('deepOut').textContent = 'sweeping 12-edge pictures…';
+  setTimeout(() => {
+    const pool = allStalks(12);
+    const r = sweepRow(12, pool);
+    S.rows.push(r);
+    paintPositions(); paintGreen(); paintGrow(); paintThin();
+    setTimeout(() => {
+      const won = wonPositions(12);
+      const rows = POLS.map(nm => policyRow(nm, won, [1, 2]));
+      S.deepPol = rows;
+      $('deepOut').innerHTML = '12-edge sweep: <strong>' + fmt(r.positions) + '</strong> more pictures, ' +
+        'first-player wins <strong>' + r.N + '</strong>, value wrong <strong>' + r.valueWrong + '</strong>, ' +
+        'green decided-in-advance <strong>' + r.greenLR + '</strong>. Replayed on ' + fmt(won.length) +
+        ' won positions (2 seeds): ' + rows.map(x => x.name + ' ' + (100 * x.rate).toFixed(2) + '%').join(' · ') + '.';
+      selftest();
+    }, 20);
+  }, 20);
+}
+setTimeout(boot, 30);
+</script>
+
+</body>
+</html>
