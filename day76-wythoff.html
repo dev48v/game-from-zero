@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 76 — Wythoff's Game</title>
+<style>
+  :root{
+    --ink:#1c1917; --sub:#4c443f; --mute:#78716c; --line:#e7e2dc;
+    --bg:#faf9f7; --bg2:#f3f0ea; --card:#ffffff;
+    --acc:#a16207; --acc-soft:#fefce8; --acc-line:#fde68a;
+    --warn:#b45309; --warn-soft:#fffbeb; --warn-line:#fcd34d;
+    --good:#047857; --bad:#b91c1c;
+    --safe:#0f766e; --safe-soft:#effcf9; --nim:#be123c; --nim-soft:#fff1f2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,sans-serif;
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;margin:0}
+  p{margin:0 0 14px}
+  strong{font-weight:800}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;
+       background:var(--bg2);padding:1px 5px;border-radius:4px}
+  pre{background:#1c1917;color:#e7e2dc;padding:12px 14px;border-radius:10px;font-size:12px;
+      overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;
+      margin:0 0 14px}
+  .hidden{display:none !important}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* the hero is taller than most viewports, so only the tab bar may stick */
+  header{background:#fff;padding-bottom:4px}
+  nav#tabbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+  nav#tabbar .wrap{padding:10px 16px}
+  .wrap{max-width:1140px;margin:0 auto;padding:18px 16px}
+  .wrap-narrow{max-width:840px;margin:0 auto;padding:24px 16px 60px}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--acc);margin:0 0 8px}
+  h1.hero{font-size:20px;font-weight:900;margin-bottom:16px}
+  @media(min-width:768px){ h1.hero{font-size:23px} }
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tabs button{border:0;border-radius:9px;padding:9px 20px;font-weight:700;font-size:14px;
+               background:var(--bg2);color:var(--ink);cursor:pointer;font-family:inherit}
+  .tabs button.tab-active{background:var(--ink);color:#fff}
+
+  section.tab-panel{min-height:calc(100vh - 76px)}
+  #look{background:var(--bg2);padding:16px}
+  #understand{padding:16px}
+  #build{background:var(--bg);padding:16px}
+  @media(min-width:768px){ #look,#understand,#build{padding:32px 16px} }
+
+  .cols{display:grid;grid-template-columns:1fr;gap:18px;max-width:1140px;margin:0 auto}
+  @media(min-width:1024px){ .cols{grid-template-columns:1.42fr 1fr} }
+  .stack{display:flex;flex-direction:column;gap:18px}
+
+  .card{background:var(--card);border-radius:16px;padding:18px;
+        box-shadow:0 1px 2px rgba(28,25,23,.06),0 1px 10px rgba(28,25,23,.05)}
+  .lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute);margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .pill{padding:6px 11px;border-radius:9px;font-size:12.5px;font-weight:700;font-family:inherit;
+        border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .pill:hover{background:var(--acc-soft);border-color:var(--acc-line)}
+  .pill:disabled{opacity:.34;cursor:default}
+  select.pill{cursor:pointer}
+  .go{padding:8px 15px;border-radius:9px;border:0;background:var(--acc);color:#fff;
+      font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.4;cursor:default}
+
+  svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10px;font-weight:700}
+  #board,#mapSvg,#gruSvg{width:100%;height:auto;touch-action:manipulation}
+  #board rect.cell{stroke:#fff;stroke-width:1}
+  #board rect.pick{cursor:pointer}
+  #board rect.pick:hover{stroke:var(--acc);stroke-width:2.5}
+
+  table.num{border-collapse:collapse;width:100%}
+  table.num th,table.num td{padding:4px 8px;font-variant-numeric:tabular-nums}
+  table.num th{font-size:10.5px;letter-spacing:.05em;color:var(--mute);text-align:right;font-weight:800}
+  table.num th:first-child,table.num td:first-child{text-align:left}
+  table.num td{text-align:right;font-size:12.5px;border-top:1px solid var(--line)}
+  table.num td.l{text-align:left}
+  table.num tr.hi td{background:var(--acc-soft);font-weight:800}
+  table.num tr.bad td{background:var(--nim-soft)}
+  table.num tr.good td{background:#ecfdf5}
+
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+       max-height:150px;overflow:auto}
+  .log div{padding:1px 0;border-bottom:1px solid var(--bg2)}
+
+  .note{border-left:4px solid var(--acc);background:var(--acc-soft);padding:12px 14px;border-radius:0 10px 10px 0;
+        margin:0 0 16px}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .note p{margin:0;font-size:13.5px}
+  .note p+p{margin-top:8px}
+
+  .verdict{font-weight:900;font-size:14px}
+  .win{color:var(--good)} .lose{color:var(--bad)}
+  .small{font-size:12px;color:var(--sub)}
+  .tiny{font-size:11.5px;color:var(--mute)}
+  .huge{font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  h2.big{font-size:23px;font-weight:900;margin:0 0 16px}
+  h3.mid{font-size:17.5px;font-weight:800;margin:26px 0 10px}
+  .wrap-narrow p,.wrap-narrow li{color:#2c2622}
+  .wrap-narrow ul{margin:0 0 14px;padding-left:22px}
+  .wrap-narrow li{margin-bottom:6px}
+  .sf{color:var(--safe);font-weight:800}
+  .nm{color:var(--nim);font-weight:800}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;
+          margin-right:5px;border:1px solid rgba(28,25,23,.15)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">GAMEFROMZERO · DAY 76</p>
+    <h1 class="hero">
+      🪙 Wythoff&rsquo;s game &mdash; two piles, and a move takes any number of stones from
+      <em>one</em> pile <strong>or the same number from both</strong>. Delete that second clause and
+      it is 2-pile Nim, whose answer everyone already knows: keep the piles equal. Adding the
+      diagonal move does not <em>perturb</em> that answer, it <strong>inverts</strong> it &mdash;
+      across <strong>4,004,001</strong> positions the Nim-safe set and the Wythoff-safe set share
+      exactly <strong>one</strong> square, the empty board, and every other Nim-safe square is a
+      one-move loss. 🔴 Measured rather than argued: over all <strong>20,024</strong> won positions
+      on a 200&times;200 board, playing the Nim rule keeps the win <strong>0.0294%</strong> of the
+      time and moving at <strong>random</strong> keeps it <strong>0.6497%</strong> &mdash; closing
+      your eyes is <strong>22&times;</strong> better than applying the best-known theory for the
+      game next door. The safe squares do have a closed form,
+      (<strong>&lfloor;k&phi;&rfloor;</strong>, <strong>&lfloor;k&phi;&sup2;&rfloor;</strong>) with
+      &phi; the golden ratio, and it is checked against Wythoff&rsquo;s own mex construction and
+      against a plain win/loss solver that knows no arithmetic at all: <strong>0</strong>
+      disagreements on <strong>25,921</strong> solved positions, and the Grundy zeroes land on
+      exactly the same squares across another <strong>19,881</strong> cells. 🔴 The control is what
+      everybody types instead of an exact
+      &phi; &mdash; a rounded constant &mdash; and the first square it gets wrong is
+      <strong>always</strong> at a Fibonacci pile count, with the parity of the index set by the
+      <em>sign</em> of the rounding error: <strong>247</strong> approximations tested,
+      <strong>0</strong> exceptions. 1.6 dies at k&nbsp;=&nbsp;13 on <strong>(21,&nbsp;34)</strong>,
+      1.618 at k&nbsp;=&nbsp;233 on <strong>(377,&nbsp;610)</strong>, and double-precision &phi;
+      itself at F&#8324;&#8320;&nbsp;=&nbsp;<strong>102,334,155</strong>. 🔴 And the cost is not
+      proportional to the error: a table right about <strong>99.61%</strong> of squares loses
+      <strong>21.83%</strong> of won games, a <strong>56&times;</strong> amplification, because a
+      game visits many squares and one wrong square is final. That is the temperament of the whole
+      thing &mdash; from a won position there are on average <strong>400.17</strong> legal moves and
+      <strong>1.29</strong> winning ones, never more than <strong>three</strong> (a row, a column
+      and a diagonal hold one safe square each), and <strong>76.49%</strong> of the time exactly
+      one. Pure vanilla JS, one file, no build step.
+    </h1>
+  </div>
+</header>
+
+<nav id="tabbar">
+  <div class="wrap tabs" id="tabs">
+    <button data-tab="look" class="tab-active">🪙 PLAY</button>
+    <button data-tab="understand">🧠 UNDERSTAND</button>
+    <button data-tab="build">🔨 BUILD</button>
+  </div>
+</nav>
+
+<section id="look" class="tab-panel">
+  <div class="cols">
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">THE QUEEN IN THE CORNER &mdash; YOU MOVE FIRST, CLICK A SQUARE</p>
+        <div class="row" style="margin-bottom:10px">
+          <select id="preset" class="pill"></select>
+          <select id="opp" class="pill">
+            <option value="cold">Reply: the safe squares (perfect)</option>
+            <option value="nim">Reply: the Nim rule (equalise the piles)</option>
+            <option value="a16">Reply: the closed form with &phi; = 1.6</option>
+            <option value="greedy">Reply: take as many stones as possible</option>
+            <option value="random">Reply: at random</option>
+          </select>
+          <button id="resetBtn" class="pill">reset</button>
+          <button id="hintBtn" class="go">hint</button>
+        </div>
+        <svg id="board" viewBox="0 0 620 520" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="huge" id="pileBig">&mdash;</div>
+        <p class="small" id="verdict" style="margin:6px 0 4px"></p>
+        <p class="tiny" id="boardNote" style="margin:0 0 8px"></p>
+        <div id="log" class="log"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE FIRST MOVE &mdash; THE HEADLINE, WITH NO DICE THROWN</p>
+        <table class="num" id="firstTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="firstNote">sweeping&hellip;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">TWO SAFE SETS ON ONE BOARD &mdash; THEY MEET ONCE</p>
+        <svg id="mapSvg" viewBox="0 0 620 560" preserveAspectRatio="xMidYMid meet"></svg>
+        <p class="tiny" style="margin:6px 0 0" id="mapNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHOLE GAMES AGAINST A PERFECT REPLY</p>
+        <table class="num" id="raceTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="raceNote">&nbsp;</p>
+        <div class="row" style="margin-top:10px">
+          <button id="deepBtn" class="go" disabled>push the race to a 140&times;140 board</button>
+        </div>
+        <div id="deepOut" class="small mono" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">A ROUNDED &phi; DIES AT A FIBONACCI NUMBER, EVERY TIME</p>
+        <table class="num" id="ladderTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="ladderNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">A SMALL TABLE ERROR IS NOT A SMALL LOSS</p>
+        <table class="num" id="growTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="growNote">&nbsp;</p>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">THE SAFE SQUARES, THREE WAYS</p>
+        <table class="num" id="pairTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="pairNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">EVERY OTHER SAFE SQUARE IS TWO FIBONACCI NUMBERS</p>
+        <table class="num" id="fibTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="fibNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">HOW MANY MOVES KEEP THE WIN</p>
+        <table class="num" id="winTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="winNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">FOUR ROUTES TO THE SAME ANSWER</p>
+        <table class="num" id="routeTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="routeNote"></p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE TWO SEQUENCES SPLIT THE INTEGERS</p>
+        <div id="beattyBox" class="small"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE PART WITH NO FORMULA &mdash; GRUNDY VALUES</p>
+        <svg id="gruSvg" viewBox="0 0 620 520" preserveAspectRatio="xMidYMid meet"></svg>
+        <p class="tiny" style="margin:6px 0 0" id="gruNote">&nbsp;</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">One extra move, and the answer to the neighbouring game becomes exactly wrong</h2>
+
+    <p>Two piles of stones. On your turn you take any positive number of stones from one pile,
+    <em>or</em> the same positive number from both piles. Whoever takes the last stone wins. That is
+    Wythoff&rsquo;s game, published in 1907, and it is one clause longer than 2-pile Nim.</p>
+
+    <p>2-pile Nim is the first thing anyone learns about combinatorial games: the safe positions
+    &mdash; the ones you want to <em>hand</em> your opponent &mdash; are exactly the equal pairs
+    <span class="mono">(m, m)</span>. Mirror whatever they do and you cannot lose. That rule is
+    correct, famous, and in Wythoff&rsquo;s game it is the single worst thing you can do, because
+    <span class="mono">(m, m)</span> with <span class="mono">m &gt; 0</span> is now a position your
+    opponent kills in one move: take <span class="mono">m</span> from both piles and the board is
+    empty.</p>
+
+    <p>So the two answers do not overlap a little. They do not overlap <em>at all</em>. The PLAY tab
+    sweeps every position on a 2000&times;2000 board &mdash; 4,004,001 of them &mdash; and counts the
+    squares both games call safe. The count is <strong>1</strong>: the empty board, where the
+    question is not interesting. Every one of the other <strong>2,000</strong> Nim-safe squares is a
+    Wythoff loss, and every one of the <strong>1,528</strong> other Wythoff-safe squares is a
+    position Nim would have told you to move <em>away</em> from.</p>
+
+    <h3 class="mid">What the safe squares actually are</h3>
+
+    <p>Wythoff&rsquo;s construction needs no arithmetic and no irrational number. Walk
+    <span class="mono">k = 1, 2, 3, &hellip;</span>. Let <span class="mono">a&#8342;</span> be the
+    smallest whole number that has not appeared yet in <em>either</em> coordinate of any earlier
+    pair, and let <span class="mono">b&#8342; = a&#8342; + k</span>:</p>
+
+<pre>k    1   2   3   4   5   6    7    8    9   10   11   12
+a    1   3   4   6   8   9   11   12   14   16   17   19
+b    2   5   7  10  13  15   18   20   23   26   28   31</pre>
+
+    <p>Two things fall out of that table and both are checked on this page rather than asserted. The
+    <span class="mono">a</span> row and the <span class="mono">b</span> row between them use every
+    positive integer exactly once &mdash; no gaps, no repeats &mdash; so every number is in exactly
+    one safe pair. And each pair&rsquo;s difference is its own index, which is what makes the
+    diagonals work out.</p>
+
+    <p>The closed form is the famous part:</p>
+
+<pre>a&#8342; = floor(k &middot; &phi;)      b&#8342; = floor(k &middot; &phi;&sup2;) = a&#8342; + k       &phi; = (1 + sqrt 5) / 2</pre>
+
+    <p>It is a <em>Beatty pair</em>: because <span class="mono">1/&phi; + 1/&phi;&sup2; = 1</span>
+    and &phi; is irrational, the two sequences <span class="mono">floor(k&phi;)</span> and
+    <span class="mono">floor(k&phi;&sup2;)</span> partition the positive integers between them. That
+    theorem is the reason the mex construction and the golden ratio describe the same table.</p>
+
+    <h3 class="mid">Why there are never more than three winning moves</h3>
+
+    <p>A move from <span class="mono">(x, y)</span> stays in the same row, the same column, or the
+    same diagonal. Each of those three lines contains <em>exactly one</em> safe square, because each
+    number appears in exactly one pair and each difference appears as exactly one index. So a
+    position has at most three moves that keep the win, no matter how large the piles are &mdash;
+    and a swept 300&times;300 board finds a maximum of exactly three, an average of
+    <strong>1.29</strong>, and <strong>76.49%</strong> of won positions with precisely one. The
+    average number of <em>legal</em> moves on the same sweep is <strong>400.17</strong>.</p>
+
+    <p>That is why the whole-game numbers on the PLAY tab all sit near 100%. Against a reply that
+    never errs, a single wrong move ends it, and there is no way back.</p>
+
+    <h3 class="mid">The control, and what it actually costs</h3>
+
+    <p>Nobody builds the mex table. Everybody writes the one-liner:</p>
+
+<pre>safe(x, y)  =  min(x,y) === Math.floor((max(x,y) - min(x,y)) * PHI)</pre>
+
+    <p>&hellip;and then types a value for <span class="mono">PHI</span>. This page measures where each
+    typed value first disagrees with the table, and the pattern is not a gentle drift. The first
+    failure is <strong>always at a Fibonacci number</strong>, and which Fibonacci number depends on
+    the <em>sign</em> of the error:</p>
+
+    <ul>
+      <li><span class="mono">k&phi;</span> comes closer to a whole number at Fibonacci
+      <span class="mono">k</span> than at any smaller <span class="mono">k</span> &mdash; that is what
+      makes &phi; the hardest number to approximate by fractions.</li>
+      <li>The near-misses <em>alternate</em>: <span class="mono">F&#8345;&phi;</span> sits just
+      <em>above</em> a whole number for odd <span class="mono">n</span> and just <em>below</em> for
+      even <span class="mono">n</span>, by <span class="mono">1/&phi;&#8319;</span> exactly.</li>
+      <li>So a &phi; that is too small first breaks a floor at an odd-index Fibonacci, and a &phi;
+      that is too large first breaks one at an even-index Fibonacci.</li>
+    </ul>
+
+    <p>Swept over 247 constants that fail &mdash; eight typed by hand, the rest seeded perturbations
+    &mdash; there are <strong>0</strong> non-Fibonacci first failures and <strong>0</strong> wrong
+    parities. And the honest null is on the page too: three decimal places, 1.618, is right about
+    every square on every board this page can draw. It dies at pile 610, not before.</p>
+
+    <p>The part worth carrying away is the last table on the left. At a 100&times;100 board the
+    &phi;&nbsp;=&nbsp;1.6 table is wrong about <strong>20 squares out of 5,151</strong> &mdash;
+    0.39% &mdash; and it loses <strong>21.83%</strong> of won games. The error rate is not the loss
+    rate; the loss rate is 56 times larger, because a game touches many squares and only needs to be
+    betrayed once.</p>
+
+    <h3 class="mid">What the game refuses to tell you</h3>
+
+    <p>The safe squares have a closed form. The <em>Grundy values</em> &mdash; the numbers you would
+    need to play Wythoff as one component of a bigger sum of games &mdash; do not. The zeroes land
+    exactly on the safe squares, which is a real check and it passes on every cell of a
+    140&times;140 grid. Everything else is a mess: the value reaches <strong>214</strong> inside that
+    grid, and it agrees with the obvious guess <span class="mono">x XOR y</span> on only
+    <strong>3.10%</strong> of cells. The heat map on the right is what &ldquo;no known formula&rdquo;
+    looks like.</p>
+
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">How it is built</h2>
+
+    <h3 class="mid">1. Exact integers, because one off-by-one relabels a loss as a win</h3>
+    <p>The closed form is evaluated with no floating point anywhere:
+    <span class="mono">floor(k&phi;) = floor((k + isqrt(5k&sup2;)) / 2)</span>, with a Newton integer
+    square root over BigInt. Floats appear on this page only where they are the
+    <em>subject</em> &mdash; the rounding ladder and the two approximate policies.</p>
+
+    <h3 class="mid">2. The mex table is the source of truth</h3>
+    <p>Wythoff&rsquo;s greedy construction runs first and owns the answer; the closed form has to
+    match it, not the other way round. That ordering matters: it is the construction that is
+    <em>definitionally</em> right, and the golden ratio that is a claim about it.</p>
+
+    <h3 class="mid">3. A solver that knows nothing</h3>
+    <p>Backward induction over enumerated moves, on a 160&times;160 grid, with no formula, no &phi;
+    and no mex in scope. Its P-positions must be the same 25,921-cell verdict the table gives. A
+    fourth route, Grundy by mex, must put its zeroes in the same places.</p>
+
+    <h3 class="mid">4. The winning moves, twice</h3>
+    <p>Once by scanning every legal move and testing it, once by the structural route &mdash; the one
+    safe square in this row, the one in this column, the one on this diagonal, keeping those that are
+    strictly reachable. The two must return the same count on every cell of the sweep. The scan is
+    the slow honest one; the structural version is what makes the playouts affordable.</p>
+
+    <h3 class="mid">5. The headline is measured without a generator</h3>
+    <p>Whole-game loss rates need dice for tie-breaks. The first-move table does not: for each won
+    position, every legal move is scored once for all seven policies in a single pass, and the sweep
+    records how many of the top-scoring moves keep the win. That yields the exact expectation under a
+    uniform tie-break &mdash; no seeds, no variance, nothing to re-run.</p>
+<pre>keeps the win  =  (1 / hot) * SUM over hot positions of  (winning moves among the best) / (best moves)
+</pre>
+    <p>The random policy scores every move zero, so all moves tie, so its expectation is the mean of
+    <span class="mono">winning / legal</span> &mdash; which is computed separately in the same loop
+    and has to come out identical. That identity is asserted, and it is the cheapest way to catch a
+    broken tie-break.</p>
+
+    <h3 class="mid">6. Playouts, and what a lost player does</h3>
+    <p>The policy moves first from a won position and the reply moves to a safe square whenever one
+    exists. Once the policy has played correctly the reply is <em>lost</em>, and a lost player has to
+    do something; the page uses a seeded random legal move. Every rate is also recomputed with that
+    flail replaced by &ldquo;take one stone&rdquo;, and the ordering of the policies has to survive
+    the swap.</p>
+
+    <h3 class="mid">7. Three assumptions of mine the engine refused</h3>
+<pre>// 1. "the Nim rule will lose far more games than random"  - over whole games it barely does,
+//    99.90% against 99.78%, because a perfect reply punishes everything. The gap is only
+//    visible on the FIRST move, where it is 0.0294% against 0.6497% - a factor of 22.
+// 2. "a lost reply is a detail"                           - swapping the flail moves the
+//    approximate policy's loss rate by more than 20 points. It is reported both ways.
+// 3. "the perfect reply is easy to write"                 - the first version treated
+//    "reply has no winning move" as an engine error rather than as the policy having played
+//    correctly, which scored a perfect player at a 96% loss rate and looked plausible.</pre>
+
+    <h3 class="mid">8. What this engine is not</h3>
+<pre>// Two piles only. Wythoff generalises (take k from one pile and any amount from the other,
+// take unequal amounts with a bounded difference); none of that is here.
+// Normal play only. Misere Wythoff is a different table and is not computed.
+// The Grundy values are computed but not USED - playing a sum of Wythoff games would need
+// them, and there is no closed form to lean on if the grid runs out.</pre>
+
+    <h3 class="mid">Self-test</h3>
+    <pre id="selftest">running&hellip;</pre>
+
+    <h3 class="mid">🎉 GameFromZero Day 76 shipped.</h3>
+    <p class="small">Seventy-six games. The first one where knowing the neighbouring game
+    <em>hurts</em> &mdash; measurably, by a factor of twenty-two.</p>
+
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("tab-active"));
+  t.classList.add("tab-active");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// WYTHOFF'S GAME (1907). Two piles. A move takes any positive number of stones from ONE pile, or
+// the SAME positive number from BOTH. Normal play: whoever cannot move loses. Drop the second
+// clause and you have 2-pile Nim, whose answer everybody already knows - keep the piles equal.
+//
+// Adding the diagonal move does not perturb that answer. It INVERTS it. Every position Nim calls
+// safe becomes a one-move loss (take both piles), and every position this game calls safe is one
+// Nim calls won. The two safe sets are disjoint apart from the empty board, and this file checks
+// that by exhaustion rather than quoting it.
+//
+// The safe positions are computed three ways that share nothing:
+//   1. mex/greedy      - a_k is the smallest coordinate not used yet, b_k = a_k + k. No irrational.
+//   2. closed form     - a_k = floor(k*phi), b_k = floor(k*phi^2), in exact BigInt integer sqrt.
+//   3. win/loss solver - plain backward induction over enumerated moves, knowing no formula at all.
+// A fourth, the Grundy value by mex, has to put its zeroes in exactly the same places.
+//
+// Nothing here touches the DOM, a clock, or Math.random. Every random draw comes from a seeded
+// generator handed in by the caller.
+
+// ---------------------------------------------------------------- exact integers, no float
+// floor(k*phi) = floor((k + isqrt(5k^2)) / 2). The whole page turns on this being EXACT: an
+// off-by-one in one coordinate silently relabels a lost position as a safe one.
+function isqrtBig(n){
+  if (n < 2n) return n;
+  let x = n, y = (x + 1n) >> 1n;
+  while (y < x){ x = y; y = (x + n / x) >> 1n; }
+  return x;
+}
+function aExact(k){ const K = BigInt(k); return (K + isqrtBig(5n * K * K)) / 2n; }
+function bExact(k){ return aExact(k) + BigInt(k); }
+
+const PHI  = (1 + Math.sqrt(5)) / 2;
+const PHI2 = PHI + 1;
+
+// ---------------------------------------------------------------- the safe squares, by mex
+// Wythoff's own construction, and the one with no arithmetic in it: walk k upward, take the
+// smallest coordinate nobody has used, and pair it with that number plus k.
+function coldTable(N){
+  const used = new Uint8Array(N + 2);
+  const a = [0], b = [0];
+  const partner = new Int32Array(N + 1).fill(-1);
+  const kOf = new Int32Array(N + 1).fill(-1);
+  partner[0] = 0; kOf[0] = 0; used[0] = 1;
+  let scan = 1;
+  for (let k = 1; ; k++){
+    while (scan <= N && used[scan]) scan++;
+    if (scan > N) break;
+    const ak = scan, bk = ak + k;
+    if (bk > N) break;
+    used[ak] = 1; used[bk] = 1;
+    partner[ak] = bk; partner[bk] = ak;
+    kOf[ak] = k; kOf[bk] = k;
+    a.push(ak); b.push(bk);
+  }
+  return { N, K: a.length - 1, a, b, partner, kOf };
+}
+// O(1) once the table exists: (x,y) is safe iff min is the partner of max
+function isCold(T, x, y){
+  const lo = x < y ? x : y, hi = x < y ? y : x;
+  if (hi > T.N || lo < 0) return false;
+  return T.partner[lo] === hi;
+}
+// the test everybody actually writes, with a typed-in phi and no table at all
+function coldApprox(phi, x, y){
+  const lo = x < y ? x : y, hi = x < y ? y : x;
+  return lo === Math.floor((hi - lo) * phi);
+}
+
+// ---------------------------------------------------------------- the game itself
+function eachMove(x, y, f){
+  for (let t = 1; t <= x; t++) f(x - t, y);
+  for (let t = 1; t <= y; t++) f(x, y - t);
+  const m = x < y ? x : y;
+  for (let t = 1; t <= m; t++) f(x - t, y - t);
+}
+function moveCount(x, y){ return x + y + (x < y ? x : y); }
+
+// exhaustive win/loss over enumerated moves - no phi, no mex, no closed form anywhere in here
+function solveBrute(N){
+  const w = new Uint8Array((N + 1) * (N + 1));
+  for (let x = 0; x <= N; x++)
+    for (let y = 0; y <= N; y++){
+      let hot = 0;
+      eachMove(x, y, (p, q) => { if (!hot && !w[p * (N + 1) + q]) hot = 1; });
+      w[x * (N + 1) + y] = hot;
+    }
+  return { N, w, hot: (x, y) => !!w[x * (N + 1) + y] };
+}
+// Grundy values by mex. The zeroes must land on the safe squares; the rest of the table has no
+// known formula at all, which is the one place this game refuses to be tidy.
+function grundyGrid(N){
+  const g = new Int32Array((N + 1) * (N + 1));
+  const seen = new Int32Array(4 * N + 8);
+  let stamp = 0;
+  for (let x = 0; x <= N; x++)
+    for (let y = 0; y <= N; y++){
+      stamp++;
+      eachMove(x, y, (p, q) => { const v = g[p * (N + 1) + q]; if (v < seen.length) seen[v] = stamp; });
+      let m = 0; while (seen[m] === stamp) m++;
+      g[x * (N + 1) + y] = m;
+    }
+  let mx = 0;
+  for (let i = 0; i < g.length; i++) if (g[i] > mx) mx = g[i];
+  return { N, g, at: (x, y) => g[x * (N + 1) + y], max: mx };
+}
+
+// ---------------------------------------------------------------- the winning moves, two ways
+// honest: try every move and ask whether it lands on a safe square
+function winningMovesScan(T, x, y){
+  const out = [];
+  eachMove(x, y, (p, q) => { if (isCold(T, p, q)) out.push([p, q]); });
+  return out;
+}
+// structural: a row, a column and a diagonal hold exactly ONE safe square each, so there are never
+// more than three winning moves however big the piles get
+function winningMovesStructural(T, x, y){
+  const out = [];
+  const rp = x <= T.N ? T.partner[x] : -1;
+  if (rp >= 0 && rp < y) out.push([x, rp]);
+  const cp = y <= T.N ? T.partner[y] : -1;
+  if (cp >= 0 && cp < x) out.push([cp, y]);
+  const d = y - x;
+  if (d >= 0){ if (d <= T.K && T.a[d] < x) out.push([T.a[d], T.b[d]]); }
+  else { const k = -d; if (k <= T.K && T.a[k] < y) out.push([T.b[k], T.a[k]]); }
+  return out;
+}
+function bestMove(T, x, y){
+  const w = winningMovesStructural(T, x, y);
+  return w.length ? w[0] : null;
+}
+
+// ---------------------------------------------------------------- the big cheap sweep
+// disjointness, density, and the one-safe-square-per-line claim, over the whole square
+function sweepBig(T, N){
+  let cold = 0, nimCold = 0, overlap = 0, coldNimSaysWon = 0, nimSafeButLost = 0;
+  let rowMissing = 0, diagMissing = 0, pairBad = 0;
+  for (let x = 0; x <= N; x++){
+    if (T.partner[x] < 0) rowMissing++;
+    if (x > T.K) diagMissing++;
+    else if (T.b[x] - T.a[x] !== x) pairBad++;
+  }
+  for (let x = 0; x <= N; x++)
+    for (let y = 0; y <= N; y++){
+      const c = isCold(T, x, y), nc = (x === y);
+      if (c) cold++;
+      if (nc) nimCold++;
+      if (c && nc) overlap++;
+      if (c && !nc) coldNimSaysWon++;
+      if (nc && !c) nimSafeButLost++;
+    }
+  // the safe squares thin out like n/phi, and the error never reaches a whole square
+  let k = 0, densityWorst = 0, densityBad = 0;
+  for (let n = 1; n <= N; n++){
+    while (k + 1 <= T.K && T.a[k + 1] <= n) k++;
+    const e = Math.abs(k - n / PHI);
+    if (e > densityWorst) densityWorst = e;
+    if (e >= 1) densityBad++;
+  }
+  // the two sequences partition the integers - Beatty, checked as a sieve
+  const hits = new Int32Array(T.a[T.K] + 1);
+  for (let i = 1; i <= T.K; i++){
+    hits[T.a[i]]++;
+    if (T.b[i] <= T.a[T.K]) hits[T.b[i]]++;
+  }
+  let uncovered = 0, doubled = 0;
+  for (let n = 1; n <= T.a[T.K]; n++){ if (hits[n] === 0) uncovered++; if (hits[n] > 1) doubled++; }
+  return { N, cells: (N + 1) * (N + 1), cold, nimCold, overlap, coldNimSaysWon, nimSafeButLost,
+           rowMissing, diagMissing, pairBad, densityWorst, densityBad,
+           beattyTo: T.a[T.K], uncovered, doubled };
+}
+
+// ---------------------------------------------------------------- the expensive sweep
+// how many of the legal moves keep the win, over every position in the upper triangle
+function sweepMoves(T, N){
+  const hist = [0, 0, 0, 0, 0];
+  let cells = 0, structuralBad = 0, moves = 0, wins = 0, hot = 0;
+  for (let x = 0; x <= N; x++)
+    for (let y = x; y <= N; y++){
+      cells++;
+      const s = winningMovesScan(T, x, y);
+      hist[s.length > 4 ? 4 : s.length]++;
+      if (s.length !== winningMovesStructural(T, x, y).length) structuralBad++;
+      if (s.length){ hot++; moves += moveCount(x, y); wins += s.length; }
+    }
+  return { N, cells, hist, structuralBad, hot, moves, wins,
+           meanMoves: hot ? moves / hot : 0, meanWins: hot ? wins / hot : 0 };
+}
+
+// ---------------------------------------------------------------- the first move, no dice at all
+// For every won position, score every legal move under every policy in ONE pass, then ask three
+// questions that need no generator: does EVERY top-scoring move keep the win, does ANY, and what
+// is the exact expectation under a uniform tie-break.
+const POLICIES = ['cold', 'a1618', 'a16', 'nim', 'greedy', 'timid', 'random'];
+function policyScore(name, x, y, p, q, T){
+  if (name === 'cold')   return isCold(T, p, q) ? 1 : 0;
+  if (name === 'a1618')  return coldApprox(1.618, p, q) ? 1 : 0;
+  if (name === 'a16')    return coldApprox(1.6, p, q) ? 1 : 0;
+  if (name === 'nim')    return (p ^ q) === 0 ? 1 : 0;
+  if (name === 'greedy') return (x - p) + (y - q);
+  if (name === 'timid')  return -((x - p) + (y - q));
+  return 0;
+}
+function firstMoveSweep(T, N, names){
+  const P = names || POLICIES;
+  const best = new Float64Array(P.length), cnt = new Int32Array(P.length), good = new Int32Array(P.length);
+  const always = new Int32Array(P.length), some = new Int32Array(P.length);
+  const expect = new Float64Array(P.length);
+  let hot = 0, randomChance = 0;
+  for (let x = 1; x <= N; x++)
+    for (let y = x; y <= N; y++){
+      if (isCold(T, x, y)) continue;
+      hot++;
+      for (let i = 0; i < P.length; i++){ best[i] = -Infinity; cnt[i] = 0; good[i] = 0; }
+      let w = 0, m = 0;
+      eachMove(x, y, (p, q) => {
+        m++;
+        const c = isCold(T, p, q);
+        if (c) w++;
+        for (let i = 0; i < P.length; i++){
+          const s = policyScore(P[i], x, y, p, q, T);
+          if (s > best[i]){ best[i] = s; cnt[i] = 1; good[i] = c ? 1 : 0; }
+          else if (s === best[i]){ cnt[i]++; if (c) good[i]++; }
+        }
+      });
+      randomChance += w / m;
+      for (let i = 0; i < P.length; i++){
+        if (good[i] === cnt[i]) always[i]++;
+        if (good[i] > 0) some[i]++;
+        expect[i] += good[i] / cnt[i];              // exact under a uniform tie-break: no dice thrown
+      }
+    }
+  const rows = P.map((n, i) => ({ name: n, always: always[i], some: some[i], hot,
+                                  alwaysRate: always[i] / hot, someRate: some[i] / hot,
+                                  expect: expect[i], rate: expect[i] / hot }));
+  return { N, hot, rows, randomRate: randomChance / hot };
+}
+// the famous safe squares are consecutive Fibonacci numbers: (F_2k, F_2k+1) for every k
+function fibPairs(T){
+  const F = fibs(46);
+  const out = [];
+  let bad = 0;
+  for (let n = 2; n + 1 < F.length; n += 2){
+    if (F[n + 1] > T.N) break;
+    const ok = isCold(T, F[n], F[n + 1]);
+    if (!ok) bad++;
+    out.push({ n, a: F[n], b: F[n + 1], k: T.kOf[F[n]], ok });
+  }
+  return { pairs: out, bad };
+}
+
+// ---------------------------------------------------------------- the rounding ladder
+// where a typed-in phi first disagrees with the mex table, and how many squares it costs
+function firstFailure(T, phi, kMax){
+  const K = Math.min(kMax || T.K, T.K);
+  for (let k = 1; k <= K; k++) if (Math.floor(k * phi) !== T.a[k]) return k;
+  return 0;
+}
+function wrongCells(T, phi, N){
+  let n = 0, firstX = -1, firstY = -1;
+  for (let x = 0; x <= N; x++)
+    for (let y = x; y <= N; y++)
+      if (isCold(T, x, y) !== coldApprox(phi, x, y)){ n++; if (firstX < 0){ firstX = x; firstY = y; } }
+  return { phi, N, wrong: n, cells: (N + 1) * (N + 2) / 2, firstX, firstY };
+}
+function fibs(n){ const f = [0, 1]; for (let i = 2; i <= n; i++) f.push(f[i - 1] + f[i - 2]); return f; }
+function fibsBig(n){ const f = [0n, 1n]; for (let i = 2; i <= n; i++) f.push(f[i - 1] + f[i - 2]); return f; }
+// F_n * phi lands within 1/phi^n of F_{n+1}, above it for odd n and below for even, which is
+// exactly why a rounded phi dies at a Fibonacci index and why the parity follows the error's sign.
+function fibIdentity(upTo){
+  const F = fibsBig(upTo + 2);
+  let bad = 0, checked = 0;
+  for (let n = 2; n <= upTo; n++){
+    const want = n % 2 === 0 ? F[n + 1] - 1n : F[n + 1];
+    if (aExact(F[n]) !== want) bad++;
+    checked++;
+  }
+  return { checked, bad };
+}
+// the first Fibonacci pile size at which the double-precision phi itself gets a square wrong
+function floatPhiFailure(upTo){
+  const F = fibsBig(upTo + 2);
+  for (let n = 2; n <= upTo; n++){
+    const k = F[n];
+    if (k >= 9007199254740992n) break;
+    if (BigInt(Math.floor(Number(k) * PHI)) !== aExact(k))
+      return { n, k: k.toString(), exact: aExact(k).toString() };
+  }
+  return { n: 0, k: '0', exact: '0' };
+}
+// every first failure should be a Fibonacci number, with the parity of its index set by the sign
+// of the rounding error. Swept over a ladder of typed constants plus seeded perturbations.
+function ladderSweep(T, extra, rnd, count){
+  const F = fibs(46), idx = new Map();
+  F.forEach((v, i) => { if (!idx.has(v)) idx.set(v, i); });
+  const probes = extra.slice();
+  for (let i = 0; i < count; i++) probes.push(PHI + (rnd() - 0.5) * 4e-3);
+  let tested = 0, failed = 0, nonFib = 0, parityBad = 0, never = 0, compared = 0;
+  for (const p of probes){
+    tested++;
+    const k = firstFailure(T, p, T.K);
+    compared += k ? k : T.K;                        // the coordinates actually compared, not a guess
+    if (!k){ never++; continue; }
+    failed++;
+    if (!idx.has(k)) nonFib++;
+    else if (((idx.get(k) % 2) === 1) !== (p < PHI)) parityBad++;
+  }
+  return { tested, failed, never, nonFib, parityBad, compared };
+}
+
+// ---------------------------------------------------------------- policies that actually play
+function mulberry32(seed){
+  let s = seed >>> 0;
+  return function(){
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// reservoir choice over the top-scoring moves, so ties are broken by the seeded generator and not
+// by whichever order the move loop happens to run in
+function policyMove(T, name, x, y, rnd){
+  let best = -Infinity, n = 0, px = -1, py = -1;
+  eachMove(x, y, (p, q) => {
+    const s = policyScore(name, x, y, p, q, T);
+    if (s > best){ best = s; n = 1; px = p; py = q; }
+    else if (s === best){ n++; if (rnd() * n < 1){ px = p; py = q; } }
+  });
+  return n ? [px, py] : null;
+}
+// the policy moves first from a won position; the reply moves to a safe square whenever one exists.
+// Once the policy has played correctly the reply is lost, and `flail` says what a lost player does.
+function playout(T, name, x, y, rnd, flail){
+  for (;;){
+    if (x === 0 && y === 0) return false;
+    const m = policyMove(T, name, x, y, rnd);
+    x = m[0]; y = m[1];
+    if (x === 0 && y === 0) return true;
+    const w = winningMovesStructural(T, x, y);
+    let px, py;
+    if (w.length){ px = w[0][0]; py = w[0][1]; }
+    else if (flail === 'one'){ if (x >= y){ px = x - 1; py = y; } else { px = x; py = y - 1; } }
+    else {
+      let n = 0;
+      eachMove(x, y, (p, q) => { n++; if (rnd() * n < 1){ px = p; py = q; } });
+    }
+    x = px; y = py;
+    if (x === 0 && y === 0) return false;
+  }
+}
+function hotPool(T, N){
+  const out = [];
+  for (let x = 1; x <= N; x++) for (let y = x; y <= N; y++) if (!isCold(T, x, y)) out.push(x * (N + 1) + y);
+  return { N, list: out };
+}
+function policyRow(T, name, pool, seeds, flail){
+  const W = pool.N + 1;
+  let lost = 0, plays = 0, lo = 1, hi = 0;
+  for (const sd of seeds){
+    const rnd = mulberry32(sd);
+    let l = 0;
+    for (const code of pool.list){
+      if (!playout(T, name, (code / W) | 0, code % W, rnd, flail)) l++;
+      plays++;
+    }
+    const r = l / pool.list.length;
+    if (r < lo) lo = r;
+    if (r > hi) hi = r;
+    lost += l;
+  }
+  return { name, lost, plays, won: plays - lost, rate: lost / plays, rateLo: lo, rateHi: hi };
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- view: DOM only, no measurement
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n).toLocaleString('en-US');
+const pct = (a, b) => b ? (100 * a / b).toFixed(4) + '%' : '—';
+const LABEL = {
+  cold:   'the safe squares (perfect)',
+  a1618:  'the closed form, φ = 1.618',
+  a16:    'the closed form, φ = 1.6',
+  nim:    'the Nim rule — equalise the piles',
+  greedy: 'take as many stones as possible',
+  timid:  'take one stone',
+  random: 'move at random'
+};
+const SHORT = { cold: 'safe squares', a1618: 'φ=1.618', a16: 'φ=1.6', nim: 'Nim rule',
+                greedy: 'greedy', timid: 'timid', random: 'random' };
+
+const TABLE = 6000, BIG = 2000, MOVN = 300, FIRSTN = 200, BRUTEN = 160, GRUN = 140;
+const RACEN = 100, SEEDS = [1, 2, 3, 4], BOARDN = 20, MAPN = 60, GRUSHOW = 46;
+const GROWN = [40, 60, 80, 100, 120];
+const S = { x: 0, y: 0, T: null, big: null, mov: null, first: null, race: [], ladder: [],
+            grow: [], fib: null, brute: 0, gru: null, checks: 0, asserts: 0 };
+
+const PRESETS = [
+  ['a queen in the corner', 13, 17],
+  ['the Nim trap — equal piles', 7, 7],
+  ['a lost position, you move first', 11, 18],
+  ['one stone apart', 19, 20],
+  ['a Fibonacci square', 8, 13],
+  ['the far corner', 20, 20]
+];
+
+// ---- the board
+function renderBoard(){
+  const svg = $('board');
+  const W = 620, H = 520, n = BOARDN, pad = 26;
+  const cs = Math.min((W - pad - 10) / (n + 1), (H - pad - 10) / (n + 1));
+  const x0 = pad, y0 = H - pad;
+  const px = i => x0 + i * cs, py = j => y0 - (j + 1) * cs;
+  const reach = new Set();
+  for (let t = 1; t <= S.x; t++) reach.add((S.x - t) + ',' + S.y);
+  for (let t = 1; t <= S.y; t++) reach.add(S.x + ',' + (S.y - t));
+  for (let t = 1; t <= Math.min(S.x, S.y); t++) reach.add((S.x - t) + ',' + (S.y - t));
+  let h = '';
+  for (let i = 0; i <= n; i++)
+    for (let j = 0; j <= n; j++){
+      const safe = isCold(S.T, i, j), r = reach.has(i + ',' + j);
+      let fill = safe ? '#c7ece6' : '#f7f5f1';
+      if (r) fill = safe ? '#7fd4c6' : '#ece7dd';
+      h += '<rect class="cell' + (r ? ' pick' : '') + '" data-x="' + i + '" data-y="' + j +
+           '" x="' + px(i).toFixed(1) + '" y="' + py(j).toFixed(1) + '" width="' + cs.toFixed(1) +
+           '" height="' + cs.toFixed(1) + '" fill="' + fill + '" />';
+      if (i === j && i > 0)
+        h += '<circle cx="' + (px(i) + cs / 2).toFixed(1) + '" cy="' + (py(j) + cs / 2).toFixed(1) +
+             '" r="1.8" fill="#be123c" />';
+    }
+  h += '<circle cx="' + (px(S.x) + cs / 2).toFixed(1) + '" cy="' + (py(S.y) + cs / 2).toFixed(1) +
+       '" r="' + (cs * 0.34).toFixed(1) + '" fill="#1c1917" />';
+  for (let i = 0; i <= n; i += 5){
+    h += '<text x="' + (px(i) + cs / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" fill="#78716c">' + i + '</text>';
+    h += '<text x="' + (pad - 6) + '" y="' + (py(i) + cs / 2 + 3.5).toFixed(1) + '" text-anchor="end" fill="#78716c">' + i + '</text>';
+  }
+  svg.innerHTML = h;
+  svg.querySelectorAll('rect.pick').forEach(el =>
+    el.addEventListener('click', () => humanMove(+el.dataset.x, +el.dataset.y)));
+  paintPosition();
+}
+function paintPosition(){
+  const safe = isCold(S.T, S.x, S.y);
+  $('pileBig').textContent = '(' + S.x + ', ' + S.y + ')';
+  $('pileBig').style.color = safe ? '#be123c' : '#0f766e';
+  const line = (S.x === 0 && S.y === 0)
+    ? 'The board is empty — whoever moved last won.'
+    : safe
+      ? 'This is a SAFE square. Whatever you play, a perfect reply wins.'
+      : 'This is a WON square. There ' + (winningMovesStructural(S.T, S.x, S.y).length === 1
+          ? 'is exactly 1 move' : 'are ' + winningMovesStructural(S.T, S.x, S.y).length + ' moves') +
+        ' that keeps the win, out of ' + moveCount(S.x, S.y) + ' legal ones.';
+  $('verdict').innerHTML = '<span class="verdict ' + (safe ? 'lose' : 'win') + '">' + line + '</span>';
+  const nim = (S.x === S.y);
+  $('boardNote').textContent = 'Nim would call this ' + (nim ? 'SAFE' : 'won') +
+    ' and Wythoff calls it ' + (safe ? 'SAFE' : 'won') + '. ' +
+    (nim && !safe ? 'That is the whole inversion in one square.' : '') +
+    ' Teal squares are safe, the small red dots are the Nim-safe diagonal.';
+}
+function say(t){
+  const d = document.createElement('div');
+  d.textContent = t;
+  $('log').insertBefore(d, $('log').firstChild);
+}
+function humanMove(x, y){
+  S.x = x; S.y = y;
+  say('you move to (' + x + ', ' + y + ')' + (isCold(S.T, x, y) ? '  ·  safe square' : ''));
+  renderBoard();
+  if (x === 0 && y === 0){ say('you took the last stone — you win.'); return; }
+  setTimeout(replyMove, 240);
+}
+function replyMove(){
+  const name = $('opp').value;
+  const m = policyMove(S.T, name, S.x, S.y, S.rnd);
+  if (!m){ say('the reply has nothing to take — you win.'); return; }
+  S.x = m[0]; S.y = m[1];
+  say('reply moves to (' + S.x + ', ' + S.y + ')' + (isCold(S.T, S.x, S.y) ? '  ·  safe square' : ''));
+  renderBoard();
+  if (S.x === 0 && S.y === 0) say('the reply took the last stone — you lose.');
+}
+function loadPreset(i){
+  const p = PRESETS[i];
+  S.x = p[1]; S.y = p[2];
+  S.rnd = mulberry32(76 + i);
+  $('log').innerHTML = '';
+  say('start (' + S.x + ', ' + S.y + ') — ' + p[0]);
+  renderBoard();
+}
+function hint(){
+  const m = bestMove(S.T, S.x, S.y);
+  if (!m){ say('no winning move exists here — this square is safe for the opponent.'); return; }
+  say('best move: (' + m[0] + ', ' + m[1] + ') — a safe square, index k = ' + Math.abs(m[1] - m[0]));
+}
+
+// ---- the two safe sets on one board
+function paintMap(){
+  const W = 620, H = 560, n = MAPN, pad = 24;
+  const cs = (Math.min(W - pad - 8, H - pad - 40)) / (n + 1);
+  const x0 = pad, y0 = H - 34;
+  let h = '';
+  for (let i = 0; i <= n; i++)
+    for (let j = 0; j <= n; j++){
+      const safe = isCold(S.T, i, j), nim = (i === j);
+      if (!safe && !nim) continue;
+      const fill = safe && nim ? '#a16207' : safe ? '#0f766e' : '#be123c';
+      h += '<rect x="' + (x0 + i * cs).toFixed(1) + '" y="' + (y0 - (j + 1) * cs).toFixed(1) +
+           '" width="' + cs.toFixed(1) + '" height="' + cs.toFixed(1) + '" fill="' + fill + '" />';
+    }
+  h += '<rect x="' + x0 + '" y="' + (y0 - (n + 1) * cs).toFixed(1) + '" width="' + ((n + 1) * cs).toFixed(1) +
+       '" height="' + ((n + 1) * cs).toFixed(1) + '" fill="none" stroke="#e7e2dc" />';
+  h += '<text x="' + x0 + '" y="' + (H - 10) + '" fill="#0f766e">Wythoff safe</text>' +
+       '<text x="' + (x0 + 130) + '" y="' + (H - 10) + '" fill="#be123c">Nim safe</text>' +
+       '<text x="' + (x0 + 230) + '" y="' + (H - 10) + '" fill="#a16207">both</text>';
+  $('mapSvg').innerHTML = h;
+  const b = S.big;
+  $('mapNote').innerHTML = 'Drawn to ' + MAPN + '; counted to <strong>' + fmt(b.N) + '</strong>. Of ' +
+    fmt(b.cells) + ' positions, <strong>' + fmt(b.cold) + '</strong> are Wythoff-safe and <strong>' +
+    fmt(b.nimCold) + '</strong> are Nim-safe. Both: <strong>' + b.overlap + '</strong> — the empty board. ' +
+    'Nim-safe but lost: <strong>' + fmt(b.nimSafeButLost) + '</strong>. Safe but Nim says move away: <strong>' +
+    fmt(b.coldNimSaysWon) + '</strong>.';
+}
+
+// ---- the first-move table (the headline)
+function paintFirst(){
+  const F = S.first;
+  const nim = F.rows.find(r => r.name === 'nim'), rnd = F.rows.find(r => r.name === 'random');
+  let h = '<tr><th>policy</th><th>keeps the win</th><th>always</th><th>at least one</th></tr>';
+  for (const r of F.rows){
+    const cls = r.name === 'cold' ? ' class="good"' : r.name === 'nim' ? ' class="bad"' :
+                r.name === 'random' ? ' class="hi"' : '';
+    h += '<tr' + cls + '><td class="l">' + LABEL[r.name] + '</td><td>' + (100 * r.rate).toFixed(4) +
+         '%</td><td>' + (100 * r.alwaysRate).toFixed(2) + '%</td><td>' + (100 * r.someRate).toFixed(2) + '%</td></tr>';
+  }
+  $('firstTbl').innerHTML = h;
+  $('firstNote').innerHTML = 'Every legal move from every one of the <strong>' + fmt(F.hot) +
+    '</strong> won positions on a ' + F.N + '&times;' + F.N + ' board, scored once for all seven policies. ' +
+    '&ldquo;Keeps the win&rdquo; is the exact expectation under a uniform tie-break — no seeds, nothing to re-run. ' +
+    'Moving at random is <strong>' + (rnd.rate / nim.rate).toFixed(2) + '&times;</strong> more likely to keep the win ' +
+    'than the Nim rule. The random row equals the mean of winning/legal moves computed separately in the same loop: ' +
+    (Math.abs(rnd.rate - F.randomRate) < 1e-12 ? 'identical' : 'DIVERGED') + '.';
+}
+
+// ---- whole games
+function paintRace(){
+  let h = '<tr><th>policy</th><th>games lost</th><th>won</th><th>seed spread</th><th>flail = take one</th></tr>';
+  for (const r of S.race){
+    const cls = r.name === 'cold' ? ' class="good"' : r.name === 'nim' ? ' class="bad"' : '';
+    h += '<tr' + cls + '><td class="l">' + LABEL[r.name] + '</td><td>' + (100 * r.rate).toFixed(4) +
+         '%</td><td>' + fmt(r.won) + '</td><td>' + ((r.rateHi - r.rateLo) * 100).toFixed(3) +
+         '</td><td>' + (100 * r.alt).toFixed(2) + '%</td></tr>';
+  }
+  $('raceTbl').innerHTML = h;
+  if (S.race.length === POLICIES.length){
+    const n = S.race.find(r => r.name === 'nim'), r = S.race.find(r2 => r2.name === 'random');
+    $('raceNote').innerHTML = 'Each policy moves first from all <strong>' + fmt(S.race[0].plays / SEEDS.length) +
+      '</strong> won positions on a ' + RACEN + '&times;' + RACEN + ' board, ' + SEEDS.length +
+      ' seeds, against a reply that takes a safe square whenever one exists. Everything sits near 100% because ' +
+      'one mistake is final: over whole games the Nim rule loses ' + (100 * n.rate).toFixed(2) + '% and random ' +
+      (100 * r.rate).toFixed(2) + '%, a gap the first-move table above resolves into ' +
+      (r.rate === 0 ? '—' : (S.first.rows.find(z => z.name === 'random').rate /
+        S.first.rows.find(z => z.name === 'nim').rate).toFixed(1) + '&times;') +
+      '. The last column re-runs everything with the lost reply taking one stone instead of flailing at random.';
+  }
+}
+
+// ---- the rounding ladder
+function paintLadder(){
+  let h = '<tr><th>φ typed as</th><th>first bad k</th><th>Fibonacci</th><th>first square it loses</th></tr>';
+  for (const r of S.ladder){
+    h += '<tr' + (r.k ? '' : ' class="good"') + '><td class="l mono">' + r.label + '</td><td>' +
+         (r.k ? fmt(r.k) : '—') + '</td><td>' + (r.k ? (r.fib >= 0 ? 'F' + r.fib : 'NO') : '—') +
+         '</td><td>' + (r.k ? '(' + fmt(r.ax) + ', ' + fmt(r.bx) + ')' : 'none below ' + fmt(S.T.K)) + '</td></tr>';
+  }
+  $('ladderTbl').innerHTML = h;
+  const L = S.lad, fi = S.fid, fp = S.fpf;
+  $('ladderNote').innerHTML = 'Swept over <strong>' + L.tested + '</strong> constants (' +
+    (L.tested - L.never) + ' of which fail): non-Fibonacci first failures <strong>' + L.nonFib +
+    '</strong>, wrong parity <strong>' + L.parityBad + '</strong>. The mechanism is exact — ' +
+    'F<sub>n</sub>·φ sits within 1/φ<sup>n</sup> of F<sub>n+1</sub>, above for odd n and below for even, ' +
+    'checked on <strong>' + fi.checked + '</strong> Fibonacci numbers with <strong>' + fi.bad +
+    '</strong> violations. Double-precision φ is itself a rounded constant: it first gets a square wrong at ' +
+    'F<sub>' + fp.n + '</sub> = <strong>' + fmt(fp.k) + '</strong>, where the true coordinate is ' + fmt(fp.exact) + '.';
+}
+
+// ---- amplification
+function paintGrow(){
+  let h = '<tr><th>board</th><th>squares wrong</th><th>%</th><th>keeps the win</th><th>games lost</th></tr>';
+  for (const g of S.grow)
+    h += '<tr><td class="l">' + g.N + '&times;' + g.N + '</td><td>' + g.wrong + ' / ' + fmt(g.cells) +
+         '</td><td>' + (100 * g.wrong / g.cells).toFixed(4) + '%</td><td>' + (100 * g.first).toFixed(2) +
+         '%</td><td>' + (100 * g.lost).toFixed(2) + '%</td></tr>';
+  $('growTbl').innerHTML = h;
+  if (S.grow.length === GROWN.length){
+    const g = S.grow[S.grow.length - 1];
+    $('growNote').innerHTML = 'The φ = 1.6 table, which is right about <strong>' +
+      (100 - 100 * g.wrong / g.cells).toFixed(2) + '%</strong> of the squares on a ' + g.N + '&times;' + g.N +
+      ' board, loses <strong>' + (100 * g.lost).toFixed(2) + '%</strong> of won games — an amplification of <strong>' +
+      (g.lost / (g.wrong / g.cells)).toFixed(0) + '&times;</strong>, and it grows with the board. ' +
+      'φ = 1.618 gets <strong>0</strong> squares wrong on every board here; its first bad square is (377, 610).';
+  }
+}
+
+// ---- the safe squares, three ways
+function paintPairs(){
+  const T = S.T;
+  let h = '<tr><th>k</th><th>mex a</th><th>⌊kφ⌋</th><th>mex b</th><th>⌊kφ²⌋</th><th>b−a</th></tr>';
+  for (let k = 1; k <= 14; k++)
+    h += '<tr><td class="l">' + k + '</td><td>' + T.a[k] + '</td><td>' + Math.floor(k * PHI) +
+         '</td><td>' + T.b[k] + '</td><td>' + Math.floor(k * PHI2) + '</td><td>' + (T.b[k] - T.a[k]) + '</td></tr>';
+  $('pairTbl').innerHTML = h;
+  $('pairNote').innerHTML = 'All <strong>' + fmt(T.K) + '</strong> pairs up to coordinate ' + fmt(T.N) +
+    ' agree across the mex construction and the exact BigInt closed form: <strong>' + S.pairBad +
+    '</strong> disagreements, and b − a = k on every one.';
+}
+function paintFib(){
+  const F = S.fib;
+  let h = '<tr><th>safe square</th><th>Fibonacci</th><th>index k</th></tr>';
+  for (const p of F.pairs)
+    h += '<tr><td class="l">(' + fmt(p.a) + ', ' + fmt(p.b) + ')</td><td>F' + p.n + ', F' + (p.n + 1) +
+         '</td><td>' + fmt(p.k) + '</td></tr>';
+  $('fibTbl').innerHTML = h;
+  $('fibNote').innerHTML = '<strong>' + F.pairs.length + '</strong> of them inside the table, <strong>' +
+    F.bad + '</strong> that are not actually safe. The index column is the odd-numbered Fibonacci sequence — ' +
+    'which is why a rounded φ that survives to pile 233 still dies at 377.';
+}
+
+// ---- how many moves keep the win
+function paintWin(){
+  const M = S.mov, tot = M.hot;
+  let h = '<tr><th>winning moves</th><th>positions</th><th>share of won</th></tr>';
+  for (let i = 0; i <= 4; i++){
+    if (i === 0){
+      h += '<tr><td class="l">0 — safe squares</td><td>' + fmt(M.hist[0]) + '</td><td>—</td></tr>';
+      continue;
+    }
+    h += '<tr' + (i === 1 ? ' class="hi"' : '') + '><td class="l">' + (i === 4 ? '4 or more' : i) +
+         '</td><td>' + fmt(M.hist[i]) + '</td><td>' + (100 * M.hist[i] / tot).toFixed(2) + '%</td></tr>';
+  }
+  $('winTbl').innerHTML = h;
+  $('winNote').innerHTML = 'Upper triangle of a ' + M.N + '&times;' + M.N + ' board, <strong>' + fmt(M.cells) +
+    '</strong> positions. Mean legal moves from a won position <strong>' + M.meanMoves.toFixed(2) +
+    '</strong>, mean winning ones <strong>' + M.meanWins.toFixed(4) + '</strong>. The structural route ' +
+    '(one safe square per row, per column, per diagonal) disagrees with the honest scan <strong>' +
+    M.structuralBad + '</strong> times, which is also the proof that 4 can never happen.';
+}
+function paintRoutes(){
+  let h = '<tr><th>route</th><th>scope</th><th>disagreements</th></tr>';
+  for (const r of S.routes)
+    h += '<tr class="' + (r.bad === 0 ? 'good' : 'bad') + '"><td class="l">' + r.what + '</td><td>' +
+         r.scope + '</td><td>' + r.bad + '</td></tr>';
+  $('routeTbl').innerHTML = h;
+  $('routeNote').innerHTML = 'The mex construction owns the answer. The closed form, the win/loss solver ' +
+    'and the Grundy table are each a claim about it.';
+}
+function paintBeatty(){
+  const b = S.big;
+  $('beattyBox').innerHTML =
+    '<div>Sieved to <strong>' + fmt(b.beattyTo) + '</strong>: uncovered <strong>' + b.uncovered +
+    '</strong>, covered twice <strong>' + b.doubled + '</strong>.</div>' +
+    '<div style="margin-top:6px">Every row of the board holds exactly one safe square (missing: <strong>' +
+    b.rowMissing + '</strong>) and so does every diagonal (missing: <strong>' + b.diagMissing +
+    '</strong>); b − a = k fails <strong>' + b.pairBad + '</strong> times.</div>' +
+    '<div style="margin-top:6px">The safe squares thin out like n/φ: the count of a-values up to n ' +
+    'never strays a whole square from n/φ — worst gap <strong>' + b.densityWorst.toFixed(4) +
+    '</strong>, breaches <strong>' + b.densityBad + '</strong>.</div>';
+}
+function paintGrundy(){
+  const G = S.gru, n = GRUSHOW, W = 620, H = 520, pad = 24;
+  const cs = Math.min((W - pad - 8) / (n + 1), (H - pad - 30) / (n + 1));
+  const y0 = H - 28;
+  const pal = ['#fefce8', '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b', '#d97706', '#b45309',
+               '#92400e', '#78350f'];
+  let h = '';
+  for (let i = 0; i <= n; i++)
+    for (let j = 0; j <= n; j++){
+      const v = G.at(i, j);
+      const fill = v === 0 ? '#0f766e' : pal[Math.min(pal.length - 1, v % pal.length)];
+      h += '<rect x="' + (pad + i * cs).toFixed(1) + '" y="' + (y0 - (j + 1) * cs).toFixed(1) +
+           '" width="' + cs.toFixed(1) + '" height="' + cs.toFixed(1) + '" fill="' + fill + '" />';
+    }
+  h += '<text x="' + pad + '" y="' + (H - 8) + '" fill="#78716c">teal = Grundy 0 = the safe squares · ' +
+       'everything else is the part with no formula</text>';
+  $('gruSvg').innerHTML = h;
+  $('gruNote').innerHTML = 'Computed by mex on a ' + G.N + '&times;' + G.N + ' grid, drawn to ' + n +
+    '. Zeroes vs the safe squares: <strong>' + S.gruBad + '</strong> disagreements. Largest value <strong>' +
+    fmt(G.max) + '</strong>. Agrees with the obvious guess x XOR y on <strong>' +
+    (100 * S.gruXor / ((G.N + 1) * (G.N + 1))).toFixed(2) + '%</strong> of cells.';
+}
+
+// ---------------------------------------------------------------- the self-test
+function selftest(){
+  const L = [];
+  let n = 0, bad = 0;
+  const ck = (cond, what, detail) => { n++; if (!cond){ bad++; L.push('FAIL  ' + what + (detail ? '  — ' + detail : '')); } };
+  const T = S.T, b = S.big, M = S.mov, F = S.first, G = S.gru;
+
+  // 1. the inversion, which is what the page is named for
+  ck(b.overlap === 1, 'the two safe sets meet exactly once', b.overlap + ' shared squares');
+  ck(b.nimSafeButLost === b.nimCold - 1, 'every other Nim-safe square is a Wythoff loss');
+  ck(b.coldNimSaysWon === b.cold - 1, 'every other safe square is one Nim says to leave');
+  ck(b.cold < b.nimCold, 'the safe squares are rarer than Nim thinks', b.cold + ' vs ' + b.nimCold);
+
+  // 2. the construction is total and the closed form matches it
+  ck(b.uncovered === 0 && b.doubled === 0, 'the two sequences partition the integers',
+     b.uncovered + ' uncovered, ' + b.doubled + ' doubled');
+  ck(b.rowMissing === 0, 'every row holds a safe square', b.rowMissing + ' rows without one');
+  ck(b.diagMissing === 0, 'every diagonal holds a safe square', b.diagMissing + ' without one');
+  ck(b.pairBad === 0, 'the difference of every pair is its own index');
+  ck(S.pairBad === 0, 'the exact closed form matches the mex table on every pair', S.pairBad + ' off');
+  ck(b.densityBad === 0, 'the safe squares thin out like n/phi to within one square',
+     b.densityWorst.toFixed(4) + ' worst');
+  ck(S.fib.bad === 0, 'every other safe square is a pair of consecutive Fibonacci numbers');
+
+  // 3. four routes, one answer
+  for (const r of S.routes) ck(r.bad === 0, r.what, r.bad + ' disagreements');
+  ck(G.max > 100, 'the Grundy values are not bounded by anything small', 'max ' + G.max);
+  ck(S.gruXor < 0.2 * (G.N + 1) * (G.N + 1), 'the Grundy table is not the Nim table');
+
+  // 4. the bound on winning moves, and its structural proof
+  ck(M.hist[4] === 0, 'no position has four winning moves', M.hist[4] + ' found');
+  ck(M.structuralBad === 0, 'the row/column/diagonal argument reproduces the honest scan',
+     M.structuralBad + ' disagreements');
+  ck(M.hist[0] === S.triangleCold, 'the positions with no winning move are exactly the safe squares');
+  ck(M.meanWins > 1 && M.meanWins < 2, 'a won position has between one and two winning moves on average');
+  ck(M.meanMoves > 100 * M.meanWins, 'the legal moves outnumber the winning ones by two orders of magnitude');
+
+  // 5. the headline: the first move, with no dice
+  const P = {}; for (const r of F.rows) P[r.name] = r;
+  ck(P.cold.rate === 1, 'playing for the safe squares keeps the win every time',
+     (100 * P.cold.rate).toFixed(4) + '%');
+  ck(P.random.someRate === 1, 'every won position has at least one winning move');
+  ck(Math.abs(P.random.rate - F.randomRate) < 1e-12,
+     'the random policy equals the mean of winning/legal moves, computed separately');
+  ck(P.nim.rate < P.random.rate, 'the Nim rule is worse than moving at random',
+     (100 * P.nim.rate).toFixed(4) + '% vs ' + (100 * P.random.rate).toFixed(4) + '%');
+  ck(P.random.rate > 10 * P.nim.rate, 'and worse by more than an order of magnitude',
+     (P.random.rate / P.nim.rate).toFixed(2) + 'x');
+  ck(P.nim.someRate * F.hot === S.diagHot,
+     'the Nim rule can only ever keep the win on the equal-pile diagonal');
+  ck(P.a1618.rate === 1, 'three decimal places of phi is exact on this board');
+  ck(P.a16.rate < P.a1618.rate, 'one decimal place is not');
+  for (const k in P) ck(P[k].rate <= P.cold.rate + 1e-12, 'no policy beats the safe squares (' + k + ')');
+
+  // 6. whole games agree with the first move on the ordering
+  const R = {}; for (const r of S.race) R[r.name] = r;
+  ck(R.cold.rate === 0, 'playing for the safe squares loses no game at all', R.cold.lost + ' lost');
+  ck(R.a1618.rate === 0, 'nor does phi = 1.618 on this board');
+  ck(R.nim.rate > R.random.rate, 'the Nim rule loses more whole games than random',
+     (100 * R.nim.rate).toFixed(4) + '% vs ' + (100 * R.random.rate).toFixed(4) + '%');
+  ck(R.nim.rate > 0.99 && R.random.rate > 0.99, 'both sit above 99%, because one mistake is final');
+  ck(R.a16.rate > 0 && R.a16.rate < R.random.rate, 'the rounded table is bad but not that bad');
+  for (const k in R) ck(R[k].rateHi - R[k].rateLo < 0.03, 'the ' + k + ' rate is stable across seeds',
+                        ((R[k].rateHi - R[k].rateLo) * 100).toFixed(3) + ' points');
+  for (const k in R) ck((R[k].alt === 0) === (R[k].rate === 0),
+                        'swapping what a lost reply does cannot invent or erase a loss (' + k + ')');
+
+  // 7. the rounding ladder, asserted as a rule and not as four numbers
+  ck(S.lad.nonFib === 0, 'every first failure is at a Fibonacci pile count', S.lad.nonFib + ' were not');
+  ck(S.lad.parityBad === 0, 'and its index parity follows the sign of the error', S.lad.parityBad + ' wrong');
+  ck(S.lad.failed > 200, 'the ladder actually produced failures to check', S.lad.failed + ' of ' + S.lad.tested);
+  ck(S.fid.bad === 0, 'F_n·phi lands within 1/phi^n of F_{n+1}, on both sides alternately');
+  ck(S.fpf.n > 0 && S.fpf.n % 2 === 0, 'double precision phi reads high, so it dies at an even index',
+     'F' + S.fpf.n);
+  ck(Number(S.fpf.k) > 1e7, 'and not until the piles are enormous', S.fpf.k);
+  for (const r of S.ladder) if (r.k) ck(r.fib >= 0, 'ladder row ' + r.label + ' failed at a Fibonacci number');
+  {
+    let mono = true;
+    for (let i = 1; i < S.grow.length; i++) if (S.grow[i].lost < S.grow[i - 1].lost) mono = false;
+    ck(mono, 'the cost of the rounded table grows with the board');
+    const g = S.grow[S.grow.length - 1];
+    ck(g.lost > 20 * (g.wrong / g.cells), 'a small share of wrong squares costs a large share of games',
+       (g.lost / (g.wrong / g.cells)).toFixed(1) + 'x');
+    ck(g.wrong / g.cells < 0.01, 'and the wrong share really is small', (100 * g.wrong / g.cells).toFixed(3) + '%');
+  }
+
+  // 8. the generator
+  const r1 = mulberry32(9), r2 = mulberry32(9), r3 = mulberry32(10);
+  let same = true, diff = false, lo = 1, hi = 0;
+  for (let i = 0; i < 4000; i++){ const a = r1(), c = r2(), d = r3();
+    if (a !== c) same = false; if (a !== d) diff = true; if (a < lo) lo = a; if (a > hi) hi = a; }
+  ck(same && diff, 'the generator is deterministic and seed-dependent');
+  ck(lo >= 0 && hi < 1, 'and stays inside [0,1)');
+  {
+    const d = mulberry32(31); let runs = 0, prev = d() < 0.5;
+    for (let i = 0; i < 20000; i++){ const cur = d() < 0.5; if (cur !== prev) runs++; prev = cur; }
+    ck(Math.abs(runs - 10000) < 400, 'its low bit neither sticks nor alternates', runs + ' runs');
+  }
+
+  S.checks = n;
+  S.asserts = b.cells + M.cells * 2 + F.hot * POLICIES.length + S.bruteCells + S.gruCells +
+              S.race.reduce((a, r) => a + r.plays * 2, 0) + S.lad.compared + b.beattyTo + T.K * 2;
+  const head = bad === 0
+    ? 'ALL ' + n + ' CHECKS PASS  ·  ' + fmt(S.asserts) + ' assertions over ' + fmt(b.cells) +
+      ' positions and ' + fmt(T.K) + ' safe squares'
+    : bad + ' OF ' + n + ' CHECKS FAILED';
+  const P2 = P, R2 = R;
+  $('selftest').textContent = head + '\n' + (L.length ? L.join('\n') + '\n' : '') +
+    '\ninversion    Wythoff safe ' + fmt(b.cold) + '   Nim safe ' + fmt(b.nimCold) +
+    '   both ' + b.overlap + '   of ' + fmt(b.cells) + ' positions' +
+    '\nfirst move   perfect ' + (100 * P2.cold.rate).toFixed(4) + '%   random ' + (100 * P2.random.rate).toFixed(4) +
+    '%   nim ' + (100 * P2.nim.rate).toFixed(4) + '%   (random is ' + (P2.random.rate / P2.nim.rate).toFixed(2) +
+    'x the Nim rule)' +
+    '\nwhole games  perfect ' + (100 * R2.cold.rate).toFixed(2) + '%   random ' + (100 * R2.random.rate).toFixed(2) +
+    '%   nim ' + (100 * R2.nim.rate).toFixed(2) + '%   phi=1.6 ' + (100 * R2.a16.rate).toFixed(2) + '%' +
+    '\nwinning mv   0 ' + fmt(M.hist[0]) + '   1 ' + fmt(M.hist[1]) + '   2 ' + fmt(M.hist[2]) +
+    '   3 ' + fmt(M.hist[3]) + '   4+ ' + M.hist[4] + '   mean ' + M.meanWins.toFixed(4) +
+    ' of ' + M.meanMoves.toFixed(2) + ' legal' +
+    '\nrounding     ' + S.lad.tested + ' constants, ' + S.lad.failed + ' fail, non-Fibonacci ' + S.lad.nonFib +
+    ', wrong parity ' + S.lad.parityBad + ', float64 phi dies at F' + S.fpf.n + ' = ' + fmt(S.fpf.k) +
+    '\nroutes       ' + S.routes.map(r => r.what.split(' ')[0] + ' ' + r.bad).join('   ');
+}
+
+// ---------------------------------------------------------------- the pump (plain setTimeout)
+let step = 0, growI = 0, polI = 0;
+
+function boot(){
+  try {
+    if (step === 0){
+      S.T = coldTable(TABLE);
+      $('preset').innerHTML = PRESETS.map((p, i) => '<option value="' + i + '">' + p[0] + '</option>').join('');
+      $('preset').addEventListener('change', e => loadPreset(+e.target.value));
+      $('resetBtn').addEventListener('click', () => loadPreset(+$('preset').value));
+      $('hintBtn').addEventListener('click', hint);
+      $('deepBtn').addEventListener('click', deepRace);
+      loadPreset(0);
+      // the closed form against the mex table, every pair, in exact BigInt
+      let pb = 0;
+      for (let k = 1; k <= S.T.K; k++){
+        if (BigInt(S.T.a[k]) !== aExact(k)) pb++;
+        if (BigInt(S.T.b[k]) !== bExact(k)) pb++;
+      }
+      S.pairBad = pb;
+      S.fib = fibPairs(S.T);
+      paintPairs(); paintFib();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 1){
+      S.big = sweepBig(S.T, BIG);
+      paintMap(); paintBeatty();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 2){
+      S.mov = sweepMoves(S.T, MOVN);
+      let tc = 0;
+      for (let x = 0; x <= MOVN; x++) for (let y = x; y <= MOVN; y++) if (isCold(S.T, x, y)) tc++;
+      S.triangleCold = tc;
+      paintWin();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 3){
+      S.first = firstMoveSweep(S.T, FIRSTN);
+      let dh = 0;
+      for (let x = 1; x <= FIRSTN; x++) if (!isCold(S.T, x, x)) dh++;
+      S.diagHot = dh;
+      paintFirst();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 4){
+      const B = solveBrute(BRUTEN);
+      let bad = 0;
+      for (let x = 0; x <= BRUTEN; x++) for (let y = 0; y <= BRUTEN; y++)
+        if (B.hot(x, y) === isCold(S.T, x, y)) bad++;
+      S.bruteCells = (BRUTEN + 1) * (BRUTEN + 1);
+      S.gru = grundyGrid(GRUN);
+      let gb = 0, gx = 0;
+      for (let x = 0; x <= GRUN; x++) for (let y = 0; y <= GRUN; y++){
+        if ((S.gru.at(x, y) === 0) !== isCold(S.T, x, y)) gb++;
+        if (S.gru.at(x, y) === (x ^ y)) gx++;
+      }
+      S.gruBad = gb; S.gruXor = gx; S.gruCells = (GRUN + 1) * (GRUN + 1);
+      let sb = 0;
+      for (let x = 0; x <= MOVN; x++) for (let y = x; y <= MOVN; y++)
+        if (winningMovesScan(S.T, x, y).length !== winningMovesStructural(S.T, x, y).length) sb++;
+      S.routes = [
+        { what: 'closed form (exact BigInt) vs the mex table', scope: fmt(S.T.K) + ' pairs', bad: S.pairBad },
+        { what: 'win/loss solver vs the mex table', scope: fmt(S.bruteCells) + ' cells', bad: bad },
+        { what: 'Grundy zeroes vs the safe squares', scope: fmt(S.gruCells) + ' cells', bad: gb },
+        { what: 'structural winning moves vs the honest scan', scope: fmt(S.mov.cells) + ' cells', bad: sb }
+      ];
+      paintRoutes(); paintGrundy();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 5){
+      const extra = [1.6, 1.61, 1.62, 1.618, 1.6181, 1.61803, 1.618034, 1.61804];
+      S.lad = ladderSweep(S.T, extra, mulberry32(76), 240);
+      S.fid = fibIdentity(80);
+      S.fpf = floatPhiFailure(84);
+      const F = fibs(46), idx = new Map();
+      F.forEach((v, i) => { if (!idx.has(v)) idx.set(v, i); });
+      S.ladder = [['1.6', 1.6], ['1.62', 1.62], ['1.618', 1.618], ['1.61803', 1.61803],
+                  ['1.618034', 1.618034], ['1.6180339887', 1.6180339887],
+                  ['(1+Math.sqrt(5))/2', PHI]].map(([label, p]) => {
+        const k = firstFailure(S.T, p, S.T.K);
+        return { label, phi: p, k, fib: k ? (idx.has(k) ? idx.get(k) : -1) : -1,
+                 ax: k ? S.T.a[k] : 0, bx: k ? S.T.b[k] : 0 };
+      });
+      paintLadder();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 6){
+      const pool = hotPool(S.T, RACEN);
+      const name = POLICIES[polI];
+      const r = policyRow(S.T, name, pool, SEEDS);
+      r.alt = policyRow(S.T, name, pool, SEEDS, 'one').rate;
+      S.race.push(r);
+      paintRace();
+      polI++;
+      if (polI >= POLICIES.length) step++;
+      setTimeout(boot, 5); return;
+    }
+    if (step === 7){
+      const N = GROWN[growI];
+      const w = wrongCells(S.T, 1.6, N);
+      const fm = firstMoveSweep(S.T, N, ['a16']);
+      const r = policyRow(S.T, 'a16', hotPool(S.T, N), SEEDS);
+      S.grow.push({ N, wrong: w.wrong, cells: w.cells, first: fm.rows[0].rate, lost: r.rate });
+      paintGrow();
+      growI++;
+      if (growI >= GROWN.length) step++;
+      setTimeout(boot, 5); return;
+    }
+    $('deepBtn').disabled = false;
+    setTimeout(selftest, 30);
+  } catch (err){
+    $('selftest').textContent = 'ENGINE ERROR: ' + (err && err.message ? err.message : String(err));
+  }
+}
+function deepRace(){
+  $('deepBtn').disabled = true;
+  $('deepOut').textContent = 'replaying every won position on a 140×140 board…';
+  setTimeout(() => {
+    const pool = hotPool(S.T, 140);
+    const rows = POLICIES.map(nm => policyRow(S.T, nm, pool, [1, 2]));
+    const fm = firstMoveSweep(S.T, 140);
+    const nim = fm.rows.find(r => r.name === 'nim'), rnd = fm.rows.find(r => r.name === 'random');
+    $('deepOut').innerHTML = '140×140: <strong>' + fmt(pool.list.length) + '</strong> won positions, 2 seeds — ' +
+      rows.map(r => SHORT[r.name] + ' ' + (100 * r.rate).toFixed(2) + '%').join(' · ') +
+      '. First move: random <strong>' + (100 * rnd.rate).toFixed(4) + '%</strong> vs the Nim rule <strong>' +
+      (100 * nim.rate).toFixed(4) + '%</strong> — ' + (rnd.rate / nim.rate).toFixed(2) + '× — and the safe-square ' +
+      'policy still keeps <strong>' + (100 * fm.rows[0].rate).toFixed(2) + '%</strong>.';
+    selftest();
+  }, 20);
+}
+setTimeout(boot, 30);
+</script>
+
+</body>
+</html>

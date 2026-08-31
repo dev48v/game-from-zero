@@ -76,6 +76,8 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 72 — Chomp](https://dev48.infy.uk/game/day72-chomp.html) — `day72-chomp.html`
 - [GameFromZero · Day 73 — Pig](https://dev48.infy.uk/game/day73-pig.html) — `day73-pig.html`
 - [GameFromZero · Day 74 — Kuhn Poker](https://dev48.infy.uk/game/day74-kuhn-poker.html) — `day74-kuhn-poker.html`
+- [GameFromZero · Day 75 — Blue-Red Hackenbush](https://dev48.infy.uk/game/day75-hackenbush.html) — `day75-hackenbush.html`
+- [GameFromZero · Day 76 — Wythoff's Game](https://dev48.infy.uk/game/day76-wythoff.html) — `day76-wythoff.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk
