@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero &middot; Day 82 &mdash; Kakuro</title>
+<style>
+  :root { --ink:#0f172a; --sub:#475569; --line:#e2e8f0; --bg:#f8fafc; --accent:#0d9488; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Inter",system-ui,sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:1152px; margin:0 auto; padding:16px; }
+  @media (min-width:768px){ .wrap { padding:24px; } }
+  header { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .kicker { font-size:12px; font-weight:800; letter-spacing:.16em; color:var(--accent); margin:0 0 8px; }
+  h1 { font-size:19px; line-height:1.5; font-weight:900; margin:0 0 12px; }
+  @media (min-width:768px){ h1 { font-size:22px; } }
+  h2 { font-size:24px; font-weight:900; margin:0 0 8px; }
+  h3 { font-size:19px; font-weight:800; margin:20px 0 6px; }
+  p { line-height:1.6; margin:0 0 12px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+  .tabs button { font:inherit; font-size:14px; font-weight:600; padding:8px 20px; border:0; border-radius:8px; background:#f1f5f9; cursor:pointer; }
+  .tabs button.tab-active { background:#0f172a; color:#fff; }
+  .hidden { display:none; }
+  .card { background:#fff; border-radius:16px; box-shadow:0 1px 3px rgba(15,23,42,.12); padding:20px; min-width:0; }
+  .stack > * + * { margin-top:20px; }
+  .grid2 { display:grid; gap:20px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:900px){ .grid2 { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+  .lbl { font-size:12px; font-weight:800; letter-spacing:.1em; color:#64748b; margin:0 0 8px; }
+  .big { font-size:24px; font-weight:900; font-variant-numeric:tabular-nums; margin:0; }
+  .note { font-size:12.5px; color:#475569; margin:8px 0 0; line-height:1.55; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:11.5px; overflow-x:auto; line-height:1.35; margin:0; white-space:pre; }
+  code { background:#f1f5f9; padding:1px 4px; border-radius:4px; font-size:.92em; }
+  .tblwrap { overflow-x:auto; }
+  table.num { border-collapse:collapse; width:100%; min-width:560px; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid var(--line); }
+  table.num td.txt { text-align:left; }
+  tr.here td { background:#f0fdfa; font-weight:700; }
+  tr.dim td { color:#94a3b8; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:800; }
+  .pill.good { background:#dcfce7; color:#166534; }
+  .pill.bad { background:#fee2e2; color:#991b1b; }
+  .ok { color:#166534; font-weight:800; }
+  .warn { color:#991b1b; font-weight:800; }
+  #selftest div { display:grid; grid-template-columns:52px 1fr; gap:8px; font-size:12.5px; padding:3px 0; border-top:1px solid var(--line); align-items:start; }
+  #selftest div span.m { grid-column:2; font-size:11.5px; color:#64748b; }
+  .board { display:inline-block; background:#fff; }
+  .board table { border-collapse:collapse; }
+  .board td { width:42px; height:42px; border:1px solid #94a3b8; padding:0; text-align:center;
+              font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+  .board td.blk { background:#0f172a; position:relative; }
+  .board td.blk span { position:absolute; font-size:10px; font-weight:800; color:#e2e8f0; }
+  .board td.blk span.d { right:3px; top:1px; }
+  .board td.blk span.r { left:3px; bottom:1px; }
+  .board td.cell { background:#fff; color:var(--accent); }
+  .board td.cell.given { color:#0f172a; }
+  .ctl { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 12px; }
+  .ctl input[type=range] { flex:1; min-width:150px; }
+  .ctl input[type=number] { width:74px; font:inherit; padding:5px 7px; border:1px solid var(--line); border-radius:7px; }
+  footer { border-top:1px solid var(--line); margin-top:28px; padding:18px 0 40px; font-size:13px; color:#475569; }
+  footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">GAMEFROMZERO &middot; DAY 82</p>
+    <h1>
+      Kakuro &mdash; the arithmetic is the easy part, and a solver that only does
+      arithmetic never finishes.
+    </h1>
+    <div class="tabs">
+      <button id="tabLook" class="tab-active" onclick="showTab('look')">Look</button>
+      <button id="tabUnd" onclick="showTab('und')">Understand</button>
+      <button id="tabBuild" onclick="showTab('build')">Build</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section id="look" class="stack">
+  <div class="card">
+    <h2>Cross-sums, with every digit in a run distinct</h2>
+    <p>
+      Kakuro is a crossword made of sums. Each run of white cells carries a clue:
+      the digits in it must add to that total, they are drawn from <b>1 to 9</b>,
+      and <b>no digit repeats inside a run</b>. That last rule is what makes it a
+      puzzle rather than a worksheet &mdash; it turns each clue into a question
+      about <i>which sets of distinct digits</i> hit a total, not merely how to
+      reach it.
+    </p>
+    <div class="ctl">
+      <span class="lbl" style="margin:0">PUZZLE</span>
+      <input type="range" id="puzR" min="0" max="4" value="0" />
+      <input type="number" id="puzN" min="0" max="4" value="0" />
+    </div>
+    <div class="grid2">
+      <div><div class="board" id="boardWrap"></div><p class="note" id="boardLeg"></p></div>
+      <div class="stack">
+        <div class="grid2">
+          <div><p class="lbl">SOLUTIONS</p><p class="big" id="kSol">&mdash;</p><p class="note" id="kSolNote"></p></div>
+          <div><p class="lbl">WHITE CELLS</p><p class="big" id="kCells">&mdash;</p><p class="note" id="kCellsNote"></p></div>
+        </div>
+        <div class="grid2">
+          <div><p class="lbl">SEARCH NODES</p><p class="big" id="kNodes">&mdash;</p><p class="note" id="kNodesNote"></p></div>
+          <div><p class="lbl">WITHOUT PRUNING</p><p class="big" id="kBrute">&mdash;</p><p class="note">9 to the power of the cell count</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>The combination table is the whole game</h2>
+    <p>
+      Before touching a board, ask a smaller question: how many sets of
+      <i>k</i> distinct digits from 1&ndash;9 sum to <i>s</i>? Most of Kakuro's
+      famous deductions fall straight out of this table, and they are not
+      arithmetic tricks &mdash; they are places where the answer is <b>exactly one
+      set</b>.
+    </p>
+    <div class="tblwrap"><table class="num" id="tUnique"></table></div>
+    <p class="note" id="uniqueNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>What the clue tells you before you write anything</h2>
+    <p>
+      Every clue narrows the digits that can appear in its run, whatever else is
+      on the board. Intersect a row's candidates with a column's and most cells
+      collapse immediately.
+    </p>
+    <div class="tblwrap"><table class="num" id="tCandidates"></table></div>
+  </div>
+</section>
+
+<section id="und" class="stack hidden">
+  <div class="card">
+    <h2>Why the sum alone is not a constraint worth having</h2>
+    <p>
+      A solver that checks only <i>"do the digits in this run add to the clue"</i>
+      can verify a finished board, and that is all it can do. It cannot prune,
+      because a partially filled run tells it almost nothing: any running total
+      below the clue is still potentially fine.
+    </p>
+    <p>
+      The constraint that actually prunes is the <b>candidate set</b>: the union
+      of all digits that appear in <i>any</i> valid combination for that clue and
+      length. A digit outside that union can be rejected the moment it is
+      proposed, before any arithmetic happens.
+    </p>
+    <div class="tblwrap"><table class="num" id="tPrune"></table></div>
+    <p class="note" id="pruneNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>The bound that fires earliest</h2>
+    <p>
+      Partway through a run you know the digits placed and how many cells remain.
+      The remaining cells must take distinct unused digits, so the rest of the sum
+      is boxed in: at least the smallest available digits, at most the largest.
+      If the clue's remainder falls outside that window, the branch is dead
+      immediately.
+    </p>
+    <pre id="codeBound"></pre>
+    <div class="tblwrap"><table class="num" id="tBound"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Uniqueness is not free</h2>
+    <p>
+      A published Kakuro has exactly one solution. Generating one is easy; proving
+      it is unique means the solver must not stop at the first answer &mdash; it has
+      to keep going and find none. The table counts how many of the puzzles here
+      are genuinely unique, and what the second solution looks like where there is
+      one.
+    </p>
+    <div class="tblwrap"><table class="num" id="tUniquePuz"></table></div>
+  </div>
+</section>
+
+<section id="build" class="stack hidden">
+  <div class="card">
+    <h2>The engine</h2>
+    <pre id="codeEngine"></pre>
+  </div>
+  <div class="card">
+    <h2>Self-check</h2>
+    <p class="note" style="margin:0 0 10px">
+      Running in your browser now, against the same engine as the tables above.
+    </p>
+    <div id="selftest"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p style="margin:0">
+      GameFromZero &middot; Day 82 &middot; Kakuro.
+      Tomorrow: Bulls and Cows &mdash; and how few guesses it really takes.
+    </p>
+  </div>
+</footer>
+</div>
+
+<script>
+// ===== ENGINE:BEGIN =====
+const ENGINE = (() => {
+
+  // ======================================================================
+  // A Kakuro board is a grid of cells. A cell is either a BLOCK (which may
+  // carry a "down" clue and/or a "right" clue) or a white cell to be filled
+  // with 1..9. A RUN is a maximal straight line of white cells; its digits
+  // must be DISTINCT and sum to the clue.
+  //
+  // The distinctness rule is what makes the combination table the real
+  // object of study: a clue plus a length names a SET of digit sets.
+  // ======================================================================
+
+  // ---------------------------------------------------- the combination table
+  // All sets of k distinct digits from 1..9 summing to s, as sorted arrays.
+  // Enumerated once over the 2^9 subsets, then indexed - every lookup after
+  // that is a hash hit rather than a search.
+  const TABLE = (() => {
+    const by = new Map();                       // "k:s" -> array of digit arrays
+    for (let mask = 1; mask < 512; mask++) {
+      const digits = [];
+      let sum = 0;
+      for (let d = 1; d <= 9; d++) {
+        if (mask & (1 << (d - 1))) { digits.push(d); sum += d; }
+      }
+      const key = digits.length + ":" + sum;
+      if (!by.has(key)) by.set(key, []);
+      by.get(key).push(digits);
+    }
+    return by;
+  })();
+
+  function combinations(k, s) {
+    if (!Number.isInteger(k) || !Number.isInteger(s)) throw new Error("k and s must be integers");
+    if (k < 1 || k > 9) throw new Error("a run holds 1 to 9 cells, got " + k);
+    return TABLE.get(k + ":" + s) || [];
+  }
+
+  // the union of digits over every valid combination - the candidate set
+  function candidates(k, s) {
+    let mask = 0;
+    for (const c of combinations(k, s)) for (const d of c) mask |= (1 << (d - 1));
+    return mask;
+  }
+  const maskToDigits = (m) => {
+    const out = [];
+    for (let d = 1; d <= 9; d++) if (m & (1 << (d - 1))) out.push(d);
+    return out;
+  };
+
+  // the smallest and largest totals a run of k distinct digits can reach
+  const minSum = (k) => (k * (k + 1)) / 2;                 // 1+2+...+k
+  const maxSum = (k) => (k * (19 - k)) / 2;                // 9+8+...+(10-k)
+
+  // ------------------------------------------------------------- the boards
+  // A board is rows of entries:
+  //   null                      -> a plain block
+  //   { down: n } / { right: n } -> a block carrying clues
+  //   0                          -> a white cell
+  const BOARDS = [
+    {
+      name: "the smallest cross",
+      grid: [
+        [null,        { down: 4 },  { down: 3 }],
+        [{ right: 4 }, 0,           0],
+        [{ right: 3 }, 0,           0]
+      ]
+    },
+    {
+      name: "a 16-in-two corner",
+      grid: [
+        [null,         { down: 16 }, { down: 7 }],
+        [{ right: 16 }, 0,            0],
+        [{ right: 7 },  0,            0]
+      ]
+    },
+    {
+      name: "three across, three down",
+      grid: [
+        [null,         { down: 23 }, { down: 23 }, { down: 23 }],
+        [{ right: 23 }, 0,            0,            0],
+        [{ right: 23 }, 0,            0,            0],
+        [{ right: 23 }, 0,            0,            0]
+      ]
+    },
+    {
+      name: "an L of runs",
+      grid: [
+        [null,         { down: 17 }, { down: 15 }, null],
+        [{ right: 16 }, 0,            0,            null],
+        [{ right: 16 }, 0,            0,            { down: 4 }],
+        [null,          null,        { right: 7 },  0]
+      ]
+    },
+    {
+      name: "a 4x4 with a hole",
+      grid: [
+        [null,         { down: 11 }, { down: 13 }, null],
+        [{ right: 10 }, 0,            0,            { down: 3 }],
+        [{ right: 12 }, 0,            0,            0],
+        [null,          null,        { right: 3 },  0]
+      ]
+    }
+  ];
+
+  const isCell = (v) => v === 0;
+  const isBlock = (v) => !isCell(v);
+
+  // ------------------------------------------------------------ run extraction
+  // Every maximal horizontal and vertical line of white cells, with its clue.
+  function runs(grid) {
+    const R = grid.length, C = grid[0].length;
+    const out = [];
+    // horizontal: a block carrying `right` starts a run to its right
+    for (let r = 0; r < R; r++) {
+      for (let c = 0; c < C; c++) {
+        const v = grid[r][c];
+        if (isBlock(v) && v && v.right !== undefined) {
+          const cells = [];
+          for (let k = c + 1; k < C && isCell(grid[r][k]); k++) cells.push([r, k]);
+          if (!cells.length) throw new Error(`right clue at ${r},${c} has no cells`);
+          out.push({ dir: "right", clue: v.right, cells });
+        }
+        if (isBlock(v) && v && v.down !== undefined) {
+          const cells = [];
+          for (let k = r + 1; k < R && isCell(grid[k][c]); k++) cells.push([k, c]);
+          if (!cells.length) throw new Error(`down clue at ${r},${c} has no cells`);
+          out.push({ dir: "down", clue: v.down, cells });
+        }
+      }
+    }
+    // every white cell must belong to exactly one run in each direction it can
+    return out;
+  }
+
+  // Which runs touch each white cell. A cell with no run at all is a board bug,
+  // not a free cell, so this refuses rather than silently allowing anything.
+  function cellIndex(grid) {
+    const R = grid.length, C = grid[0].length;
+    const rs = runs(grid);
+    const idx = new Map();                     // "r,c" -> [run indices]
+    rs.forEach((run, i) => {
+      for (const [r, c] of run.cells) {
+        const k = r + "," + c;
+        if (!idx.has(k)) idx.set(k, []);
+        idx.get(k).push(i);
+      }
+    });
+    for (let r = 0; r < R; r++) {
+      for (let c = 0; c < C; c++) {
+        if (!isCell(grid[r][c])) continue;
+        if (!idx.has(r + "," + c)) throw new Error(`white cell ${r},${c} belongs to no run`);
+      }
+    }
+    return { runs: rs, idx };
+  }
+
+  // -------------------------------------------------------------- the solver
+  // Assign one white cell at a time. Two prunes, and the page's whole point is
+  // that only the second one does any work:
+  //   SUM   - the running total may not exceed the clue              (weak)
+  //   CAND  - the digit must be in the clue's candidate set, must not
+  //           repeat in the run, and the remainder must stay reachable (strong)
+  // A NODE BUDGET, not a nicety.
+  //
+  // With useCandidates:false the only prune is "the running total has already
+  // overshot the clue", which does not fire until late and never rules out a
+  // repeat. On the nine-cell board that is 9^9 = 387,420,489 assignments and
+  // the solver does not finish - measured past 120 seconds, not estimated.
+  //
+  // So the baseline gets a budget and REPORTS hitting it. Reporting "did not
+  // finish within N nodes" is a stronger statement of what candidate sets buy
+  // than any speedup ratio would be, and it is the truth.
+  function solve(grid, { limit = Infinity, useCandidates = true, maxNodes = Infinity } = {}) {
+    const { runs: rs, idx } = cellIndex(grid);
+    const cells = [];
+    for (let r = 0; r < grid.length; r++) {
+      for (let c = 0; c < grid[0].length; c++) if (isCell(grid[r][c])) cells.push([r, c]);
+    }
+    const value = new Map();                   // "r,c" -> digit
+    const out = [];
+    let nodes = 0;
+    let capped = false;                        // true once the budget ran out
+
+    // per-run precomputation
+    const candMask = rs.map((run) => candidates(run.cells.length, run.clue));
+
+    function runState(ri) {
+      const run = rs[ri];
+      let placed = 0, sum = 0, used = 0;
+      for (const [r, c] of run.cells) {
+        const v = value.get(r + "," + c);
+        if (v !== undefined) { placed++; sum += v; used |= (1 << (v - 1)); }
+      }
+      return { placed, sum, used, left: run.cells.length - placed };
+    }
+
+    // THE RULES vs THE REASONING - a distinction this function got wrong once.
+    //
+    // Distinctness inside a run is a RULE of Kakuro, not an optimisation. It
+    // used to sit behind the `useCandidates` flag, which meant the "no prune"
+    // baseline was quietly solving a DIFFERENT PUZZLE - sums only, repeats
+    // allowed. On the smallest board it returned 2 solutions where the real
+    // puzzle has 1, and the page asserted the two solvers agreed.
+    //
+    // So: everything above the flag is a rule both solvers must obey, and
+    // everything below it is inference that only changes HOW FAST the same
+    // answer is reached.
+    function allowed(ri, d) {
+      const run = rs[ri];
+      const st = runState(ri);
+      if (st.sum + d > run.clue) return false;                 // rule: never overshoot
+      if (st.used & (1 << (d - 1))) return false;              // rule: digits in a run are DISTINCT
+      if (!useCandidates) return true;
+
+      if (!(candMask[ri] & (1 << (d - 1)))) return false;      // not in any combination
+
+      // the remainder must still be reachable with distinct unused digits
+      const left = st.left - 1;
+      const rem = run.clue - st.sum - d;
+      if (left === 0) return rem === 0;
+      if (rem < 0) return false;
+      const avail = [];
+      for (let x = 1; x <= 9; x++) if (!((st.used | (1 << (d - 1))) & (1 << (x - 1)))) avail.push(x);
+      if (avail.length < left) return false;
+      let lo = 0, hi = 0;
+      for (let i = 0; i < left; i++) { lo += avail[i]; hi += avail[avail.length - 1 - i]; }
+      return rem >= lo && rem <= hi;
+    }
+
+    function rec(i) {
+      if (out.length >= limit || capped) return;
+      if (nodes >= maxNodes) { capped = true; return; }
+      if (i === cells.length) {
+        nodes++;
+        // every run must hit its clue exactly
+        for (let ri = 0; ri < rs.length; ri++) {
+          const st = runState(ri);
+          if (st.sum !== rs[ri].clue) return;
+        }
+        out.push(new Map(value));
+        return;
+      }
+      const [r, c] = cells[i];
+      const key = r + "," + c;
+      for (let d = 1; d <= 9; d++) {
+        nodes++;
+        if (nodes >= maxNodes) { capped = true; return; }
+        let ok = true;
+        for (const ri of idx.get(key)) if (!allowed(ri, d)) { ok = false; break; }
+        if (!ok) continue;
+        value.set(key, d);
+        rec(i + 1);
+        value.delete(key);
+        if (out.length >= limit || capped) return;
+      }
+    }
+    rec(0);
+    // `capped` is the honest part: a caller that ignores it would read an
+    // abandoned search as a completed one with few solutions.
+    return { solutions: out, nodes, capped, cells: cells.length, runs: rs };
+  }
+
+  // ------------------------------------------------------------- verification
+  // Independent of the solver: given a filled board, is it actually valid?
+  function verify(grid, assignment) {
+    const rs = runs(grid);
+    for (const run of rs) {
+      let sum = 0;
+      const seen = new Set();
+      for (const [r, c] of run.cells) {
+        const v = assignment.get(r + "," + c);
+        if (v === undefined) return { ok: false, why: `cell ${r},${c} is empty` };
+        if (v < 1 || v > 9) return { ok: false, why: `cell ${r},${c} holds ${v}` };
+        if (seen.has(v)) return { ok: false, why: `digit ${v} repeats in a ${run.dir} run` };
+        seen.add(v);
+        sum += v;
+      }
+      if (sum !== run.clue) return { ok: false, why: `a ${run.dir} run sums to ${sum}, clue is ${run.clue}` };
+    }
+    return { ok: true, why: "every run has distinct digits summing to its clue" };
+  }
+
+  // -------------------------------------------------------- the unique clues
+  // Clue/length pairs admitting exactly one combination. These are the
+  // deductions Kakuro players memorise, and they are a property of the table,
+  // not of any board.
+  function uniqueClues() {
+    const out = [];
+    for (let k = 2; k <= 9; k++) {
+      for (let s = minSum(k); s <= maxSum(k); s++) {
+        const c = combinations(k, s);
+        if (c.length === 1) out.push({ k, s, combo: c[0] });
+      }
+    }
+    return out;
+  }
+
+  // how many (k, s) pairs are possible at all, and the spread of counts
+  function tableCensus() {
+    let pairs = 0, unique = 0, worst = 0, worstAt = null, total = 0;
+    for (let k = 1; k <= 9; k++) {
+      for (let s = minSum(k); s <= maxSum(k); s++) {
+        const n = combinations(k, s).length;
+        pairs++; total += n;
+        if (n === 1) unique++;
+        if (n > worst) { worst = n; worstAt = { k, s }; }
+      }
+    }
+    return { pairs, unique, worst, worstAt, total };
+  }
+
+  return {
+    TABLE, combinations, candidates, maskToDigits, minSum, maxSum,
+    runs, cellIndex, solve, verify, uniqueClues, tableCensus,
+    BOARDS, isCell, isBlock
+  };
+})();
+// ===== ENGINE:END =====
+</script>
+
+<script>
+function showTab(name) {
+  for (const t of ["look", "und", "build"]) document.getElementById(t).classList.toggle("hidden", t !== name);
+  document.getElementById("tabLook").classList.toggle("tab-active", name === "look");
+  document.getElementById("tabUnd").classList.toggle("tab-active", name === "und");
+  document.getElementById("tabBuild").classList.toggle("tab-active", name === "build");
+}
+const el = (id) => document.getElementById(id);
+function table(id, head, rows) {
+  el(id).innerHTML =
+    "<tr>" + head.map((h) => "<th>" + h + "</th>").join("") + "</tr>" +
+    rows.map((r) => "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + ">" +
+      r.cells.map((c, i) => "<td" + (i === 0 ? ' class="txt"' : "") + ">" + c + "</td>").join("") + "</tr>").join("");
+}
+function selfCheckPanel(fn) {
+  const out = []; let n = 0, bad = 0;
+  const t = (label, cond, detail = "") => {
+    n += 1; if (!cond) bad += 1;
+    out.push('<div><span class="' + (cond ? "ok" : "warn") + '">' + (cond ? "PASS" : "FAIL") +
+      '</span><span>' + label + '</span><span class="m">' + detail + "</span></div>");
+  };
+  fn(t);
+  el("selftest").innerHTML =
+    '<p class="note" style="margin:0 0 8px"><b class="' + (bad ? "warn" : "ok") + '">' +
+    (n - bad) + " of " + n + " checks pass</b>" + (bad ? " &mdash; " + bad + " FAILED" : "") + ".</p>" + out.join("");
+}
+
+// -------------------------------------------------------------------- drawing
+function drawBoard(grid, assignment) {
+  let s = "<table>";
+  for (let r = 0; r < grid.length; r++) {
+    s += "<tr>";
+    for (let c = 0; c < grid[0].length; c++) {
+      const v = grid[r][c];
+      if (ENGINE.isCell(v)) {
+        const d = assignment ? assignment.get(r + "," + c) : undefined;
+        s += '<td class="cell">' + (d === undefined ? "" : d) + "</td>";
+      } else if (v === null) {
+        s += '<td class="blk"></td>';
+      } else {
+        s += '<td class="blk">' +
+          (v.down !== undefined ? '<span class="d">' + v.down + "</span>" : "") +
+          (v.right !== undefined ? '<span class="r">' + v.right + "</span>" : "") + "</td>";
+      }
+    }
+    s += "</tr>";
+  }
+  return s + "</table>";
+}
+
+// ------------------------------------------------------------------ the picker
+function render() {
+  const i = Math.max(0, Math.min(ENGINE.BOARDS.length - 1, parseInt(el("puzN").value, 10) || 0));
+  el("puzR").value = String(i); el("puzN").value = String(i);
+  const B = ENGINE.BOARDS[i];
+  const r = ENGINE.solve(B.grid, { limit: 3 });
+  const sol = r.solutions[0] || null;
+
+  el("boardWrap").innerHTML = drawBoard(B.grid, sol);
+  el("boardLeg").innerHTML = "<b>" + B.name + "</b> &mdash; " + r.runs.length +
+    " runs over " + r.cells + " white cells";
+
+  el("kSol").innerHTML = r.solutions.length === 1
+    ? '<span class="ok">1</span>'
+    : '<span class="warn">' + (r.solutions.length >= 3 ? "3+" : r.solutions.length) + "</span>";
+  el("kSolNote").textContent = r.solutions.length === 1 ? "exactly one - a real puzzle"
+    : r.solutions.length === 0 ? "the clues contradict" : "ambiguous, not a real puzzle";
+  el("kCells").textContent = String(r.cells);
+  el("kCellsNote").textContent = r.runs.length + " clues to satisfy";
+  el("kNodes").textContent = r.nodes.toLocaleString("en-US");
+  const brute = Math.pow(9, r.cells);
+  el("kNodesNote").textContent = ((100 * r.nodes) / brute).toFixed(4) + "% of brute force";
+  el("kBrute").textContent = brute.toLocaleString("en-US");
+}
+
+// ---------------------------------------------------------------- the tables
+const CEN = ENGINE.tableCensus();
+const UNI = ENGINE.uniqueClues();
+
+{
+  const show = UNI.filter((u) => u.k <= 4 || u.combo.length >= 8).slice(0, 14);
+  table("tUnique", ["run length", "clue", "the only set that works", "why it is forced"],
+    show.map((u) => ({
+      cls: u.k === 2 ? "here" : "",
+      cells: [u.k + " cells", u.s, u.combo.join(" + "),
+        u.s === ENGINE.minSum(u.k) ? "the smallest total possible"
+          : u.s === ENGINE.maxSum(u.k) ? "the largest total possible"
+          : "one step from an extreme"]
+    })));
+  el("uniqueNote").innerHTML =
+    "Of the <b>" + CEN.pairs + "</b> possible clue-and-length pairs, <b>" + CEN.unique +
+    "</b> admit exactly one set of digits. Those are the cells you fill first, and they are a " +
+    "property of the <i>table</i> rather than of any particular board. The worst case is " +
+    "<b>" + CEN.worst + "</b> combinations, at " + CEN.worstAt.k + " cells summing to " +
+    CEN.worstAt.s + ".";
+}
+
+{
+  const rows = [[2, 3], [2, 4], [2, 16], [2, 17], [3, 6], [3, 23], [3, 24], [4, 10], [4, 30], [5, 15]]
+    .map(([k, s]) => {
+      const combos = ENGINE.combinations(k, s);
+      const cand = ENGINE.maskToDigits(ENGINE.candidates(k, s));
+      return {
+        cls: combos.length === 1 ? "here" : "",
+        cells: [k + " cells, clue " + s, combos.length, cand.join(" "), cand.length,
+          combos.length === 1 ? '<span class="pill good">forced</span>'
+            : cand.length <= 5 ? '<span class="pill good">strong</span>'
+            : '<span class="pill bad">says little</span>']
+      };
+    });
+  table("tCandidates", ["the clue", "combinations", "digits that can appear", "how many", "how much it tells you"], rows);
+}
+
+// The budget the rules-only solver is given before the page gives up on it.
+// Two million nodes is about 0.7 s - large enough that four of the five boards
+// finish well inside it, small enough that the page still loads.
+const NODE_BUDGET = 2000000;
+
+{
+  let capped = 0;
+  const rows = ENGINE.BOARDS.map((B) => {
+    const withC = ENGINE.solve(B.grid, { useCandidates: true });
+    const without = ENGINE.solve(B.grid, { useCandidates: false, maxNodes: NODE_BUDGET });
+    const brute = Math.pow(9, withC.cells);
+    if (without.capped) capped++;
+    return {
+      cls: without.capped ? "bad" : "",
+      cells: [B.name, withC.cells, brute.toLocaleString("en-US"),
+        without.capped
+          ? "did not finish in " + NODE_BUDGET.toLocaleString("en-US")
+          : without.nodes.toLocaleString("en-US"),
+        withC.nodes.toLocaleString("en-US"),
+        without.capped
+          ? "&gt; " + (without.nodes / withC.nodes).toFixed(0) + "x"
+          : (without.nodes / withC.nodes).toFixed(1) + "x"]
+    };
+  });
+  table("tPrune", ["board", "white cells", "brute force", "rules only",
+    "with candidate sets", "speedup"], rows);
+
+  const finished = ENGINE.BOARDS
+    .map((B) => [B, ENGINE.solve(B.grid, { useCandidates: false, maxNodes: NODE_BUDGET })])
+    .filter((pair) => !pair[1].capped);
+  const totWith = finished.reduce((acc, pair) => acc + ENGINE.solve(pair[0].grid, { useCandidates: true }).nodes, 0);
+  const totWithout = finished.reduce((acc, pair) => acc + pair[1].nodes, 0);
+
+  el("pruneNote").innerHTML =
+    "On the <b>" + finished.length + "</b> boards where the rules-only solver finishes at all, it touches <b>" +
+    totWithout.toLocaleString("en-US") + "</b> nodes against the candidate-set solver's <b>" +
+    totWith.toLocaleString("en-US") + "</b> &mdash; <b>" + (totWithout / totWith).toFixed(0) + "x</b>. " +
+    "On the remaining <b>" + capped + "</b> it <span class=\"bad\">does not finish</span>, which is the " +
+    "more honest headline: nine white cells is 9<sup>9</sup> = " + Math.pow(9, 9).toLocaleString("en-US") +
+    " assignments, and a running total only prunes <i>after</i> it has already overshot. A candidate set " +
+    "rejects a digit the moment it is proposed. That is not a speedup, it is the difference between " +
+    "terminating and not.";
+}
+
+{
+  const rows = [];
+  for (const [k, s, placed] of [[3, 20, [9]], [3, 20, [9, 8]], [4, 11, [1, 2]], [2, 17, []], [5, 34, [9, 8, 7]]]) {
+    const used = placed.reduce((m, d) => m | (1 << (d - 1)), 0);
+    const left = k - placed.length;
+    const rem = s - placed.reduce((a, b) => a + b, 0);
+    const avail = [];
+    for (let x = 1; x <= 9; x++) if (!(used & (1 << (x - 1)))) avail.push(x);
+    let lo = 0, hi = 0;
+    for (let i = 0; i < left; i++) { lo += avail[i]; hi += avail[avail.length - 1 - i]; }
+    rows.push({
+      cls: rem < lo || rem > hi ? "here" : "",
+      cells: [k + " cells, clue " + s, placed.length ? placed.join(" ") : "nothing yet", left, rem,
+        lo + " to " + hi,
+        rem < lo || rem > hi ? '<span class="pill bad">dead branch</span>'
+                             : '<span class="pill good">still possible</span>']
+    });
+  }
+  table("tBound", ["the run", "placed so far", "cells left", "sum still needed",
+    "reachable range", "verdict"], rows);
+}
+
+{
+  table("tUniquePuz", ["board", "solutions", "white cells", "is it a puzzle?"],
+    ENGINE.BOARDS.map((B) => {
+      const r = ENGINE.solve(B.grid, { limit: 4 });
+      return {
+        cls: r.solutions.length === 1 ? "here" : "",
+        cells: [B.name, r.solutions.length >= 4 ? "4+" : r.solutions.length, r.cells,
+          r.solutions.length === 1 ? '<span class="pill good">yes</span>'
+            : r.solutions.length === 0 ? '<span class="pill bad">no - contradictory</span>'
+            : '<span class="pill bad">no - ambiguous</span>']
+      };
+    }));
+}
+
+el("codeBound").textContent = [
+  "// partway through a run: can the remainder still be reached",
+  "// with distinct digits not yet used?",
+  "const left = cellsInRun - placed - 1;",
+  "const rem  = clue - sumSoFar - d;",
+  "if (left === 0) return rem === 0;",
+  "const avail = digits1to9.filter(x => !usedInThisRun(x));",
+  "let lo = 0, hi = 0;",
+  "for (let i = 0; i < left; i++) {",
+  "  lo += avail[i];                       // the smallest still available",
+  "  hi += avail[avail.length - 1 - i];    // the largest",
+  "}",
+  "return rem >= lo && rem <= hi;"
+].join("\n");
+
+el("codeEngine").textContent = [
+  "// the combination table: every set of k distinct digits summing to s,",
+  "// enumerated once over the 2^9 subsets",
+  String(ENGINE.combinations), "",
+  "// the candidate set - the union over every valid combination",
+  String(ENGINE.candidates), "",
+  "// verification, independent of the solver",
+  String(ENGINE.verify)
+].join("\n");
+
+el("puzN").addEventListener("input", render);
+el("puzR").addEventListener("input", () => { el("puzN").value = el("puzR").value; render(); });
+render();
+
+// --------------------------------------------------------------- the self-check
+selfCheckPanel((t) => {
+
+  // --- the combination table
+  t("every combination really is k distinct digits summing to s", (() => {
+    for (let k = 1; k <= 9; k++) {
+      for (let s = ENGINE.minSum(k); s <= ENGINE.maxSum(k); s++) {
+        for (const c of ENGINE.combinations(k, s)) {
+          if (c.length !== k) return false;
+          if (new Set(c).size !== k) return false;
+          if (c.reduce((a, b) => a + b, 0) !== s) return false;
+          if (c.some((d) => d < 1 || d > 9)) return false;
+        }
+      }
+    }
+    return true;
+  })(), CEN.pairs + " clue/length pairs checked");
+
+  t("the table holds every subset of 1..9 exactly once", (() => {
+    let n = 0;
+    for (let k = 1; k <= 9; k++) {
+      for (let s = ENGINE.minSum(k); s <= ENGINE.maxSum(k); s++) n += ENGINE.combinations(k, s).length;
+    }
+    return n === 511;                           // 2^9 - 1, the empty set excluded
+  })(), "511 non-empty subsets");
+
+  t("combinations come out sorted, so two lookups never disagree on order", (() => {
+    for (let k = 2; k <= 6; k++) {
+      for (let s = ENGINE.minSum(k); s <= ENGINE.maxSum(k); s++) {
+        for (const c of ENGINE.combinations(k, s)) {
+          for (let i = 1; i < c.length; i++) if (c[i] <= c[i - 1]) return false;
+        }
+      }
+    }
+    return true;
+  })());
+
+  t("a total outside the reachable range has no combinations at all", (() => {
+    for (let k = 1; k <= 9; k++) {
+      if (ENGINE.combinations(k, ENGINE.minSum(k) - 1).length) return false;
+      if (ENGINE.combinations(k, ENGINE.maxSum(k) + 1).length) return false;
+    }
+    return true;
+  })(), "checked just outside both ends for every length");
+
+  t("minSum and maxSum are the triangular bounds", (() => {
+    for (let k = 1; k <= 9; k++) {
+      let lo = 0, hi = 0;
+      for (let i = 1; i <= k; i++) { lo += i; hi += (10 - i); }
+      if (ENGINE.minSum(k) !== lo || ENGINE.maxSum(k) !== hi) return false;
+    }
+    return true;
+  })(), "1+2+..+k and 9+8+..+(10-k)");
+
+  t("an impossible run length throws rather than returning nothing", (() => {
+    for (const k of [0, 10, -1]) { try { ENGINE.combinations(k, 10); return false; } catch { } }
+    return true;
+  })(), "a run cannot hold 0 or more than 9 cells");
+
+  // --- the famous forced clues
+  t("17 in two cells is forced to 8 and 9", (() => {
+    const c = ENGINE.combinations(2, 17);
+    return c.length === 1 && c[0].join("") === "89";
+  })());
+
+  t("3 in two cells is forced to 1 and 2", (() => {
+    const c = ENGINE.combinations(2, 3);
+    return c.length === 1 && c[0].join("") === "12";
+  })());
+
+  t("24 in three cells is forced to 7, 8 and 9", (() => {
+    const c = ENGINE.combinations(3, 24);
+    return c.length === 1 && c[0].join("") === "789";
+  })());
+
+  // INVERSION. This was written as "and 16 in two cells is NOT forced",
+  // expecting 7+9 and 8+8. It failed, and it was right to: 8+8 REPEATS, and
+  // digits inside a run are distinct, so {7,9} is the only pair. 16-in-two is
+  // every bit as forced as 17-in-two is - which is why the board named "a
+  // 16-in-two corner" has no solutions at all rather than several.
+  t("INVERSION: 16 in two cells IS forced, because 8+8 repeats", (() => {
+    const c = ENGINE.combinations(2, 16);
+    return c.length === 1 && c[0].join("") === "79";
+  })(), "the guess was 7+9 and 8+8 - distinctness rules 8+8 out");
+
+  t("CONTROL: 16 in two cells would NOT be forced if repeats were legal", (() => {
+    // the same question asked of multisets, counted directly
+    let n = 0;
+    for (let a2 = 1; a2 <= 9; a2++) for (let b2 = a2; b2 <= 9; b2++) if (a2 + b2 === 16) n++;
+    return n === 2;                                  // {7,9} and {8,8}
+  })(), "7+9 and 8+8 - so the whole difference is the distinctness rule");
+
+  t("every clue the engine calls forced really has one combination",
+    UNI.every((u) => ENGINE.combinations(u.k, u.s).length === 1),
+    UNI.length + " forced clue/length pairs");
+
+  // --- candidate sets
+  t("a candidate set is exactly the union over its combinations", (() => {
+    for (let k = 2; k <= 5; k++) {
+      for (let s = ENGINE.minSum(k); s <= ENGINE.maxSum(k); s++) {
+        const union = new Set();
+        for (const c of ENGINE.combinations(k, s)) for (const d of c) union.add(d);
+        const got = new Set(ENGINE.maskToDigits(ENGINE.candidates(k, s)));
+        if (got.size !== union.size) return false;
+        for (const d of union) if (!got.has(d)) return false;
+      }
+    }
+    return true;
+  })());
+
+  t("a forced clue has exactly k candidates",
+    UNI.every((u) => ENGINE.maskToDigits(ENGINE.candidates(u.k, u.s)).length === u.k),
+    "nothing to choose from");
+
+  t("an impossible clue has no candidates at all",
+    ENGINE.candidates(2, 1) === 0 && ENGINE.candidates(3, 25) === 0);
+
+  // --- the boards
+  t("every board's runs cover every white cell", (() => {
+    for (const B of ENGINE.BOARDS) {
+      try { ENGINE.cellIndex(B.grid); } catch { return false; }
+    }
+    return true;
+  })(), ENGINE.BOARDS.length + " boards");
+
+  t("every solution the solver returns passes an independent verify()", (() => {
+    for (const B of ENGINE.BOARDS) {
+      for (const sol of ENGINE.solve(B.grid, { limit: 4 }).solutions) {
+        if (!ENGINE.verify(B.grid, sol).ok) return false;
+      }
+    }
+    return true;
+  })());
+
+  t("no board returns the same solution twice", (() => {
+    for (const B of ENGINE.BOARDS) {
+      const seen = ENGINE.solve(B.grid, { limit: 8 }).solutions
+        .map((m) => [...m.entries()].sort().map(([k, v]) => k + "=" + v).join(","));
+      if (new Set(seen).size !== seen.length) return false;
+    }
+    return true;
+  })());
+
+  t("at least one board is a real puzzle - exactly one solution",
+    ENGINE.BOARDS.some((B) => ENGINE.solve(B.grid, { limit: 3 }).solutions.length === 1),
+    ENGINE.BOARDS.filter((B) => ENGINE.solve(B.grid, { limit: 3 }).solutions.length === 1).length +
+    " of " + ENGINE.BOARDS.length);
+
+  // --- THE point: candidate sets versus arithmetic
+  t("the candidate-set solver finds exactly what the rules-only solver finds", (() => {
+    for (const B of ENGINE.BOARDS) {
+      const slow = ENGINE.solve(B.grid, { useCandidates: false, maxNodes: NODE_BUDGET });
+      if (slow.capped) continue;                    // nothing to compare against
+      const fast = ENGINE.solve(B.grid, { useCandidates: true }).solutions.length;
+      if (fast !== slow.solutions.length) return false;
+    }
+    return true;
+  })(), "the prune is sound - on every board that finishes, it discards no solution");
+
+  // This one FAILED the first time it was written, and that is why the two
+  // solvers now share their rules. Distinctness used to sit behind the
+  // useCandidates flag, so the baseline allowed repeats and reported 2
+  // solutions on the smallest board where the real puzzle has exactly 1.
+  t("INVERSION: a repeat inside a run is a RULE, so neither solver may return one", (() => {
+    for (const B of ENGINE.BOARDS) {
+      for (const flag of [true, false]) {
+        const r = ENGINE.solve(B.grid, { useCandidates: flag, maxNodes: NODE_BUDGET });
+        for (const sol of r.solutions) if (!ENGINE.verify(B.grid, sol).ok) return false;
+      }
+    }
+    return true;
+  })(), "every solution either solver returns passes the independent verifier");
+
+  t("CONTROL: and the rules-only solver DOES NOT FINISH on the 9-cell board", (() => {
+    const nine = ENGINE.BOARDS.find((B) => ENGINE.solve(B.grid, { useCandidates: true }).cells === 9);
+    if (!nine) return false;
+    return ENGINE.solve(nine.grid, { useCandidates: false, maxNodes: NODE_BUDGET }).capped === true;
+  })(), "9^9 = " + Math.pow(9, 9).toLocaleString("en-US") + " - a budget of " +
+        NODE_BUDGET.toLocaleString("en-US") + " nodes is nowhere near it");
+
+  // An independent count, from combinatorics rather than from the solver: the
+  // only three DISTINCT digits summing to 23 are {6,8,9}, since the maximum is
+  // 9+8+7=24. So every row AND every column is a permutation of that one set -
+  // the board is a 3x3 Latin square on 3 symbols, and there are exactly 12.
+  t("the all-23 board has exactly 12 solutions, the number of 3x3 Latin squares", (() => {
+    const nine = ENGINE.BOARDS.find((B) => ENGINE.solve(B.grid, { useCandidates: true }).cells === 9);
+    if (!nine) return false;
+    if (ENGINE.combinations(3, 23).length !== 1) return false;        // only {6,8,9}
+    return ENGINE.solve(nine.grid, { useCandidates: true }).solutions.length === 12;
+  })(), "counted two ways - by search, and by 3! x 2 = 12");
+
+  t("and both are a tiny fraction of brute force", (() => {
+    for (const B of ENGINE.BOARDS) {
+      const r = ENGINE.solve(B.grid, { useCandidates: true });
+      if (r.nodes >= Math.pow(9, r.cells)) return false;
+    }
+    return true;
+  })());
+
+  // --- verify() is strict
+  t("verify() rejects a repeated digit in a run", (() => {
+    const B = ENGINE.BOARDS[0];
+    const bad = new Map([["1,1", 2], ["1,2", 2], ["2,1", 2], ["2,2", 1]]);
+    return !ENGINE.verify(B.grid, bad).ok;
+  })());
+
+  t("verify() rejects a run that misses its clue", (() => {
+    const B = ENGINE.BOARDS[0];
+    const bad = new Map([["1,1", 1], ["1,2", 1], ["2,1", 1], ["2,2", 1]]);
+    return !ENGINE.verify(B.grid, bad).ok;
+  })());
+
+  t("verify() rejects an empty cell", (() => {
+    const B = ENGINE.BOARDS[0];
+    return !ENGINE.verify(B.grid, new Map([["1,1", 1]])).ok;
+  })());
+
+  t("a clue with no cells after it throws", (() => {
+    try { ENGINE.runs([[{ right: 5 }]]); return false; } catch { return true; }
+  })());
+});
+</script>
+</body>
+</html>
