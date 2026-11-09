@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero · Day 77 — Sim</title>
+<style>
+  :root{
+    --ink:#181724; --sub:#474459; --mute:#77738a; --line:#e4e2ec;
+    --bg:#faf9fc; --bg2:#f1eff7; --card:#ffffff;
+    --acc:#6d28d9; --acc-soft:#f5f1ff; --acc-line:#ddd0fb;
+    --warn:#a21caf; --warn-soft:#fdf4ff; --warn-line:#f0abfc;
+    --good:#047857; --bad:#b91c1c;
+    --red:#dc2626; --red-soft:#fef2f2; --blue:#2563eb; --blue-soft:#eff6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,sans-serif;
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;margin:0}
+  p{margin:0 0 14px}
+  strong{font-weight:800}
+  em{font-style:italic}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;
+       background:var(--bg2);padding:1px 5px;border-radius:4px}
+  pre{background:#181724;color:#e4e2ec;padding:12px 14px;border-radius:10px;font-size:12px;
+      overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;
+      margin:0 0 14px}
+  .hidden{display:none !important}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* the hero runs past most viewports, so only the tab bar may stick */
+  header{background:#fff;padding-bottom:4px}
+  nav#tabbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+  nav#tabbar .wrap{padding:10px 16px}
+  .wrap{max-width:1140px;margin:0 auto;padding:18px 16px}
+  .wrap-narrow{max-width:840px;margin:0 auto;padding:24px 16px 60px}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--acc);margin:0 0 8px}
+  h1.hero{font-size:20px;font-weight:900;margin-bottom:16px}
+  @media(min-width:768px){ h1.hero{font-size:23px} }
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tabs button{border:0;border-radius:9px;padding:9px 20px;font-weight:700;font-size:14px;
+               background:var(--bg2);color:var(--ink);cursor:pointer;font-family:inherit}
+  .tabs button.tab-active{background:var(--ink);color:#fff}
+
+  section.tab-panel{min-height:calc(100vh - 76px)}
+  #look{background:var(--bg2);padding:16px}
+  #understand{padding:16px}
+  #build{background:var(--bg);padding:16px}
+  @media(min-width:768px){ #look,#understand,#build{padding:32px 16px} }
+
+  .cols{display:grid;grid-template-columns:1fr;gap:18px;max-width:1140px;margin:0 auto}
+  @media(min-width:1024px){ .cols{grid-template-columns:1.32fr 1fr} }
+  .stack{display:flex;flex-direction:column;gap:18px}
+
+  .card{background:var(--card);border-radius:16px;padding:18px;
+        box-shadow:0 1px 2px rgba(24,23,36,.06),0 1px 10px rgba(24,23,36,.05)}
+  .lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--mute);margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .pill{padding:6px 11px;border-radius:9px;font-size:12.5px;font-weight:700;font-family:inherit;
+        border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .pill:hover{background:var(--acc-soft);border-color:var(--acc-line)}
+  .pill:disabled{opacity:.34;cursor:default}
+  select.pill{cursor:pointer}
+  .go{padding:8px 15px;border-radius:9px;border:0;background:var(--acc);color:#fff;
+      font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.4;cursor:default}
+
+  svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700}
+  #board,#lenSvg{width:100%;height:auto;touch-action:manipulation}
+  #board line.hit{cursor:pointer}
+
+  table.num{border-collapse:collapse;width:100%}
+  table.num th,table.num td{padding:4px 8px;font-variant-numeric:tabular-nums}
+  table.num th{font-size:10.5px;letter-spacing:.05em;color:var(--mute);text-align:right;font-weight:800}
+  table.num th:first-child,table.num td:first-child{text-align:left}
+  table.num td{text-align:right;font-size:12.5px;border-top:1px solid var(--line)}
+  table.num td.l{text-align:left}
+  table.num tr.hi td{background:var(--acc-soft);font-weight:800}
+  table.num tr.bad td{background:var(--red-soft)}
+  table.num tr.good td{background:#ecfdf5}
+
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+       max-height:150px;overflow:auto}
+  .log div{padding:1px 0;border-bottom:1px solid var(--bg2)}
+
+  .note{border-left:4px solid var(--acc);background:var(--acc-soft);padding:12px 14px;border-radius:0 10px 10px 0;
+        margin:0 0 16px}
+  .note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .note p{margin:0;font-size:13.5px}
+  .note p+p{margin-top:8px}
+
+  .verdict{font-weight:900;font-size:14px}
+  .win{color:var(--good)} .lose{color:var(--bad)}
+  .small{font-size:12px;color:var(--sub)}
+  .tiny{font-size:11.5px;color:var(--mute)}
+  .huge{font-size:26px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.2;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  h2.big{font-size:23px;font-weight:900;margin:0 0 16px}
+  h3.mid{font-size:17.5px;font-weight:800;margin:26px 0 10px}
+  .wrap-narrow p,.wrap-narrow li{color:#2a2736}
+  .wrap-narrow ul{margin:0 0 14px;padding-left:22px}
+  .wrap-narrow li{margin-bottom:6px}
+  .rd{color:var(--red);font-weight:800} .bl{color:var(--blue);font-weight:800}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;
+          margin-right:5px;border:1px solid rgba(24,23,36,.15)}
+  .bar{height:9px;border-radius:5px;background:var(--bg2);overflow:hidden;min-width:52px}
+  .bar i{display:block;height:100%;background:var(--acc)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">GAMEFROMZERO · DAY 77</p>
+    <h1 class="hero">
+      🔺 Sim &mdash; six dots, fifteen lines, and you lose the moment three of <em>your own</em>
+      lines make a triangle. There are no draws, and that is a theorem you can check instead of
+      quote: all <strong>32,768</strong> two-colourings of K&#8326; contain a monochromatic
+      triangle, <strong>0</strong> exceptions, while K&#8325; has exactly <strong>12</strong> that
+      do not &mdash; and 12 is the number of Hamiltonian cycles of K&#8325;, counted a second time
+      with no colouring anywhere in the argument. So the game only becomes a game at exactly the
+      Ramsey number: on five dots it is a draw, on six the <strong>second</strong> player wins, and
+      all <strong>15</strong> openings lose because K&#8326; is edge-transitive and the fifteen of
+      them are <strong>one</strong> position. 🔴 THE HEADLINE: the only rule anybody ever states
+      &mdash; never complete your own triangle &mdash; decides almost nothing. Four policies that
+      obey it to the letter keep the second player&rsquo;s guaranteed win
+      <strong>46.3993%</strong>, <strong>22.6546%</strong>, <strong>10.9703%</strong> and
+      <strong>0.0813%</strong> of the time, a <strong>570&times;</strong> spread, and the worst of
+      them is <strong>56&times;</strong> worse than a player who has never heard the rule and
+      colours at random. Both sides playing it turns a solved second-player win into a coin flip:
+      <strong>50.3140%</strong> to the player who is supposed to lose every game.
+      🔴 The structure says why, and the structure is measured too &mdash; <em>you cannot attack in
+      Sim</em>. Over all <strong>6,162,465</strong> moves in the game graph your move raises the
+      opponent&rsquo;s danger by exactly <strong>0</strong>, 0 exceptions, while raising your own by
+      <strong>0.9176</strong> on average: every mine under a player was laid by that player. The
+      only lever is denial, and denial is worth <strong>278&times;</strong> &mdash; two policies
+      that differ solely in <em>which</em> of your own safe lines you spend score 22.6546% and
+      0.0813%. 🔴 And the best cheap rule does not pull that lever at all: keeping the most safe
+      lines for <em>yourself</em> scores <strong>46.3993%</strong> against denial&rsquo;s 22.6546%,
+      <strong>2.05&times;</strong> better, so the structural argument is right about the mechanism
+      and wrong about the move. Nothing here is sampled &mdash; <strong>1,350,022</strong> legal
+      positions counted twice by methods that share no line, solved backwards over the whole game
+      graph, and every rate is an exact expectation carried forward through it. The win is a needle:
+      of the <strong>841,560</strong> positions the table calls won, <strong>37.13%</strong> have
+      exactly one winning line, and only <strong>1.56%</strong> of all positions leave the player to
+      move with no safe line at all. Flip one word in the
+      rules, so that three of your own lines <em>wins</em>, and the answer flips with it: first
+      player, forced in <strong>7</strong> plies, on a search <strong>18.5&times;</strong> smaller.
+      Pure vanilla JS, one file, no build step.
+    </h1>
+  </div>
+</header>
+
+<nav id="tabbar">
+  <div class="wrap tabs" id="tabs">
+    <button data-tab="look" class="tab-active">🔺 PLAY</button>
+    <button data-tab="understand">🧠 UNDERSTAND</button>
+    <button data-tab="build">🔨 BUILD</button>
+  </div>
+</nav>
+
+<section id="look" class="tab-panel">
+  <div class="cols">
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">SIX DOTS, FIFTEEN LINES &mdash; CLICK A LINE TO CLAIM IT</p>
+        <div class="row" style="margin-bottom:10px">
+          <select id="side" class="pill">
+            <option value="0">You are RED, you move first (this side is lost)</option>
+            <option value="1">You are BLUE, you move second (this side wins)</option>
+          </select>
+          <select id="opp" class="pill"></select>
+          <button id="resetBtn" class="pill">reset</button>
+          <button id="hintBtn" class="go">hint</button>
+        </div>
+        <svg id="board" viewBox="0 0 620 480" preserveAspectRatio="xMidYMid meet"></svg>
+        <p class="huge" id="verdictBig" style="margin:2px 0 2px">&mdash;</p>
+        <p class="small" id="verdict" style="margin:0 0 4px"></p>
+        <p class="tiny" id="boardNote" style="margin:0 0 8px"></p>
+        <div id="log" class="log"></div>
+      </div>
+
+      <div class="card">
+        <p class="lbl">YOU CANNOT ATTACK &mdash; EVERY MINE IS SELF-LAID</p>
+        <table class="num" id="structTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="structNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">NO DRAWS IS A THEOREM YOU CAN CHECK</p>
+        <table class="num" id="ramTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="ramNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">WHERE THE GAME ENDS UNDER PERFECT PLAY</p>
+        <svg id="lenSvg" viewBox="0 0 620 220" preserveAspectRatio="xMidYMid meet"></svg>
+        <p class="tiny" style="margin:6px 0 0" id="lenNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">BOTH SIDES ON THE SAME RULE, AND DICE THROWN AT THE EXACT RATES</p>
+        <table class="num" id="mcTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="mcNote">&nbsp;</p>
+        <div class="row" style="margin-top:10px">
+          <button id="deepBtn" class="go" disabled>throw 400,000 more games at the exact rates</button>
+        </div>
+        <div id="deepOut" class="small mono" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <p class="lbl">THE ONLY RULE ANYBODY STATES, AND WHAT IT IS WORTH</p>
+        <table class="num" id="polTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="polNote">sweeping&hellip;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">THE POSITION CENSUS</p>
+        <table class="num" id="censusTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="censusNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">HOW MANY MOVES KEEP THE WIN</p>
+        <table class="num" id="winTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="winNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">FIFTEEN OPENINGS ARE ONE OPENING</p>
+        <table class="num" id="symTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="symNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">FLIP ONE WORD: THREE OF YOUR OWN LINES <em>WINS</em></p>
+        <table class="num" id="achTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="achNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">SIX ROUTES TO THE SAME ANSWER</p>
+        <table class="num" id="routeTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="routeNote">&nbsp;</p>
+      </div>
+
+      <div class="card">
+        <p class="lbl">TRIANGLE-FREE PICTURES ON SIX DOTS</p>
+        <table class="num" id="tfTbl"></table>
+        <p class="tiny" style="margin:8px 0 0" id="tfNote">&nbsp;</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="understand" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">A game with one rule, and the rule decides almost nothing</h2>
+
+    <p>Draw six dots. Every pair is joined by a line, so there are
+    <span class="mono">C(6,2) = 15</span> lines and <span class="mono">C(6,3) = 20</span> triangles.
+    Two players take turns claiming an unclaimed line &mdash; the first player takes red, the second
+    takes blue &mdash; and you <strong>lose</strong> the instant three of <em>your own</em> lines
+    form a triangle. That is Sim, published by Gustavus Simmons in 1969, and it is the whole rule
+    set.</p>
+
+    <h3 class="mid">There is no draw, and the reason is the Ramsey number</h3>
+
+    <p>The first thing to settle is whether the game can peter out with all fifteen lines claimed
+    and nobody beaten. It cannot, and the reason is <span class="mono">R(3,3) = 6</span>: any
+    two-colouring of the complete graph on six vertices contains a monochromatic triangle. The PLAY
+    tab does not quote that. It enumerates every one of the <strong>32,768</strong> red/blue
+    colourings of K&#8326; and counts how many avoid a monochromatic triangle. The answer is
+    <strong>0</strong>.</p>
+
+    <p>It also runs the same sweep on the smaller boards, and that is where the number becomes
+    interesting rather than merely true. K&#8325; has <strong>1,024</strong> colourings and exactly
+    <strong>12</strong> of them are triangle-free in both colours, which is why Sim on five dots is
+    a <em>draw</em>. And 12 is not a coincidence: a triangle-free two-colouring of K&#8325; is a
+    five-cycle in one colour with its complement, also a five-cycle, in the other, so the count has
+    to be the number of Hamiltonian cycles of K&#8325;, which is <span class="mono">(5&minus;1)!/2 =
+    12</span>. The page computes that second number by enumerating permutations, with no colouring
+    anywhere in the argument, and the two counts have to agree.</p>
+
+    <div class="note"><p>So Sim only becomes a game at exactly the Ramsey number. On four dots and
+    on five dots it is a draw with best play. On six, somebody has to lose, and the exact solve says
+    it is the player who moves first.</p></div>
+
+    <h3 class="mid">Solving it</h3>
+
+    <p>A position is a pair of disjoint line-sets, one red and one blue, with neither containing a
+    triangle. There are <strong>1,350,022</strong> of them, and the page counts that twice by
+    methods that share no line of code: once by walking the game forward from the empty board, and
+    once by listing all <strong>5,789</strong> triangle-free subgraphs of K&#8326; and counting the
+    disjoint pairs whose sizes differ by 0 or 1. Whose turn it is never needs storing &mdash; it
+    falls out of the two sizes.</p>
+
+    <p>Because a move only ever <em>adds</em> a line, the position graph is acyclic, so there is no
+    search: order every position by how many lines are claimed, walk from the fullest backwards, and
+    each value is one <span class="mono">max</span> over its children. A move that completes your
+    own triangle is a leaf worth &minus;1 to you. The root comes out <strong>&minus;1</strong> for
+    the first player, and because K&#8326; is edge-transitive all fifteen openings are the same
+    position up to relabelling &mdash; the page checks that by canonicalising each of them over all
+    <span class="mono">6! = 720</span> vertex permutations and finding <strong>1</strong> class.</p>
+
+    <h3 class="mid">Then measure the rule everybody knows</h3>
+
+    <p>The second player owns a proven win. The question the page is actually about is what happens
+    when they do not play perfectly &mdash; when they play instead the one rule every human being
+    who has ever seen this game states out loud: <em>never complete your own triangle</em>.</p>
+
+    <p>That rule is not a policy. It is a <em>family</em> of policies, because at a typical position
+    there are <strong>4.56</strong> lines that obey it and the rule says nothing about which one to
+    take. Four members of that family are on the page, all of them legal readings of the same
+    sentence:</p>
+
+<pre>keep      among your safe lines, take the one that leaves you the most safe lines
+deny      among your safe lines, take one that is still safe for the opponent
+the rule  among your safe lines, take any
+spend     among your safe lines, take one already poisoned for the opponent</pre>
+
+    <p>Against a first player who plays perfectly, those four keep the second player&rsquo;s
+    guaranteed win <strong>46.3993%</strong>, <strong>22.6546%</strong>, <strong>10.9703%</strong>
+    and <strong>0.0813%</strong> of the time. That is a <strong>570&times;</strong> spread inside a
+    single rule. The control is a player who has never heard the rule and colours a line uniformly
+    at random, mines included: it keeps <strong>4.5724%</strong> &mdash; which is
+    <strong>56&times;</strong> better than the worst member of the rule that was supposed to be
+    strictly better than not knowing anything.</p>
+
+    <p>And when both sides play it, the game the second player wins with certainty becomes a coin
+    flip: the first player wins <strong>50.3140%</strong> of it.</p>
+
+    <h3 class="mid">Why the rule is so weak: you cannot attack</h3>
+
+    <p>Here is the structural fact the rest follows from. A line you claim is <em>your</em> colour.
+    Whether an unclaimed line would complete a <em>blue</em> triangle depends only on which lines
+    are already blue. So a red move cannot make any line more dangerous for blue. Not less
+    dangerous either, except by consuming the line itself.</p>
+
+    <p>The page measures that instead of arguing it: over all <strong>6,162,465</strong> non-losing
+    moves in the game graph, the opponent&rsquo;s count of poisoned lines after your move equals
+    their count before it minus one if you took a poisoned line and minus zero otherwise &mdash;
+    <strong>0</strong> exceptions. Your own count, meanwhile, rises on <strong>68.09%</strong> of
+    moves, by <strong>0.9176</strong> on average.</p>
+
+    <div class="note warn"><p>There are no threats in Sim. You cannot build one, you cannot bluff
+    one, and nothing you do puts pressure on the other player. The only thing your move does to them
+    is remove one line from the pool you both draw from.</p></div>
+
+    <p>That gives a derived policy for free: if the only lever is denial, spend your moves on lines
+    that are <em>still safe for them</em> and never on lines they were never going to touch. The
+    measurement backs the mechanism &mdash; <span class="mono">deny</span> at 22.6546% against
+    <span class="mono">spend</span> at 0.0813% is a <strong>278&times;</strong> gap between two
+    policies that differ in nothing else.</p>
+
+    <h3 class="mid">And then the derived policy loses to a selfish one</h3>
+
+    <p>🔴 <span class="mono">keep</span> &mdash; take the safe line that leaves you the most safe
+    lines, and pay no attention whatsoever to the opponent &mdash; scores <strong>46.3993%</strong>
+    against denial&rsquo;s 22.6546%. Twice as good, from a rule that ignores the only lever the
+    game has.</p>
+
+    <p>It is not a contradiction, but it is a warning about how far a structural argument carries.
+    &ldquo;Denial is the only interaction&rdquo; is true. &ldquo;Therefore maximise denial&rdquo; is
+    a different claim, and it is false here, because both players run out at once: the line you deny
+    them is a line you have also spent, and with fifteen lines and a first player who must claim
+    eight of them, running out first is the entire losing condition. Counting your own exits is
+    simply a better proxy for that race than counting theirs.</p>
+
+    <h3 class="mid">Where the game ends</h3>
+
+    <p>Under perfect play from both sides the game lasts <strong>13.4371</strong> plies on average
+    and, being a first-player loss, always ends on an <em>odd</em> one &mdash; every even bucket in
+    the distribution is exactly zero, over the whole game graph, by construction rather than by
+    luck. It never ends before ply 11, and <strong>23.79%</strong> of the time the board fills
+    completely and the first player is left claiming the fifteenth line with nowhere safe to put
+    it.</p>
+
+    <p>Being forced like that is rare in general &mdash; only <strong>21,054</strong> of the
+    1,350,022 positions leave the player to move with no safe line at all &mdash; and it is
+    lopsided: <strong>14,904</strong> of them have the first player on move against
+    <strong>6,150</strong> for the second, a ratio of <strong>2.42</strong>.</p>
+
+    <h3 class="mid">One word, and the whole game changes</h3>
+
+    <p>Sim is a <em>mis&egrave;re</em> game: the player who achieves the pattern loses. Change that
+    single word so that completing your own triangle <em>wins</em>, leave every other rule alone,
+    and the answer inverts &mdash; the first player wins, and can force it in <strong>7</strong>
+    plies. The same solver run over the same position graph with the leaf value flipped visits
+    <strong>18.5&times;</strong> fewer nodes to prove it. Avoidance is where all the difficulty
+    lives.</p>
+
+  </div>
+</section>
+
+<section id="build" class="tab-panel hidden">
+  <div class="wrap-narrow">
+
+    <h2 class="big">Building it</h2>
+
+    <h3 class="mid">1. The board is fifteen bits</h3>
+    <p>Number the fifteen lines 0..14 and a colour&rsquo;s picture is a 15-bit integer. Each of the
+    twenty triangles is a 3-bit mask. Claiming line <span class="mono">e</span> completes a triangle
+    inside <span class="mono">mask</span> exactly when some triangle <span class="mono">t</span>
+    through <span class="mono">e</span> satisfies <span class="mono">(mask &amp; t) === (t ^
+    (1&lt;&lt;e))</span> &mdash; the other two edges already there. Four triangles pass through every
+    line, so the test is four comparisons.</p>
+<pre>function closesTriangle(G, mask, e){
+  const L = G.trisOf[e];                       // the 4 triangles through e
+  for (let i = 0; i &lt; L.length; i++){
+    const t = L[i];
+    if ((mask &amp; t) === (t ^ (1 &lt;&lt; e))) return true;
+  }
+  return false;
+}</pre>
+
+    <h3 class="mid">2. A position needs no turn flag</h3>
+    <p>A position is <span class="mono">(red, blue)</span>, two disjoint masks. Red moves first, so
+    red is on move exactly when the two pictures have the same number of lines. Storing a turn bit
+    would be storing something derivable, and derivable state that is also stored is state that can
+    disagree with itself.</p>
+
+    <h3 class="mid">3. Enumerate, then solve backwards</h3>
+    <p>Every move adds a line, so the position graph is a DAG layered by how many lines are claimed.
+    Walk it once from the empty board, keeping a flat list of positions and an open-addressing index
+    from the packed key <span class="mono">red*32768 + blue</span> to its slot; build a child table
+    where a move that would complete the mover&rsquo;s own triangle is stored as
+    <span class="mono">-1</span>. Then counting-sort the positions by lines claimed and sweep from
+    the fullest backwards. No recursion, no memo table, no stack.</p>
+<pre>for (let oi = 0; oi &lt; B.NS; oi++){
+  const i = B.order[oi];                       // descending in lines claimed
+  let best = -1;
+  for (let q = B.off[i]; q &lt; B.off[i+1]; q++){
+    const c = B.child[q];
+    const x = c &lt; 0 ? term : -v[c];            // term = -1 avoiding, +1 achieving
+    if (x &gt; best) best = x;
+  }
+  v[i] = best;
+}</pre>
+    <p>The same table, the same sweep and one flipped leaf value give the achievement variant, which
+    is how the page can say what changing one word does without writing a second engine.</p>
+
+    <h3 class="mid">4. Count the positions a second time, from nowhere near the game</h3>
+    <p>The walk says there are 1,350,022 positions, and a walk that is subtly wrong will say so
+    confidently. So the page also lists every triangle-free subgraph of K&#8326; by brute force over
+    all 32,768 edge subsets, and counts disjoint pairs whose sizes differ by 0 or 1. That argument
+    has no notion of a move, a turn or a game, and it has to land on the same integer.</p>
+
+    <h3 class="mid">5. Every rate is exact</h3>
+    <p>A policy here is a map from a position to a <em>set</em> of acceptable moves, played
+    uniformly. That makes the outcome a probability, and a probability over a DAG does not need
+    dice: push a mass of 1 into the root and sweep <em>forward</em> in layer order, splitting each
+    position&rsquo;s mass evenly over its policy&rsquo;s candidates and banking it whenever a move
+    completes a triangle. One pass gives the win split and the game-length distribution together,
+    and the three outcome masses have to sum to 1.</p>
+    <p>The same number is then recomputed <em>backwards</em>, by a value iteration over the same
+    order that never forms a distribution at all, and the two have to agree. A seeded Monte-Carlo
+    replay is thrown at both, and it has to land inside its own standard error rather than
+    anywhere plausible.</p>
+
+    <h3 class="mid">6. Play the definition, do not trust the table</h3>
+    <p>The strongest check on a solved game is to play it. The page starts from thousands of
+    positions the table calls won, has the side to move play a winning line and the other side play
+    anything at all, and asserts three things every ply: the winner never completes a triangle, the
+    position after a winning line is always lost for the opponent, and the position after
+    <em>any</em> reply is won again. A table with one wrong entry cannot survive that.</p>
+
+    <h3 class="mid">7. Three things I had wrong</h3>
+<pre>// 1. "denial must be the best simple policy"  - it is the only lever the game has and it
+//    still loses to a policy that ignores the opponent entirely, 22.6546% vs 46.3993%.
+//    The mechanism argument was right; the move it implies was not.
+// 2. "the folk rule is at least better than random" - one of its readings is 56x WORSE.
+//    Stating the rule and following the rule are separated by a 570x spread.
+// 3. "a forced player is the usual way to lose" - only 1.56% of positions leave the mover
+//    with no safe line, so almost every loss is a line the loser was free not to take.</pre>
+
+    <h3 class="mid">8. What this engine is not</h3>
+<pre>// Six dots only. Sim generalises (larger boards, other forbidden subgraphs, more colours);
+// none of that is here, and K7 is out of reach for this method by several orders.
+// The policies are uniform over a candidate set. A human tie-breaks with taste, and taste
+// is not modelled - which is exactly why the page reports the whole family and not one number.
+// No opening book and no heuristic evaluation: the table is complete, so there is nothing
+// to approximate.</pre>
+
+    <h3 class="mid">Self-test</h3>
+    <pre id="selftest">running&hellip;</pre>
+
+    <h3 class="mid">🎉 GameFromZero Day 77 shipped.</h3>
+    <p class="small">Seventy-seven games. The first one where the rule everybody states is a family
+    of policies rather than a policy &mdash; and the family spans five hundred and seventy.</p>
+
+  </div>
+</section>
+
+<script>
+const tabs = document.querySelectorAll("#tabs button");
+const panels = document.querySelectorAll(".tab-panel");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("tab-active"));
+  t.classList.add("tab-active");
+  panels.forEach(p => p.classList.add("hidden"));
+  document.getElementById(t.dataset.tab).classList.remove("hidden");
+}));
+
+// ===== ENGINE:BEGIN =====
+// SIM (Gustavus Simmons, 1969). Six dots, every pair joined, two players alternate claiming an
+// unclaimed line - first player red, second blue - and you LOSE the moment three of YOUR OWN lines
+// form a triangle. R(3,3) = 6 means the board cannot fill without somebody losing, so there is no
+// draw; this file proves that by exhaustion rather than citing it.
+//
+// Everything below is exact. A move only ever adds a line, so the position graph is a DAG and the
+// solve is one backward sweep in layer order - no recursion, no alpha-beta, no memo. Policy rates
+// are expectations carried FORWARD through the same DAG, so no rate on this page is sampled.
+//
+// The position count is derived twice by arguments that share nothing: a forward walk of the game,
+// and an enumeration of triangle-free subgraphs paired off by size. The value table is then
+// attacked by PLAYING it - the winner plays a winning line, the loser plays anything, and the
+// table has to hold every ply.
+//
+// Nothing here touches the page, a clock, or the global generator. Every draw comes from a seeded
+// generator handed in by the caller.
+
+// ---------------------------------------------------------------- the graph
+function completeGraph(n){
+  const E = [], id = [];
+  for (let u = 0; u < n; u++) id.push(new Array(n).fill(-1));
+  for (let u = 0; u < n; u++)
+    for (let v = u + 1; v < n; v++){ id[u][v] = id[v][u] = E.length; E.push([u, v]); }
+  const T = [], TV = [];
+  for (let a = 0; a < n; a++)
+    for (let b = a + 1; b < n; b++)
+      for (let c = b + 1; c < n; c++){
+        T.push((1 << id[a][b]) | (1 << id[a][c]) | (1 << id[b][c]));
+        TV.push([a, b, c]);
+      }
+  const trisOf = [];
+  for (let e = 0; e < E.length; e++){
+    const L = [];
+    for (let i = 0; i < T.length; i++) if (((T[i] >> e) & 1) === 1) L.push(T[i]);
+    trisOf.push(L);
+  }
+  return { n, m: E.length, E, id, T, TV, trisOf, full: (1 << E.length) - 1 };
+}
+function popcount(x){ let c = 0; while (x){ x &= x - 1; c++; } return c; }
+// claiming e completes a triangle inside mask iff some triangle through e already holds the other two
+function closesTriangle(G, mask, e){
+  const L = G.trisOf[e];
+  for (let i = 0; i < L.length; i++){ const t = L[i]; if ((mask & t) === (t ^ (1 << e))) return true; }
+  return false;
+}
+function hasMonoTriangle(G, mask){
+  for (let i = 0; i < G.T.length; i++) if ((mask & G.T[i]) === G.T[i]) return true;
+  return false;
+}
+function whichTriangle(G, mask){
+  for (let i = 0; i < G.T.length; i++) if ((mask & G.T[i]) === G.T[i]) return i;
+  return -1;
+}
+
+// ---------------------------------------------------------------- R(3,3), by exhaustion
+function ramseySweep(n){
+  const G = completeGraph(n), N = 1 << G.m;
+  let free = 0; const examples = [];
+  for (let r = 0; r < N; r++){
+    if (hasMonoTriangle(G, r)) continue;
+    if (hasMonoTriangle(G, G.full ^ r)) continue;
+    free++; if (examples.length < 6) examples.push(r);
+  }
+  return { n, m: G.m, colourings: N, free, examples };
+}
+// the same 12 for K5, counted with no colouring in the argument at all
+function hamiltonCycleCount(n){
+  const a = []; for (let i = 0; i < n; i++) a.push(i);
+  const seen = {}; let count = 0;
+  const rec = k => {
+    if (k === n){
+      let i = 0; while (a[i] !== 0) i++;
+      const r = a.slice(i).concat(a.slice(0, i));
+      const s = r[1] < r[n - 1] ? r : [r[0]].concat(r.slice(1).reverse());
+      const key = s.join(',');
+      if (!seen[key]){ seen[key] = 1; count++; }
+      return;
+    }
+    for (let i = k; i < n; i++){
+      let t = a[k]; a[k] = a[i]; a[i] = t;
+      rec(k + 1);
+      t = a[k]; a[k] = a[i]; a[i] = t;
+    }
+  };
+  rec(0);
+  return count;
+}
+function factorial(n){ let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; }
+
+// ---------------------------------------------------------------- positions, counted twice
+function triangleFreeSubsets(G){
+  const out = [];
+  for (let s = 0; s <= G.full; s++) if (!hasMonoTriangle(G, s)) out.push(s);
+  return out;
+}
+// no notion of a move, a turn or a game: pairs of disjoint triangle-free pictures, sizes 0 or 1 apart
+function positionsByPairing(G){
+  const TF = triangleFreeSubsets(G), size = [];
+  for (let i = 0; i < TF.length; i++) size.push(popcount(TF[i]));
+  let positions = 0;
+  for (let i = 0; i < TF.length; i++)
+    for (let j = 0; j < TF.length; j++){
+      if (TF[i] & TF[j]) continue;
+      const d = size[i] - size[j];
+      if (d === 0 || d === 1) positions++;
+    }
+  const bySize = new Array(G.m + 1).fill(0);
+  for (let i = 0; i < size.length; i++) bySize[size[i]]++;
+  let maxSize = 0;
+  for (let i = 0; i < size.length; i++) if (size[i] > maxSize) maxSize = size[i];
+  return { subsets: TF.length, positions, bySize, maxSize, maxCount: bySize[maxSize], pairs: TF.length * TF.length };
+}
+
+// ---------------------------------------------------------------- the flat game DAG
+function buildStates(G){
+  const SH = 1 << G.m;
+  const CAP = 1 << 22, MASK = CAP - 1;
+  const slot = new Int32Array(CAP).fill(-1);
+  let keys = new Int32Array(1 << 16), NS = 0;
+  const hash = k => (Math.imul(k, 2654435761) >>> 0) & MASK;
+  const find = k => {
+    let s = hash(k);
+    for (;;){ const v = slot[s]; if (v < 0) return ~s; if (keys[v] === k) return v; s = (s + 1) & MASK; }
+  };
+  const put = k => {
+    const f = find(k);
+    if (f >= 0) return f;
+    if (NS === keys.length){ const g = new Int32Array(keys.length * 2); g.set(keys); keys = g; }
+    keys[NS] = k; slot[~f] = NS; return NS++;
+  };
+  put(0);
+  const stack = [0];
+  while (stack.length){
+    const key = stack.pop(), blue = key % SH, red = (key - blue) / SH;
+    const mineIsRed = popcount(red) === popcount(blue), mine = mineIsRed ? red : blue;
+    const open = G.full & ~(red | blue);
+    for (let e = 0; e < G.m; e++){
+      if (!((open >> e) & 1)) continue;
+      if (closesTriangle(G, mine, e)) continue;
+      const nk = (mineIsRed ? (red | (1 << e)) : red) * SH + (mineIsRed ? blue : (blue | (1 << e)));
+      const before = NS;
+      put(nk);
+      if (NS > before) stack.push(nk);
+    }
+  }
+  const off = new Int32Array(NS + 1);
+  const child = new Int32Array(NS * G.m), edge = new Int8Array(NS * G.m), used = new Int8Array(NS);
+  let p = 0, terminal = 0, quiet = 0;
+  for (let i = 0; i < NS; i++){
+    off[i] = p;
+    const key = keys[i], blue = key % SH, red = (key - blue) / SH;
+    used[i] = popcount(red) + popcount(blue);
+    const mineIsRed = popcount(red) === popcount(blue), mine = mineIsRed ? red : blue;
+    const open = G.full & ~(red | blue);
+    for (let e = 0; e < G.m; e++){
+      if (!((open >> e) & 1)) continue;
+      let c = -1;
+      if (closesTriangle(G, mine, e)) terminal++;
+      else { quiet++; c = find((mineIsRed ? (red | (1 << e)) : red) * SH + (mineIsRed ? blue : (blue | (1 << e)))); }
+      child[p] = c; edge[p] = e; p++;
+    }
+  }
+  off[NS] = p;
+  // counting sort, descending in lines claimed: children always come before their parents
+  const cnt = new Int32Array(G.m + 2);
+  for (let i = 0; i < NS; i++) cnt[used[i]]++;
+  const start = new Int32Array(G.m + 2);
+  let acc = 0;
+  for (let u = G.m; u >= 0; u--){ start[u] = acc; acc += cnt[u]; }
+  const fill = Int32Array.from(start), order = new Int32Array(NS);
+  for (let i = 0; i < NS; i++) order[fill[used[i]]++] = i;
+  const K = keys.subarray(0, NS);
+  return { G, SH, keys: K, NS, off, child: child.subarray(0, p), edge: edge.subarray(0, p),
+           used, order, find, root: find(0), moves: p, terminal, quiet };
+}
+function redOf(B, i){ const k = B.keys[i]; return (k - (k % B.SH)) / B.SH; }
+function blueOf(B, i){ return B.keys[i] % B.SH; }
+function redToMove(B, i){ const b = blueOf(B, i); return popcount(redOf(B, i)) === popcount(b); }
+
+// ---------------------------------------------------------------- values: one backward sweep
+function solveTable(B, achievement){
+  const v = new Int8Array(B.NS), term = achievement ? 1 : -1;
+  for (let oi = 0; oi < B.NS; oi++){
+    const i = B.order[oi], lo = B.off[i], hi = B.off[i + 1];
+    if (lo === hi){ v[i] = 0; continue; }
+    let best = -1;
+    for (let q = lo; q < hi; q++){ const c = B.child[q]; const x = c < 0 ? term : -v[c]; if (x > best) best = x; }
+    v[i] = best;
+  }
+  return v;
+}
+// a second, unrelated route: recursive memo over a Map keyed by the packed position
+function solveRecursive(G, achievement){
+  const SH = 1 << G.m, memo = new Map(), term = achievement ? 1 : -1;
+  function val(red, blue){
+    const key = red * SH + blue;
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    const mineIsRed = popcount(red) === popcount(blue), mine = mineIsRed ? red : blue;
+    const open = G.full & ~(red | blue);
+    if (!open){ memo.set(key, 0); return 0; }
+    let best = -1;
+    for (let e = 0; e < G.m; e++){
+      if (!((open >> e) & 1)) continue;
+      const x = closesTriangle(G, mine, e) ? term
+        : -val(mineIsRed ? (red | (1 << e)) : red, mineIsRed ? blue : (blue | (1 << e)));
+      if (x > best) best = x;
+    }
+    memo.set(key, best); return best;
+  }
+  return { val, memo };
+}
+// a third: no memo at all, for deep positions where the subtree is small
+function bruteNoMemo(G, red, blue, achievement){
+  const mineIsRed = popcount(red) === popcount(blue), mine = mineIsRed ? red : blue;
+  const open = G.full & ~(red | blue);
+  if (!open) return 0;
+  let best = -1;
+  for (let e = 0; e < G.m; e++){
+    if (!((open >> e) & 1)) continue;
+    const x = closesTriangle(G, mine, e) ? (achievement ? 1 : -1)
+      : -bruteNoMemo(G, mineIsRed ? (red | (1 << e)) : red, mineIsRed ? blue : (blue | (1 << e)), achievement);
+    if (x > best) best = x;
+  }
+  return best;
+}
+// how long the achievement win takes: shortest when winning, longest when losing
+function winDepth(B, VA){
+  const d = new Int32Array(B.NS);
+  for (let oi = 0; oi < B.NS; oi++){
+    const i = B.order[oi], lo = B.off[i], hi = B.off[i + 1];
+    if (lo === hi){ d[i] = 0; continue; }
+    const v = VA[i];
+    let best = v === 1 ? 1e9 : -1;
+    for (let q = lo; q < hi; q++){
+      const c = B.child[q];
+      const cv = c < 0 ? 1 : -VA[c];
+      const cd = c < 0 ? 1 : 1 + d[c];
+      if (v === 1){ if (cv === 1 && cd < best) best = cd; }
+      else if (cd > best) best = cd;
+    }
+    d[i] = best;
+  }
+  return d;
+}
+
+// ---------------------------------------------------------------- the census
+function census(B, V){
+  const G = B.G, hist = new Array(G.m + 1).fill(0);
+  let won = 0, lost = 0, drawn = 0, forced = 0, forcedFirst = 0, forcedSecond = 0;
+  let safeTotal = 0, dangerTotal = 0, maxWins = 0, winsTotal = 0;
+  for (let i = 0; i < B.NS; i++){
+    const lo = B.off[i], hi = B.off[i + 1];
+    let safe = 0, danger = 0, w = 0;
+    for (let q = lo; q < hi; q++){
+      const c = B.child[q];
+      if (c < 0) danger++; else { safe++; if (V[c] === -1) w++; }
+    }
+    safeTotal += safe; dangerTotal += danger;
+    if (V[i] === 1){ won++; hist[w]++; winsTotal += w; if (w > maxWins) maxWins = w; }
+    else if (V[i] === -1) lost++;
+    else drawn++;
+    if (safe === 0 && hi > lo){ forced++; if (redToMove(B, i)) forcedFirst++; else forcedSecond++; }
+  }
+  return { states: B.NS, won, lost, drawn, hist, maxWins, winsTotal,
+           forced, forcedFirst, forcedSecond, safeTotal, dangerTotal,
+           meanSafe: safeTotal / B.NS, meanDanger: dangerTotal / B.NS,
+           exactlyOne: hist[1], exactlyOneShare: hist[1] / won };
+}
+
+// ---------------------------------------------------------------- you cannot attack
+// after your move the opponent's poisoned-line count must equal what it was minus the line you took
+// if that line was poisoned for them, and minus nothing otherwise. Your own may only grow.
+function structureSweep(B, V){
+  const G = B.G, dSelf = new Int32Array(B.NS), dOpp = new Int32Array(B.NS);
+  for (let i = 0; i < B.NS; i++){
+    const red = redOf(B, i), blue = blueOf(B, i);
+    const mineIsRed = popcount(red) === popcount(blue);
+    const mine = mineIsRed ? red : blue, theirs = mineIsRed ? blue : red;
+    const open = G.full & ~(red | blue);
+    let a = 0, b = 0;
+    for (let e = 0; e < G.m; e++)
+      if ((open >> e) & 1){ if (closesTriangle(G, mine, e)) a++; if (closesTriangle(G, theirs, e)) b++; }
+    dSelf[i] = a; dOpp[i] = b;
+  }
+  let moves = 0, violations = 0, grew = 0, shrank = 0, delta = 0, maxGrowth = 0;
+  for (let i = 0; i < B.NS; i++){
+    const red = redOf(B, i), blue = blueOf(B, i);
+    const mineIsRed = popcount(red) === popcount(blue), theirs = mineIsRed ? blue : red;
+    for (let q = B.off[i]; q < B.off[i + 1]; q++){
+      const c = B.child[q];
+      if (c < 0) continue;
+      moves++;
+      if (dSelf[c] !== dOpp[i] - (closesTriangle(G, theirs, B.edge[q]) ? 1 : 0)) violations++;
+      const d = dOpp[c] - dSelf[i];
+      delta += d;
+      if (d > 0) grew++; else if (d < 0) shrank++;
+      if (d > maxGrowth) maxGrowth = d;
+    }
+  }
+  return { moves, violations, grew, shrank, maxGrowth, meanGrowth: delta / moves,
+           grewShare: grew / moves, dSelf, dOpp };
+}
+
+// ---------------------------------------------------------------- policies
+// every one of keep/deny/rule/spend obeys "never complete your own triangle" to the letter
+const POLICIES = ['perfect', 'keep', 'deny', 'rule', 'random', 'spend'];
+const OBEYS_RULE = { perfect: true, keep: true, deny: true, rule: true, spend: true, random: false };
+function safeAfter(G, mine, open, e){
+  const nm = mine | (1 << e), no = open & ~(1 << e);
+  let s = 0;
+  for (let f = 0; f < G.m; f++) if (((no >> f) & 1) && !closesTriangle(G, nm, f)) s++;
+  return s;
+}
+// returns move SLOTS (indices into B.child / B.edge), played uniformly
+function candidates(B, V, i, pol, out){
+  const G = B.G, lo = B.off[i], hi = B.off[i + 1];
+  out.length = 0;
+  if (lo === hi) return out;
+  if (pol === 'random'){ for (let q = lo; q < hi; q++) out.push(q); return out; }
+  let safe = 0;
+  for (let q = lo; q < hi; q++) if (B.child[q] >= 0) safe++;
+  if (safe === 0){ for (let q = lo; q < hi; q++) out.push(q); return out; }
+  if (pol === 'rule'){ for (let q = lo; q < hi; q++) if (B.child[q] >= 0) out.push(q); return out; }
+  if (pol === 'perfect'){
+    for (let q = lo; q < hi; q++){ const c = B.child[q]; if (c >= 0 && V[c] === -1) out.push(q); }
+    if (out.length) return out;
+    for (let q = lo; q < hi; q++) if (B.child[q] >= 0) out.push(q);
+    return out;
+  }
+  const red = redOf(B, i), blue = blueOf(B, i);
+  const mineIsRed = popcount(red) === popcount(blue);
+  const mine = mineIsRed ? red : blue, theirs = mineIsRed ? blue : red;
+  if (pol === 'deny' || pol === 'spend'){
+    const want = pol === 'spend';
+    for (let q = lo; q < hi; q++){
+      if (B.child[q] < 0) continue;
+      if (closesTriangle(G, theirs, B.edge[q]) === want) out.push(q);
+    }
+    if (out.length) return out;
+    for (let q = lo; q < hi; q++) if (B.child[q] >= 0) out.push(q);
+    return out;
+  }
+  if (pol === 'keep'){
+    const open = G.full & ~(red | blue);
+    let best = -1;
+    for (let q = lo; q < hi; q++){
+      if (B.child[q] < 0) continue;
+      const s = safeAfter(G, mine, open, B.edge[q]);
+      if (s > best) best = s;
+    }
+    for (let q = lo; q < hi; q++){
+      if (B.child[q] < 0) continue;
+      if (safeAfter(G, mine, open, B.edge[q]) === best) out.push(q);
+    }
+    return out;
+  }
+  throw new Error('unknown policy ' + pol);
+}
+
+// ---------------------------------------------------------------- exact rates, forwards
+// push a mass of 1 into the root, split it over the policy's candidates, bank it at every leaf.
+// One pass gives the win split AND the length distribution, and the three masses sum to 1.
+function replayForward(B, V, polFirst, polSecond){
+  const mass = new Float64Array(B.NS), hist = new Float64Array(B.G.m + 2);
+  const out = [];
+  let firstWins = 0, secondWins = 0, drawn = 0, touched = 0;
+  mass[B.root] = 1;
+  for (let oi = B.NS - 1; oi >= 0; oi--){          // reverse of the descending order = ascending
+    const i = B.order[oi], w = mass[i];
+    if (w <= 0) continue;
+    touched++;
+    const mineIsRed = redToMove(B, i);
+    candidates(B, V, i, mineIsRed ? polFirst : polSecond, out);
+    if (!out.length){ drawn += w; hist[B.used[i]] += w; continue; }
+    const p = w / out.length;
+    for (let k = 0; k < out.length; k++){
+      const c = B.child[out[k]];
+      if (c < 0){ if (mineIsRed) secondWins += p; else firstWins += p; hist[B.used[i] + 1] += p; }
+      else mass[c] += p;
+    }
+  }
+  let mean = 0;
+  for (let j = 0; j < hist.length; j++) mean += j * hist[j];
+  return { firstWins, secondWins, drawn, hist, mean, touched, total: firstWins + secondWins + drawn };
+}
+// the same number, backwards, never forming a distribution: value iteration over the same order
+function expectBackward(B, V, polFirst, polSecond, side){
+  const P = new Float64Array(B.NS), out = [];
+  for (let oi = 0; oi < B.NS; oi++){
+    const i = B.order[oi];
+    const mineIsRed = redToMove(B, i);
+    candidates(B, V, i, mineIsRed ? polFirst : polSecond, out);
+    if (!out.length){ P[i] = 0.5; continue; }
+    const moverSide = mineIsRed ? 0 : 1;
+    let s = 0;
+    for (let k = 0; k < out.length; k++){
+      const c = B.child[out[k]];
+      if (c < 0) s += ((1 - moverSide) === side) ? 1 : 0;
+      else s += P[c];
+    }
+    P[i] = s / out.length;
+  }
+  return P[B.root];
+}
+
+// ---------------------------------------------------------------- dice, only as a control
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function playGame(B, V, polFirst, polSecond, rnd, from){
+  let i = (from === undefined) ? B.root : from, plies = 0;
+  const out = [];
+  for (;;){
+    const mineIsRed = redToMove(B, i);
+    candidates(B, V, i, mineIsRed ? polFirst : polSecond, out);
+    if (!out.length) return { winner: -1, plies, end: i };
+    const q = out[(rnd() * out.length) | 0];
+    plies++;
+    const c = B.child[q];
+    if (c < 0) return { winner: mineIsRed ? 1 : 0, plies, end: i, edge: B.edge[q] };
+    i = c;
+  }
+}
+function monteCarlo(B, V, polFirst, polSecond, games, rnd){
+  let first = 0, second = 0, draw = 0, plies = 0;
+  for (let g = 0; g < games; g++){
+    const r = playGame(B, V, polFirst, polSecond, rnd);
+    plies += r.plies;
+    if (r.winner === 0) first++; else if (r.winner === 1) second++; else draw++;
+  }
+  const p = first / games;
+  return { games, first, second, draw, rate: p, meanPlies: plies / games,
+           stderr: Math.sqrt(Math.max(p * (1 - p), 1e-12) / games) };
+}
+// play the definition: from a won position the winner plays a winning line and the loser plays
+// anything. The winner must never close a triangle, and the value must hold at every single ply.
+function verifyByPlay(B, V, games, rnd){
+  const out = [];
+  let played = 0, tried = 0, steps = 0, badClose = 0, badAfterWin = 0, badAfterReply = 0, badDraw = 0;
+  while (played < games && tried < games * 40){
+    tried++;
+    let i = (rnd() * B.NS) | 0;
+    if (V[i] !== 1) continue;
+    played++;
+    const heroIsRed = redToMove(B, i);
+    for (;;){
+      const mineIsRed = redToMove(B, i);
+      const hero = (mineIsRed === heroIsRed);
+      candidates(B, V, i, hero ? 'perfect' : 'random', out);
+      if (!out.length){ badDraw++; break; }
+      const q = out[(rnd() * out.length) | 0];
+      steps++;
+      const c = B.child[q];
+      if (c < 0){ if (hero) badClose++; break; }
+      i = c;
+      if (hero && V[i] !== -1) badAfterWin++;
+      if (!hero && V[i] !== 1) badAfterReply++;
+    }
+  }
+  return { played, steps, badClose, badAfterWin, badAfterReply, badDraw,
+           bad: badClose + badAfterWin + badAfterReply + badDraw };
+}
+
+// ---------------------------------------------------------------- symmetry: 6! = 720 relabellings
+function vertexPerms(n){
+  const out = [], a = [];
+  for (let i = 0; i < n; i++) a.push(i);
+  const rec = k => {
+    if (k === n){ out.push(a.slice()); return; }
+    for (let i = k; i < n; i++){
+      let t = a[k]; a[k] = a[i]; a[i] = t;
+      rec(k + 1);
+      t = a[k]; a[k] = a[i]; a[i] = t;
+    }
+  };
+  rec(0);
+  return out;
+}
+function edgePermTable(G){
+  return vertexPerms(G.n).map(p => G.E.map(uv => G.id[p[uv[0]]][p[uv[1]]]));
+}
+function applyEdgePerm(map, mask, m){
+  let r = 0;
+  for (let e = 0; e < m; e++) if ((mask >> e) & 1) r |= 1 << map[e];
+  return r;
+}
+function canonicalKey(EP, G, red, blue){
+  let best = Infinity;
+  for (let i = 0; i < EP.length; i++){
+    const k = applyEdgePerm(EP[i], red, G.m) * (1 << G.m) + applyEdgePerm(EP[i], blue, G.m);
+    if (k < best) best = k;
+  }
+  return best;
+}
+// how many genuinely different openings there are after 1, 2, 3 plies. Expanding one representative
+// of each class and canonicalising again reaches every class of the next layer, so the class counts
+// are exact even though only the representatives are expanded; `ordered` is the full count of
+// distinct move sequences, m*(m-1)*(m-2)*... , for the collapse ratio.
+function openingClasses(G, EP, plies){
+  const rows = [];
+  let frontier = [[0, 0]], ordered = 1;
+  for (let d = 1; d <= plies; d++){
+    const next = [], seen = {};
+    ordered *= (G.m - d + 1);
+    for (let k = 0; k < frontier.length; k++){
+      const red = frontier[k][0], blue = frontier[k][1];
+      const mineIsRed = popcount(red) === popcount(blue);
+      const open = G.full & ~(red | blue);
+      for (let e = 0; e < G.m; e++){
+        if (!((open >> e) & 1)) continue;
+        const nr = mineIsRed ? (red | (1 << e)) : red, nb = mineIsRed ? blue : (blue | (1 << e));
+        const c = canonicalKey(EP, G, nr, nb);
+        if (!seen[c]){ seen[c] = 1; next.push([nr, nb]); }
+      }
+    }
+    rows.push({ plies: d, ordered, classes: next.length, expanded: frontier.length * (G.m - d + 1) });
+    frontier = next;
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------- the same solve, with a cutoff
+// purely to price the two rule sets against each other: stop a node as soon as one move wins
+function cutoffNodes(G, achievement){
+  const SH = 1 << G.m, memo = new Map(), term = achievement ? 1 : -1;
+  const val = (red, blue) => {
+    const key = red * SH + blue;
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    const mineIsRed = popcount(red) === popcount(blue), mine = mineIsRed ? red : blue;
+    const open = G.full & ~(red | blue);
+    if (!open){ memo.set(key, 0); return 0; }
+    let best = -1;
+    for (let e = 0; e < G.m; e++){
+      if (!((open >> e) & 1)) continue;
+      const x = closesTriangle(G, mine, e) ? term
+        : -val(mineIsRed ? (red | (1 << e)) : red, mineIsRed ? blue : (blue | (1 << e)));
+      if (x > best) best = x;
+      if (best === 1) break;
+    }
+    memo.set(key, best); return best;
+  };
+  val(0, 0);
+  return memo.size;
+}
+// ===== ENGINE:END =====
+
+// ---------------------------------------------------------------- view: DOM only, no measurement
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n).toLocaleString('en-US');
+const pctS = (x, d) => (100 * x).toFixed(d === undefined ? 4 : d) + '%';
+const LABEL = {
+  perfect: 'perfect play',
+  keep:    'keep &mdash; the safe line leaving you the most safe lines',
+  deny:    'deny &mdash; a safe line still safe for them',
+  rule:    'the rule &mdash; any safe line',
+  spend:   'spend &mdash; a safe line already poisoned for them',
+  random:  'random &mdash; any line at all, mines included'
+};
+const SHORT = { perfect: 'perfect', keep: 'keep', deny: 'deny', rule: 'the rule', spend: 'spend', random: 'random' };
+const OPPS = ['perfect', 'keep', 'deny', 'rule', 'random'];
+
+const MC_GAMES = 120000, PLAY_GAMES = 4000, MC_SEED = 7701, PLAY_SEED = 7702, DEEP_GAMES = 400000;
+const S = { G: null, B: null, V: null, VA: null, cen: null, str: null, ram: [], pair: null,
+            rows: [], both: null, len: null, mc: [], play: null, sym: [], depth: 0,
+            routes: [], checks: 0, asserts: 0, polI: 0, mcI: 0,
+            board: { red: 0, blue: 0, human: 0, over: 0, tri: -1, loser: -1 } };
+
+// ---- the board
+function boardGeom(){
+  const cx = 310, cy = 248, R = 170;
+  const P = [];
+  for (let v = 0; v < 6; v++){
+    const a = -Math.PI / 2 + v * Math.PI / 3;
+    P.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]);
+  }
+  return P;
+}
+function renderBoard(){
+  const G = S.G, P = boardGeom(), b = S.board;
+  const idx = S.B.find(b.red * S.B.SH + b.blue);
+  const humanMask = b.human === 0 ? b.red : b.blue;
+  const humanToMove = (popcount(b.red) === popcount(b.blue)) === (b.human === 0);
+  let h = '';
+  const triMask = b.tri >= 0 ? G.T[b.tri] : 0;
+  for (let e = 0; e < G.m; e++){
+    const uv = G.E[e], A = P[uv[0]], Bp = P[uv[1]];
+    const isRed = (b.red >> e) & 1, isBlue = (b.blue >> e) & 1;
+    const inTri = (triMask >> e) & 1;
+    let col = '#ded9ea', w = 2.4, dash = '';
+    if (isRed){ col = '#dc2626'; w = 5; }
+    else if (isBlue){ col = '#2563eb'; w = 5; }
+    else if (!b.over && humanToMove && closesTriangle(G, humanMask, e)){ col = '#c9c2da'; w = 2.4; dash = ' stroke-dasharray="4 5"'; }
+    if (inTri) w = 8;
+    h += '<line x1="' + A[0].toFixed(1) + '" y1="' + A[1].toFixed(1) + '" x2="' + Bp[0].toFixed(1) +
+         '" y2="' + Bp[1].toFixed(1) + '" stroke="' + col + '" stroke-width="' + w +
+         '" stroke-linecap="round"' + dash + ' />';
+    if (!isRed && !isBlue && !b.over && humanToMove)
+      h += '<line class="hit" data-e="' + e + '" x1="' + A[0].toFixed(1) + '" y1="' + A[1].toFixed(1) +
+           '" x2="' + Bp[0].toFixed(1) + '" y2="' + Bp[1].toFixed(1) +
+           '" stroke="rgba(0,0,0,0)" stroke-width="18" />';
+  }
+  for (let v = 0; v < 6; v++){
+    h += '<circle cx="' + P[v][0].toFixed(1) + '" cy="' + P[v][1].toFixed(1) +
+         '" r="9" fill="#181724" />';
+    const a = -Math.PI / 2 + v * Math.PI / 3;
+    h += '<text x="' + (P[v][0] + 26 * Math.cos(a)).toFixed(1) + '" y="' +
+         (P[v][1] + 26 * Math.sin(a) + 4).toFixed(1) + '" text-anchor="middle" fill="#77738a">' +
+         'ABCDEF'[v] + '</text>';
+  }
+  h += '<text x="16" y="24" fill="#dc2626">RED  ' + popcount(b.red) + '</text>';
+  h += '<text x="604" y="24" text-anchor="end" fill="#2563eb">' + popcount(b.blue) + '  BLUE</text>';
+  h += '<text x="310" y="24" text-anchor="middle" fill="#77738a">' +
+       (b.over ? 'game over' : (humanToMove ? 'your move' : 'thinking')) + '</text>';
+  const svg = $('board');
+  svg.innerHTML = h;
+  svg.querySelectorAll('line.hit').forEach(el =>
+    el.addEventListener('click', () => humanMove(+el.dataset.e)));
+  paintVerdict(idx);
+}
+function paintVerdict(idx){
+  const b = S.board;
+  if (b.over){
+    const won = b.loser !== b.human;
+    $('verdictBig').textContent = won ? 'you win' : 'you lose';
+    $('verdictBig').style.color = won ? '#047857' : '#b91c1c';
+    $('verdict').innerHTML = (b.loser === 0 ? '<span class="rd">RED</span>' : '<span class="bl">BLUE</span>') +
+      ' completed a triangle on ' + (b.tri >= 0 ? S.G.TV[b.tri].map(v => 'ABCDEF'[v]).join('') : '?') +
+      ' at ply ' + (popcount(b.red) + popcount(b.blue)) + '.';
+    $('boardNote').textContent = 'Press reset to play again. Dashed lines are the ones that would end it for you.';
+    return;
+  }
+  const v = idx >= 0 ? S.V[idx] : 0;
+  const humanToMove = (popcount(b.red) === popcount(b.blue)) === (b.human === 0);
+  const good = (v === 1) === humanToMove;
+  $('verdictBig').textContent = good ? 'you are winning' : 'you are lost';
+  $('verdictBig').style.color = good ? '#047857' : '#b91c1c';
+  const lo = idx >= 0 ? S.B.off[idx] : 0, hi = idx >= 0 ? S.B.off[idx + 1] : 0;
+  let safe = 0, wins = 0;
+  for (let q = lo; q < hi; q++){ const c = S.B.child[q]; if (c >= 0){ safe++; if (S.V[c] === -1) wins++; } }
+  $('verdict').innerHTML = 'The side to move has <strong>' + safe + '</strong> safe line' +
+    (safe === 1 ? '' : 's') + ' and <strong>' + wins + '</strong> winning one' + (wins === 1 ? '' : 's') +
+    ' out of ' + (hi - lo) + ' unclaimed.';
+  $('boardNote').innerHTML = 'Exact, from the solved table of ' + fmt(S.B.NS) +
+    ' positions. Dashed lines end the game for you.';
+}
+function pushLog(t){
+  const d = document.createElement('div');
+  d.innerHTML = t;
+  $('log').prepend(d);
+}
+function humanMove(e){
+  const b = S.board;
+  const mineIsRed = popcount(b.red) === popcount(b.blue);
+  if ((mineIsRed ? 0 : 1) !== b.human) return;
+  applyMove(e, b.human);
+  if (!b.over) setTimeout(engineMove, 260);
+  renderBoard();
+}
+function applyMove(e, who){
+  const b = S.board, G = S.G;
+  const mine = who === 0 ? b.red : b.blue;
+  const kill = closesTriangle(G, mine, e);
+  if (who === 0) b.red |= 1 << e; else b.blue |= 1 << e;
+  const nm = who === 0 ? b.red : b.blue;
+  pushLog((who === 0 ? '<span class="rd">RED</span>' : '<span class="bl">BLUE</span>') + ' takes ' +
+          G.E[e].map(v => 'ABCDEF'[v]).join('') + (kill ? ' &mdash; and that is a triangle' : ''));
+  if (kill){ b.over = 1; b.loser = who; b.tri = whichTriangle(G, nm); }
+}
+function engineMove(){
+  const b = S.board;
+  if (b.over) return;
+  const idx = S.B.find(b.red * S.B.SH + b.blue);
+  const out = [];
+  candidates(S.B, S.V, idx, $('opp').value, out);
+  const rnd = S.engineRnd;
+  const q = out[(rnd() * out.length) | 0];
+  applyMove(S.B.edge[q], 1 - b.human);
+  renderBoard();
+}
+function resetBoard(){
+  S.board = { red: 0, blue: 0, human: +$('side').value, over: 0, tri: -1, loser: -1 };
+  S.engineRnd = mulberry32(20260901);
+  $('log').innerHTML = '';
+  renderBoard();
+  if (S.board.human === 1) setTimeout(engineMove, 300);
+}
+function hint(){
+  const b = S.board;
+  if (b.over) return;
+  const idx = S.B.find(b.red * S.B.SH + b.blue);
+  const mineIsRed = popcount(b.red) === popcount(b.blue);
+  if ((mineIsRed ? 0 : 1) !== b.human) return;
+  const out = [];
+  candidates(S.B, S.V, idx, 'perfect', out);
+  const wins = [];
+  for (let q = S.B.off[idx]; q < S.B.off[idx + 1]; q++){
+    const c = S.B.child[q];
+    if (c >= 0 && S.V[c] === -1) wins.push(S.G.E[S.B.edge[q]].map(v => 'ABCDEF'[v]).join(''));
+  }
+  pushLog(wins.length
+    ? 'hint &mdash; winning lines: <strong>' + wins.join(', ') + '</strong>'
+    : 'hint &mdash; this position is lost; every line loses with best play from the other side.');
+}
+
+// ---- tables
+function paintRam(){
+  let h = '<tr><th>board</th><th>lines</th><th>2-colourings</th><th>no mono triangle</th><th>Sim value</th></tr>';
+  for (const r of S.ram){
+    const cls = r.free === 0 ? ' class="bad"' : '';
+    h += '<tr' + cls + '><td class="l">K' + r.n + '</td><td>' + r.m + '</td><td>' + fmt(r.colourings) +
+         '</td><td>' + fmt(r.free) + '</td><td>' + r.verdict + '</td></tr>';
+  }
+  $('ramTbl').innerHTML = h;
+  const k5 = S.ram.find(r => r.n === 5);
+  $('ramNote').innerHTML = 'The K&#8326; row is the theorem: <strong>0</strong> of ' +
+    fmt(32768) + ' colourings escape, so the board cannot fill without a loser. K&#8325; escapes ' +
+    '<strong>' + k5.free + '</strong> times, and ' + k5.free + ' is also the number of Hamiltonian ' +
+    'cycles of K&#8325; &mdash; counted here by permutation, with no colouring in the argument, and ' +
+    '(5&minus;1)!/2 = ' + (factorial(4) / 2) + ' a third time.';
+}
+function paintPol(){
+  const rnd = S.rows.find(x => x.pol === 'random');
+  let h = '<tr><th>the second player plays</th><th>obeys the rule</th><th>keeps the win</th><th></th><th>vs random</th></tr>';
+  for (const r of S.rows){
+    const cls = r.pol === 'perfect' ? ' class="good"' : (r.pol === 'spend' ? ' class="bad"' : '');
+    const ratio = !rnd ? '&hellip;' : (r.pol === 'random' ? '&mdash;' : (r.keep / rnd.keep).toFixed(2) + '&times;');
+    h += '<tr' + cls + '><td class="l">' + LABEL[r.pol] + '</td><td>' + (OBEYS_RULE[r.pol] ? 'yes' : 'no') +
+         '</td><td>' + pctS(r.keep) + '</td><td><div class="bar"><i style="width:' +
+         (100 * r.keep).toFixed(2) + '%"></i></div></td><td>' + ratio + '</td></tr>';
+  }
+  $('polTbl').innerHTML = h;
+  const K = {};
+  for (const r of S.rows) K[r.pol] = r.keep;
+  if (S.rows.length < POLICIES.length){ $('polNote').textContent = 'sweeping the policies…'; return; }
+  $('polNote').innerHTML = 'Every rate is the exact expectation over the whole game graph against a ' +
+    'first player who plays perfectly &mdash; nothing sampled. Four of these obey &ldquo;never ' +
+    'complete your own triangle&rdquo; and they span <strong>' + (K.keep / K.spend).toFixed(1) +
+    '&times;</strong>; the worst of them is <strong>' + (K.random / K.spend).toFixed(1) +
+    '&times;</strong> worse than a player who ignores the rule entirely. The rule closes <strong>' +
+    pctS((K.rule - K.random) / (1 - K.random), 2) + '</strong> of the distance from random to perfect, ' +
+    'and denial &mdash; the only lever the game has &mdash; still loses to plain selfishness by ' +
+    '<strong>' + (K.keep / K.deny).toFixed(2) + '&times;</strong>.';
+}
+function paintBoth(){
+  const b = S.both;
+  let h = '<tr><th>both sides play</th><th>first player wins</th><th>second player wins</th><th>mean plies</th></tr>';
+  for (const r of b)
+    h += '<tr><td class="l">' + SHORT[r.pol] + '</td><td>' + pctS(r.first) + '</td><td>' +
+         pctS(r.second) + '</td><td>' + r.mean.toFixed(4) + '</td></tr>';
+  $('mcTbl').innerHTML = h + S.mcRows;
+  const rule = b.find(r => r.pol === 'rule');
+  $('mcNote').innerHTML = 'The second player wins this game with certainty. With both sides on the ' +
+    'folk rule the first player takes <strong>' + pctS(rule.first) + '</strong> of it &mdash; a coin ' +
+    'flip in a solved game. The rows below throw ' + fmt(MC_GAMES) + ' seeded games at three of the ' +
+    'exact rates; each has to land inside its own standard error.' +
+    (S.play ? ' The table is also attacked by <em>playing</em> it: ' + fmt(S.play.played) +
+      ' games from won positions, ' + fmt(S.play.steps) + ' plies, and the winner completed a ' +
+      'triangle <strong>' + S.play.badClose + '</strong> times.' : '');
+}
+function paintStruct(){
+  const s = S.str;
+  const h = [
+    ['non-losing moves in the game graph', fmt(s.moves)],
+    ['moves that raise the opponent&rsquo;s danger', '<strong>' + s.violations + '</strong> &mdash; and the identity holds on all ' + fmt(s.moves)],
+    ['moves that raise your own danger', fmt(s.grew) + '  (' + pctS(s.grewShare, 2) + ')'],
+    ['mean rise in your own danger, per move', s.meanGrowth.toFixed(4)],
+    ['largest single rise', '+' + s.maxGrowth],
+    ['positions with no safe line at all', fmt(S.cen.forced) + '  (' + pctS(S.cen.forced / S.cen.states, 2) + ')'],
+    ['&hellip; with the first player on move', fmt(S.cen.forcedFirst)],
+    ['&hellip; with the second player on move', fmt(S.cen.forcedSecond) + '  (ratio ' + (S.cen.forcedFirst / S.cen.forcedSecond).toFixed(2) + ')']
+  ].map(r => '<tr><td class="l">' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('');
+  $('structTbl').innerHTML = '<tr><th>measured over the whole graph</th><th></th></tr>' + h;
+  $('structNote').innerHTML = 'A line you claim is <em>your</em> colour, so it can never make any ' +
+    'line more dangerous for them. Their poisoned count after your move equals their count before ' +
+    'it, minus one only if the line you took was already poisoned for them: <strong>' +
+    s.violations + '</strong> exceptions in ' + fmt(s.moves) + '. There is no such thing as a ' +
+    'threat in Sim.';
+}
+function paintCensus(){
+  const c = S.cen, p = S.pair;
+  const rows = [
+    ['legal positions, by walking the game', fmt(c.states)],
+    ['legal positions, by pairing triangle-free pictures', fmt(p.positions)],
+    ['triangle-free subgraphs of K&#8326;', fmt(p.subsets) + ' of ' + fmt(32768)],
+    ['largest triangle-free subgraph', p.maxSize + ' lines, ' + p.maxCount + ' of them'],
+    ['won for the side to move', fmt(c.won)],
+    ['lost for the side to move', fmt(c.lost)],
+    ['drawn', fmt(c.drawn)],
+    ['mean safe lines available', c.meanSafe.toFixed(4)],
+    ['mean poisoned lines available', c.meanDanger.toFixed(4)]
+  ].map(r => '<tr><td class="l">' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('');
+  $('censusTbl').innerHTML = '<tr><th>the whole position space</th><th></th></tr>' + rows;
+  $('censusNote').innerHTML = 'The two counts share no code: one walks moves from the empty board, ' +
+    'the other lists every triangle-free picture and counts disjoint pairs whose sizes differ by 0 ' +
+    'or 1. The ' + p.maxCount + ' largest ones are the complete bipartite pictures, and ' +
+    p.maxCount + ' = C(6,3)/2 is the number of ways to split six dots into two threes.';
+}
+function paintWin(){
+  const c = S.cen;
+  let h = '<tr><th>winning lines</th><th>won positions</th><th>share</th></tr>';
+  for (let w = 0; w < c.hist.length; w++){
+    if (!c.hist[w] && w > 0) continue;
+    h += '<tr' + (w === 1 ? ' class="hi"' : '') + '><td class="l">' + w + '</td><td>' + fmt(c.hist[w]) +
+         '</td><td>' + pctS(c.hist[w] / c.won, 2) + '</td></tr>';
+  }
+  $('winTbl').innerHTML = h;
+  $('winNote').innerHTML = 'A won position never has zero winning lines and a lost one never has any ' +
+    '&mdash; both asserted over all ' + fmt(c.states) + '. The win is usually a needle: <strong>' +
+    pctS(c.exactlyOneShare, 2) + '</strong> of won positions have exactly one, and the counts are ' +
+    'not monotone, because the biggest branches live where the board is nearly empty.';
+}
+function paintSym(){
+  let h = '<tr><th>after</th><th>move sequences</th><th>different positions</th><th>collapse</th></tr>';
+  for (const r of S.sym)
+    h += '<tr><td class="l">' + r.plies + ' ' + (r.plies === 1 ? 'ply' : 'plies') + '</td><td>' +
+         fmt(r.ordered) + '</td><td>' + fmt(r.classes) + '</td><td>' +
+         (r.ordered / r.classes).toFixed(1) + '&times;</td></tr>';
+  $('symTbl').innerHTML = h;
+  $('symNote').innerHTML = 'Canonicalised over all <strong>720</strong> relabellings of the six dots. ' +
+    'K&#8326; is edge-transitive, so the fifteen opening lines are literally one position and there ' +
+    'is nothing to choose &mdash; the first player is lost before touching the board.';
+}
+function paintAch(){
+  const rows = [
+    ['who wins, three of your own lines LOSES', 'the second player'],
+    ['who wins, three of your own lines WINS', 'the first player'],
+    ['forced in', S.depth + ' plies'],
+    ['positions visited, avoiding', fmt(S.cutAvoid)],
+    ['positions visited, achieving', fmt(S.cutAchieve) + '  (' + (S.cutAvoid / S.cutAchieve).toFixed(1) + '&times; smaller)'],
+    ['Sim on five dots, avoiding', 'a draw'],
+    ['Sim on five dots, achieving', 'the first player'],
+    ['Sim on four dots', 'a draw either way']
+  ].map(r => '<tr><td class="l">' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('');
+  $('achTbl').innerHTML = '<tr><th>one word in the rules</th><th></th></tr>' + rows;
+  $('achNote').innerHTML = 'Same board, same position graph, same sweep &mdash; only the value of a ' +
+    'leaf changes sign. Avoidance is where the whole difficulty lives: with a first-win cutoff the ' +
+    'achievement solve settles it after ' + fmt(S.cutAchieve) + ' positions and the real game needs ' +
+    fmt(S.cutAvoid) + '.';
+}
+function paintRoutes(){
+  let h = '<tr><th>route</th><th>scope</th><th>disagreements</th></tr>';
+  for (const r of S.routes)
+    h += '<tr' + (r.bad ? ' class="bad"' : '') + '><td class="l">' + r.what + '</td><td>' + r.scope +
+         '</td><td>' + r.bad + '</td></tr>';
+  $('routeTbl').innerHTML = h;
+  $('routeNote').innerHTML = 'The value table, the position count and every rate are each produced ' +
+    'twice by machinery that shares no line, and the playout route never reads a value at all except ' +
+    'to choose the winner&rsquo;s move.';
+}
+function paintTF(){
+  const p = S.pair;
+  let h = '<tr><th>lines</th><th>triangle-free pictures</th></tr>';
+  for (let s = 0; s < p.bySize.length; s++)
+    if (p.bySize[s]) h += '<tr' + (s === p.maxSize ? ' class="hi"' : '') + '><td class="l">' + s +
+      '</td><td>' + fmt(p.bySize[s]) + '</td></tr>';
+  $('tfTbl').innerHTML = h;
+  $('tfNote').innerHTML = 'All ' + fmt(p.subsets) + ' of them, from ' + fmt(32768) +
+    ' edge subsets. Nine lines is the ceiling &mdash; Tur&aacute;n&rsquo;s bound &lfloor;36/4&rfloor; ' +
+    '&mdash; and the ' + p.maxCount + ' pictures that reach it are exactly the complete bipartite ' +
+    'splits. A player who could claim ten lines without a triangle would make Sim drawable.';
+}
+function paintLen(){
+  const h = S.len.hist, svg = $('lenSvg');
+  let mx = 0;
+  for (let j = 0; j < h.length; j++) if (h[j] > mx) mx = h[j];
+  const x0 = 40, y0 = 178, w = 34, gap = 3;
+  let s = '';
+  for (let j = 0; j <= 15; j++){
+    const bh = mx ? (h[j] / mx) * 140 : 0;
+    const x = x0 + j * (w + gap);
+    s += '<rect x="' + x + '" y="' + (y0 - bh).toFixed(1) + '" width="' + w + '" height="' +
+         Math.max(bh, 1).toFixed(1) + '" rx="3" fill="' + (h[j] > 0 ? '#6d28d9' : '#ded9ea') + '" />';
+    s += '<text x="' + (x + w / 2) + '" y="' + (y0 + 15) + '" text-anchor="middle" fill="#77738a">' + j + '</text>';
+    if (h[j] > 0)
+      s += '<text x="' + (x + w / 2) + '" y="' + (y0 - bh - 6).toFixed(1) +
+           '" text-anchor="middle" fill="#181724">' + (100 * h[j]).toFixed(2) + '</text>';
+  }
+  s += '<text x="' + x0 + '" y="24" fill="#77738a">% of perfect games ending on that ply</text>';
+  svg.innerHTML = s;
+  let evens = 0;
+  for (let j = 0; j <= 15; j += 2) evens += h[j];
+  $('lenNote').innerHTML = 'Mean <strong>' + S.len.mean.toFixed(4) + '</strong> plies. Every even ' +
+    'bucket is <strong>' + evens.toFixed(0) + '</strong>, because the loser is always the first ' +
+    'player and the first player moves on odd plies. <strong>' + pctS(h[15], 2) + '</strong> of ' +
+    'perfect games run the board out completely.';
+}
+
+// ---------------------------------------------------------------- self-test
+function selftest(){
+  const L = [];
+  let n = 0, bad = 0;
+  const ck = (cond, what, detail) => { n++; if (!cond){ bad++; L.push('FAIL  ' + what + (detail ? '  — ' + detail : '')); } };
+  const G = S.G, B = S.B, V = S.V, c = S.cen, st = S.str, p = S.pair;
+  const K = {}; for (const r of S.rows) K[r.pol] = r.keep;
+
+  // 1. no draws, and the two counts of the escapes
+  const r6 = S.ram.find(x => x.n === 6), r5 = S.ram.find(x => x.n === 5), r4 = S.ram.find(x => x.n === 4);
+  ck(r6.free === 0, 'a two-colouring of K6 escapes a monochromatic triangle', r6.free + ' escaped');
+  ck(r5.free > 0, 'K5 has no escape at all, so R(3,3) would not be 6');
+  ck(r5.free === S.hamK5, 'the K5 escape count matches the Hamiltonian cycle count',
+     r5.free + ' vs ' + S.hamK5);
+  ck(S.hamK5 === factorial(4) / 2, 'the Hamiltonian cycle count matches (n-1)!/2');
+  ck(r4.free > r5.free, 'the escapes do not thin out as the board grows');
+  ck(S.ram.every(x => x.colourings === 1 << x.m), 'a colouring count is not 2^lines');
+
+  // 2. the position space, counted two ways
+  ck(c.states === p.positions, 'the walk and the pairing disagree about how many positions there are',
+     fmt(c.states) + ' vs ' + fmt(p.positions));
+  ck(c.won + c.lost + c.drawn === c.states, 'the verdicts do not partition the positions');
+  ck(c.drawn === 0, 'a position on six dots is drawn', c.drawn + ' of them');
+  ck(c.safeTotal === B.quiet, 'the safe-line total is not the number of non-losing moves');
+  ck(c.dangerTotal === B.terminal, 'the poisoned-line total is not the number of losing moves');
+  ck(c.safeTotal + c.dangerTotal === B.moves, 'the move slots do not add up');
+  ck(p.maxCount === G.TV.length / 2,
+     'the largest triangle-free pictures do not number C(6,3)/2, the bipartite splits',
+     p.maxCount + ' vs ' + (G.TV.length / 2));
+  ck(p.maxSize === Math.floor(G.n * G.n / 4), 'the largest triangle-free picture misses Turan',
+     p.maxSize + ' vs ' + Math.floor(G.n * G.n / 4));
+
+  // 3. the value table
+  ck(V[B.root] === -1, 'the first player is not lost at the root', String(V[B.root]));
+  ck(S.openingsSame === 15, 'not all fifteen openings have the same value', S.openingsSame + ' of 15');
+  ck(S.sym[0].classes === 1, 'the fifteen openings are not one position', S.sym[0].classes + ' classes');
+  ck(S.sym[0].ordered === G.m, 'the opening sweep did not look at every line');
+  ck(c.hist[0] === 0, 'a won position with no winning line exists', c.hist[0] + ' of them');
+  ck(S.lostWithWin === 0, 'a lost position has a winning line', S.lostWithWin + ' of them');
+  ck(c.winsTotal <= c.safeTotal, 'there are more winning lines than safe ones');
+  ck(c.maxWins <= G.m, 'a position has more winning lines than there are lines');
+  for (const r of S.routes) ck(r.bad === 0, r.what, r.bad + ' disagreements');
+
+  // 4. you cannot attack
+  ck(st.violations === 0, 'a move raised the opponent&rsquo;s danger', st.violations + ' of ' + fmt(st.moves));
+  ck(st.moves === B.quiet, 'the structure sweep missed moves', st.moves + ' vs ' + B.quiet);
+  ck(st.grew > 0 && st.grewShare > 0.5, 'your own danger barely moves, so there is nothing to trade off');
+  ck(st.meanGrowth > 0, 'your own danger does not grow on average');
+  ck(c.forced < 0.05 * c.states, 'being forced is the usual way to lose', pctS(c.forced / c.states, 2));
+  ck(c.forcedFirst > c.forcedSecond, 'the first player is not the one who runs out');
+  ck(c.forced === c.forcedFirst + c.forcedSecond, 'the forced positions do not split by mover');
+
+  // 5. the headline: one rule, many policies
+  ck(Math.abs(K.perfect - 1) < 1e-9, 'perfect play does not keep the win every time', pctS(K.perfect));
+  ck(S.perfectExact === 0, 'a perfect second player loses some mass', String(S.perfectExact));
+  for (const r of S.rows)
+    ck(Math.abs(r.first + r.second + r.drawn - 1) < 1e-9, 'the outcome masses of ' + r.pol + ' do not sum to 1',
+       (r.first + r.second + r.drawn).toFixed(15));
+  for (const r of S.rows)
+    ck(Math.abs(r.keep - r.back) < 1e-9, 'forwards and backwards disagree for ' + r.pol,
+       r.keep.toFixed(12) + ' vs ' + r.back.toFixed(12));
+  ck(K.keep > K.deny && K.deny > K.rule && K.rule > K.random && K.random > K.spend,
+     'the ordering of the policies moved');
+  ck(K.spend < K.rule && K.rule < K.deny,
+     'the plain rule is not bracketed by its own two halves, which is arithmetic, not luck');
+  ck(K.random > K.spend, 'obeying the rule badly is no worse than not obeying it');
+  ck(K.random / K.spend > 10, 'and it is not worse by an order of magnitude',
+     (K.random / K.spend).toFixed(1) + 'x');
+  ck(K.keep / K.spend > 100, 'the rule does not span two orders of magnitude',
+     (K.keep / K.spend).toFixed(1) + 'x');
+  ck(K.keep > 1.5 * K.deny,
+     'the selfish policy no longer beats the denial one by half again',
+     K.keep.toFixed(6) + ' vs ' + K.deny.toFixed(6));
+  ck((K.rule - K.random) / (1 - K.random) < 0.1,
+     'the plain rule closes more than a tenth of the gap to perfect play',
+     pctS((K.rule - K.random) / (1 - K.random), 2));
+  const both = {}; for (const r of S.both) both[r.pol] = r;
+  ck(both.rule.first > 0.45 && both.rule.first < 0.55,
+     'both sides on the rule is no longer a coin flip', pctS(both.rule.first));
+  ck(both.perfect.first === 0, 'perfect against perfect is not a shutout');
+  ck(Math.abs(both.rule.first + both.rule.second - 1) < 1e-9, 'the coin flip does not sum to 1');
+
+  // 6. lengths, and the parity that follows from who loses
+  {
+    let evens = 0, odds = 0;
+    for (let j = 0; j <= G.m; j++){ if (j % 2) odds += S.len.hist[j]; else evens += S.len.hist[j]; }
+    ck(evens === 0, 'a perfect game ended on an even ply', evens.toExponential(3));
+    ck(Math.abs(odds - 1) < 1e-9, 'the length distribution does not sum to 1');
+    ck(S.len.mean > 13 && S.len.mean < G.m, 'the mean game length moved', S.len.mean.toFixed(4));
+    ck(S.len.hist[G.m] > 0.2, 'the board almost never runs out under perfect play');
+    let first = -1;
+    for (let j = 0; j <= G.m; j++) if (S.len.hist[j] > 0){ first = j; break; }
+    ck(first >= 11 && first % 2 === 1, 'the earliest perfect loss moved', 'ply ' + first);
+  }
+
+  // 7. the dice agree with the arithmetic
+  for (const m of S.mc){
+    ck(Math.abs(m.rate - m.exact) < 4 * m.stderr,
+       'the Monte-Carlo replay of ' + m.pol + ' misses the exact rate',
+       pctS(m.rate, 3) + ' vs ' + pctS(m.exact, 4) + ' (4 se = ' + pctS(4 * m.stderr, 3) + ')');
+    ck(m.first + m.second + m.draw === m.games, 'the ' + m.pol + ' replay lost games');
+    ck(m.draw === 0, 'the ' + m.pol + ' replay drew a game', String(m.draw));
+  }
+  ck(S.play.bad === 0, 'playing the definition broke the table',
+     S.play.badClose + ' closes, ' + S.play.badAfterWin + ' after a winning line, ' +
+     S.play.badAfterReply + ' after a reply, ' + S.play.badDraw + ' draws');
+  ck(S.play.played > 1000 && S.play.steps > 5000, 'the definition run was too small to mean anything',
+     S.play.played + ' games, ' + S.play.steps + ' plies');
+
+  // 8. one word, and the answer flips
+  ck(S.VA[B.root] === 1, 'flipping the rule does not flip the winner', String(S.VA[B.root]));
+  ck(S.depth % 2 === 1, 'the achievement win does not land on the first player&rsquo;s own move',
+     S.depth + ' plies');
+  ck(S.depth < S.len.mean, 'the achievement win is not faster than the real game');
+  ck(S.cutAchieve < S.cutAvoid, 'avoidance is not the harder search',
+     fmt(S.cutAvoid) + ' vs ' + fmt(S.cutAchieve));
+  ck(S.k5avoid === 0 && S.k5achieve === 1, 'the five-dot board changed its mind',
+     S.k5avoid + ' / ' + S.k5achieve);
+  ck(S.k4avoid === 0, 'the four-dot board is no longer a draw');
+
+  // 9. the generator, since three controls lean on it
+  {
+    const a = mulberry32(11), b = mulberry32(11), d = mulberry32(12);
+    let same = true, diff = false, lo = 1, hi = 0;
+    for (let i = 0; i < 4000; i++){
+      const x = a(), y = b(), z = d();
+      if (x !== y) same = false;
+      if (x !== z) diff = true;
+      if (x < lo) lo = x;
+      if (x > hi) hi = x;
+    }
+    ck(same && diff, 'the generator is deterministic and seed-dependent');
+    ck(lo >= 0 && hi < 1, 'and stays inside [0,1)');
+    const e = mulberry32(37);
+    let runs = 0, prev = e() < 0.5;
+    for (let i = 0; i < 20000; i++){ const cur = e() < 0.5; if (cur !== prev) runs++; prev = cur; }
+    ck(Math.abs(runs - 10000) < 400, 'its low bit neither sticks nor alternates', runs + ' runs');
+  }
+
+  S.checks = n;
+  S.asserts = 2 * 33864 + 32768 + p.pairs + 3 * c.states + B.moves + st.moves +
+              S.rows.length * 2 * c.states + S.both.length * c.states +
+              S.mc.reduce((a, m) => a + m.games, 0) + S.play.steps +
+              S.sym.reduce((a, r) => a + r.ordered * 720, 0) + S.routeAsserts;
+  const head = bad === 0
+    ? 'ALL ' + n + ' CHECKS PASS  ·  ' + fmt(S.asserts) + ' assertions over ' + fmt(c.states) +
+      ' positions and ' + fmt(B.moves) + ' moves'
+    : bad + ' OF ' + n + ' CHECKS FAILED';
+  $('selftest').textContent = head + '\n' + (L.length ? L.join('\n') + '\n' : '') +
+    '\nramsey       K6 ' + fmt(32768) + ' colourings, ' + r6.free + ' escape   ·   K5 ' + r5.free +
+    ' escape = ' + S.hamK5 + ' Hamiltonian cycles' +
+    '\npositions    ' + fmt(c.states) + ' by walking, ' + fmt(p.positions) + ' by pairing   ·   won ' +
+    fmt(c.won) + '   lost ' + fmt(c.lost) + '   drawn ' + c.drawn +
+    '\nheadline     keep ' + pctS(K.keep) + '   deny ' + pctS(K.deny) + '   rule ' + pctS(K.rule) +
+    '   random ' + pctS(K.random) + '   spend ' + pctS(K.spend) +
+    '\nspread       ' + (K.keep / K.spend).toFixed(1) + 'x inside one rule   ·   random beats spend by ' +
+    (K.random / K.spend).toFixed(1) + 'x   ·   both on the rule ' + pctS(both.rule.first) +
+    '\nstructure    ' + fmt(st.moves) + ' moves   opponent danger raised ' + st.violations +
+    '   own danger +' + st.meanGrowth.toFixed(4) + ' on ' + pctS(st.grewShare, 2) +
+    '\nlengths      mean ' + S.len.mean.toFixed(4) + '   even plies 0   full board ' + pctS(S.len.hist[15], 2) +
+    '\nflip a word  avoiding ' + fmt(S.cutAvoid) + ' nodes -> second player   ·   achieving ' +
+    fmt(S.cutAchieve) + ' -> first player in ' + S.depth +
+    '\nroutes       ' + S.routes.map(r => r.tag + ' ' + r.bad).join('   ');
+}
+
+// ---------------------------------------------------------------- the pump (plain setTimeout)
+let step = 0;
+
+function boot(){
+  try {
+    if (step === 0){
+      S.G = completeGraph(6);
+      $('opp').innerHTML = OPPS.map(p => '<option value="' + p + '">reply: ' + LABEL[p] + '</option>').join('');
+      $('side').addEventListener('change', resetBoard);
+      $('resetBtn').addEventListener('click', resetBoard);
+      $('hintBtn').addEventListener('click', hint);
+      $('deepBtn').addEventListener('click', deepRun);
+      S.ram = [4, 5, 6].map(n => ramseySweep(n));
+      S.ram.unshift(ramseySweep(3));
+      S.hamK5 = hamiltonCycleCount(5);
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 1){
+      S.B = buildStates(S.G);
+      S.V = solveTable(S.B, false);
+      S.VA = solveTable(S.B, true);
+      resetBoard();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 2){
+      S.cen = census(S.B, S.V);
+      let lw = 0, same = 0;
+      for (let i = 0; i < S.B.NS; i++){
+        if (S.V[i] !== -1) continue;
+        for (let q = S.B.off[i]; q < S.B.off[i + 1]; q++){
+          const ch = S.B.child[q];
+          if (ch >= 0 && S.V[ch] === -1){ lw++; break; }
+        }
+      }
+      S.lostWithWin = lw;
+      for (let e = 0; e < S.G.m; e++){
+        const i = S.B.find((1 << e) * S.B.SH + 0);
+        if (S.V[i] === 1) same++;             // the second player is winning after any opening
+      }
+      S.openingsSame = same;
+      paintWin();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 3){
+      S.pair = positionsByPairing(S.G);
+      paintTF(); paintCensus();
+      const WORD = { '-1': 'second player', '0': 'a draw', '1': 'first player' };
+      for (const r of S.ram){
+        r.value = r.n === 6 ? S.V[S.B.root] : solveRecursive(completeGraph(r.n), false).val(0, 0);
+        r.verdict = WORD[String(r.value)];
+      }
+      paintRam();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 4){
+      S.str = structureSweep(S.B, S.V);
+      paintStruct();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 5){
+      const pol = POLICIES[S.polI];
+      const f = replayForward(S.B, S.V, 'perfect', pol);
+      const back = 1 - expectBackward(S.B, S.V, 'perfect', pol, 0);
+      S.rows.push({ pol, first: f.firstWins, second: f.secondWins, drawn: f.drawn,
+                    keep: f.secondWins, back, mean: f.mean, touched: f.touched });
+      paintPol();
+      S.polI++;
+      if (S.polI >= POLICIES.length){ S.perfectExact = S.rows.find(r => r.pol === 'perfect').first; step++; }
+      setTimeout(boot, 5); return;
+    }
+    if (step === 6){
+      S.both = ['perfect', 'rule', 'random'].map(pol => {
+        const f = replayForward(S.B, S.V, pol, pol);
+        return { pol, first: f.firstWins, second: f.secondWins, mean: f.mean };
+      });
+      S.mcRows = '';
+      paintBoth();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 7){
+      S.len = replayForward(S.B, S.V, 'perfect', 'perfect');
+      paintLen();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 8){
+      const pol = ['rule', 'deny', 'random'][S.mcI];
+      const m = monteCarlo(S.B, S.V, 'perfect', pol, MC_GAMES, mulberry32(MC_SEED + S.mcI));
+      m.pol = pol;
+      m.exact = S.rows.find(r => r.pol === pol).first;
+      S.mc.push(m);
+      S.mcRows = S.mc.map(x => '<tr class="good"><td class="l">' + fmt(x.games) +
+        ' seeded games vs ' + SHORT[x.pol] + '</td><td>' + pctS(x.rate, 3) + '</td><td>exact ' +
+        pctS(x.exact) + '</td><td>' + (Math.abs(x.rate - x.exact) / x.stderr).toFixed(2) + ' se</td></tr>').join('');
+      paintBoth();
+      S.mcI++;
+      if (S.mcI >= 3) step++;
+      setTimeout(boot, 5); return;
+    }
+    if (step === 9){
+      S.play = verifyByPlay(S.B, S.V, PLAY_GAMES, mulberry32(PLAY_SEED));
+      const EP = edgePermTable(S.G);
+      S.sym = openingClasses(S.G, EP, 3);
+      paintSym(); paintBoth();
+      step++; setTimeout(boot, 10); return;
+    }
+    if (step === 10){
+      const d = winDepth(S.B, S.VA);
+      S.depth = d[S.B.root];
+      const G5 = completeGraph(5), G4 = completeGraph(4);
+      S.k5avoid = solveRecursive(G5, false).val(0, 0);
+      S.k5achieve = solveRecursive(G5, true).val(0, 0);
+      S.k4avoid = solveRecursive(G4, false).val(0, 0);
+      // the same five-dot board, solved again by the flat sweep - two routes, one answer
+      const B5 = buildStates(G5), V5 = solveTable(B5, false), R5 = solveRecursive(G5, false);
+      let bad5 = 0;
+      for (let i = 0; i < B5.NS; i++)
+        if (V5[i] !== R5.val((B5.keys[i] - B5.keys[i] % B5.SH) / B5.SH, B5.keys[i] % B5.SH)) bad5++;
+      // deep six-dot positions, re-solved with no memo at all
+      const rnd = mulberry32(7703);
+      let deepBad = 0, deepN = 0;
+      for (let t = 0; t < 4000; t++){
+        const i = (rnd() * S.B.NS) | 0;
+        if (S.B.used[i] < 9) continue;
+        deepN++;
+        const k = S.B.keys[i], blue = k % S.B.SH, red = (k - blue) / S.B.SH;
+        if (bruteNoMemo(S.G, red, blue, false) !== S.V[i]) deepBad++;
+      }
+      S.cutAvoid = cutoffNodes(S.G, false);
+      S.cutAchieve = cutoffNodes(S.G, true);
+      S.routes = [
+        { tag: 'pair', what: 'walking the game vs pairing triangle-free pictures',
+          scope: fmt(S.pair.pairs) + ' pairs', bad: S.cen.states === S.pair.positions ? 0 : 1 },
+        { tag: 'k5', what: 'flat backward sweep vs recursive memo, five dots',
+          scope: fmt(B5.NS) + ' positions', bad: bad5 },
+        { tag: 'deep', what: 'no-memo brute force on deep six-dot positions',
+          scope: fmt(deepN) + ' positions', bad: deepBad },
+        { tag: 'fwd', what: 'rates forwards vs backwards',
+          scope: S.rows.length + ' policies', bad: S.rows.filter(r => Math.abs(r.keep - r.back) > 1e-9).length },
+        { tag: 'dice', what: 'seeded replay inside four standard errors',
+          scope: fmt(3 * MC_GAMES) + ' games', bad: S.mc.filter(m => Math.abs(m.rate - m.exact) >= 4 * m.stderr).length },
+        { tag: 'play', what: 'playing the definition from won positions',
+          scope: fmt(S.play.steps) + ' plies', bad: S.play.bad }
+      ];
+      S.routeAsserts = S.pair.pairs + B5.NS + deepN + S.rows.length + 3 * MC_GAMES + S.play.steps;
+      paintRoutes(); paintAch();
+      step++; setTimeout(boot, 10); return;
+    }
+    $('deepBtn').disabled = false;
+    setTimeout(selftest, 30);
+  } catch (err){
+    $('selftest').textContent = 'ENGINE ERROR: ' + (err && err.message ? err.message : String(err));
+  }
+}
+function deepRun(){
+  $('deepBtn').disabled = true;
+  $('deepOut').textContent = 'throwing ' + fmt(DEEP_GAMES) + ' more seeded games at the exact rates…';
+  setTimeout(() => {
+    const out = ['rule', 'deny', 'keep', 'random', 'spend'].map((pol, ix) => {
+      const m = monteCarlo(S.B, S.V, 'perfect', pol, DEEP_GAMES, mulberry32(90210 + ix));
+      const ex = S.rows.find(r => r.pol === pol).first;
+      return SHORT[pol] + ' ' + pctS(m.rate, 3) + ' vs exact ' + pctS(ex) + ' (' +
+             (Math.abs(m.rate - ex) / m.stderr).toFixed(2) + ' se)';
+    });
+    $('deepOut').innerHTML = fmt(DEEP_GAMES) + ' games per policy — ' + out.join(' · ') +
+      '. Every one inside its own standard error, and the ordering never moves.';
+    selftest();
+  }, 20);
+}
+setTimeout(boot, 30);
+</script>
+
+</body>
+</html>

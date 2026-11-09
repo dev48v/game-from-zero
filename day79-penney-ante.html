@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero &middot; Day 79 &mdash; Penney's ante</title>
+<style>
+  :root { --ink:#0f172a; --sub:#475569; --line:#e2e8f0; --bg:#f8fafc; --accent:#b45309; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Inter",system-ui,sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:1152px; margin:0 auto; padding:16px; }
+  @media (min-width:768px){ .wrap { padding:24px; } }
+  header { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .kicker { font-size:12px; font-weight:800; letter-spacing:.16em; color:var(--accent); margin:0 0 8px; }
+  h1 { font-size:19px; line-height:1.5; font-weight:900; margin:0 0 12px; }
+  @media (min-width:768px){ h1 { font-size:22px; } }
+  h2 { font-size:24px; font-weight:900; margin:0 0 8px; }
+  h3 { font-size:19px; font-weight:800; margin:20px 0 6px; }
+  p { line-height:1.6; margin:0 0 12px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+  .tabs button { font:inherit; font-size:14px; font-weight:600; padding:8px 20px; border:0; border-radius:8px; background:#f1f5f9; cursor:pointer; }
+  .tabs button.tab-active { background:#0f172a; color:#fff; }
+  .hidden { display:none; }
+  .card { background:#fff; border-radius:16px; box-shadow:0 1px 3px rgba(15,23,42,.12); padding:20px; min-width:0; }
+  .stack > * + * { margin-top:20px; }
+  .grid2 { display:grid; gap:20px; grid-template-columns:minmax(0,1fr); }
+  .grid3 { display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  .grid4 { display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:900px){ .grid2 { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+  @media (min-width:768px){ .grid3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+                            .grid4 { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+  .lbl { font-size:12px; font-weight:800; letter-spacing:.1em; color:#64748b; margin:0 0 8px; }
+  .big { font-size:24px; font-weight:900; font-variant-numeric:tabular-nums; margin:0; }
+  .note { font-size:12.5px; color:#475569; margin:8px 0 0; line-height:1.55; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:11.5px; overflow-x:auto; line-height:1.35; margin:0; white-space:pre; }
+  code { background:#f1f5f9; padding:1px 4px; border-radius:4px; font-size:.92em; }
+  .tblwrap { overflow-x:auto; }
+  table.num { border-collapse:collapse; width:100%; min-width:520px; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid var(--line); }
+  table.num tr.here td { background:#eef2ff; font-weight:700; }
+  table.num tr.dim td { color:#94a3b8; }
+  table.num td.txt { text-align:left; font-size:11.5px; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:99px; font-size:11px; font-weight:800; }
+  .good { background:#dcfce7; color:#166534; }
+  .stop { background:#fef3c7; color:#92400e; }
+  .bad { background:#fee2e2; color:#991b1b; }
+  .ok { color:#166534; font-weight:800; }
+  .warn { color:#991b1b; font-weight:800; }
+  select, input[type=range], input[type=text] { border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; font:inherit; font-size:13px; width:100%; margin-top:4px; background:#fff; }
+  input[type=range] { padding:0; }
+  label.f { font-size:13px; display:block; }
+  .callout { background:#eef2ff; border-left:4px solid var(--accent); padding:14px; border-radius:0 8px 8px 0; }
+  .callout p { font-size:13.5px; margin:0; }
+  a { color:var(--accent); }
+  .prose { max-width:760px; margin:0 auto; }
+  .bar { display:block; height:9px; background:#e0e7ff; border-radius:3px; position:relative; min-width:110px; }
+  .bar i { position:absolute; top:0; left:0; height:9px; background:var(--accent); border-radius:3px; }
+  .sc { font-size:12.5px; line-height:1.6; }
+  .sc div { display:flex; gap:8px; align-items:baseline; }
+  .sc .m { color:#94a3b8; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">GAMEFROMZERO &middot; DAY 79</p>
+    <h1>
+      &#129689; Penney&rsquo;s ante &mdash; you pick a length-3 pattern of heads and tails, then I pick
+      one <em>after seeing yours</em>. We flip a fair coin until one appears, and whoever&rsquo;s pattern
+      lands first wins. <strong>Nothing here is simulated and nothing is a float</strong>: each pair is
+      solved as an absorbing Markov chain over rationals with BigInt numerator and denominator, so
+      &ldquo;I win 2/3 of the time&rdquo; is <code>2n/3n</code> and not 0.6667 &mdash; and every answer is
+      cross-checked against Conway&rsquo;s leading-numbers algorithm, which shares no code with the chain.
+      &#128308; <strong>Whatever you pick, I have a reply that wins &mdash; and the worst case for me is
+      2/3.</strong> Pick HHH and I take <strong>7/8</strong>. There is no pattern you can choose that
+      leaves me under a two-to-one favourite. &#128308; The intuition that decides it for most people is
+      simply wrong: <strong>HHT, HTT, THH and TTH all wait exactly 8 flips on average</strong>, and yet
+      THH beats HHT <strong>3/4</strong> of the time. Which pattern appears soonest on its own says
+      nothing about which appears first when two are racing. &#128308; And the shape of the game changes
+      with the length in a way I did not expect: at length <strong>2</strong> the second player&rsquo;s
+      best reply wins exactly <strong>1/2</strong> &mdash; no advantage exists at all &mdash; while at
+      length <strong>4</strong> the relation becomes genuinely cyclic, with <strong>42</strong> triples
+      where A beats B beats C beats A. At length 3 there are <strong>none</strong>.
+    </h1>
+
+    <div class="tabs">
+      <button id="tabLook" class="tab-active" onclick="showTab('look')">&#128065; LOOK</button>
+      <button id="tabUnd" onclick="showTab('und')">&#129504; UNDERSTAND</button>
+      <button id="tabBuild" onclick="showTab('build')">&#128296; BUILD</button>
+    </div>
+  </div>
+</header>
+
+<main id="look" class="wrap stack">
+  <div class="callout">
+    <p>
+      <strong>Solved twice, by two routes that share no code.</strong> The chain enumerates the states of
+      the race &mdash; the longest suffix of the flips so far that is a prefix of either pattern &mdash;
+      and solves the linear system exactly over rationals. Conway&rsquo;s algorithm computes the odds
+      from four overlap numbers and nothing else. They agree on all 56 ordered pairs.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Pick yours. I will pick second.</h2>
+    <div class="grid2" style="margin:12px 0">
+      <label class="f">Your pattern
+        <select id="mine"></select>
+      </label>
+      <label class="f">Pattern length
+        <select id="len"><option>2</option><option selected>3</option><option>4</option></select>
+      </label>
+    </div>
+    <div class="grid4">
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">MY REPLY</p><p class="big" id="kReply">&mdash;</p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">I WIN</p><p class="big warn" id="kProb">&mdash;</p>
+        <p class="note" id="kProbDec"></p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">YOUR PATTERN ALONE WAITS</p><p class="big" id="kWait">&mdash;</p>
+        <p class="note">flips, on average</p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">MINE WAITS</p><p class="big" id="kWait2">&mdash;</p>
+        <p class="note" id="kWaitNote"></p></div>
+    </div>
+    <div class="tblwrap" style="margin-top:16px"><table class="num" id="tAgainst"></table></div>
+    <p class="note">
+      Every entry is the exact probability that the column pattern beats yours, as a fraction. The row is
+      read left to right: there is no arrangement of these numbers in which you are safe.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Every pattern, and its best answer</h2>
+    <div class="tblwrap"><table class="num" id="tBest"></table></div>
+  </div>
+</main>
+
+<main id="und" class="wrap stack hidden">
+  <div class="card">
+    <h3 style="margin-top:0">1. The number people decide on says nothing</h3>
+    <p>
+      Ask anyone which pattern to pick and they reason about how long it takes to appear. That is a real
+      quantity, it is computable exactly, and it is <em>not</em> what decides this game.
+    </p>
+    <div class="tblwrap"><table class="num" id="tWait"></table></div>
+    <p class="note">
+      <strong>Four patterns wait exactly 8 flips. They are not interchangeable.</strong> THH beats HHT
+      3/4 of the time, and both wait 8. Waiting time is a property of one pattern on its own; winning is
+      a property of the <em>pair</em>, and the two questions have different answers.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">2. Why going second is worth so much</h3>
+    <p>
+      The mechanism is overlap. Your pattern has to appear <em>somewhere</em> in the stream, and the two
+      flips before it are not free &mdash; they are part of the stream too. I choose a pattern that sits
+      on the front of yours, so that most of the ways your pattern could begin have already completed
+      mine.
+    </p>
+    <div class="tblwrap"><table class="num" id="tWhy"></table></div>
+    <p class="note">
+      Against <code>HHH</code>, the reply <code>THH</code> wins <strong>7/8</strong> for a reason you can
+      say in one sentence: unless the very first three flips are HHH, a T must appear before your run
+      completes &mdash; and that T, followed by the HH you need, <em>is</em> my pattern. The only
+      surviving case is the 1/8 where you win immediately.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">3. The length changes the game, and not gradually</h3>
+    <div class="tblwrap"><table class="num" id="tLen"></table></div>
+    <p class="note">
+      At length 2 the best reply wins exactly <strong>1/2</strong>: going second is worth <em>nothing</em>,
+      and the game does not exist. At length 3 the second player is guaranteed at least <strong>2/3</strong>
+      and the &ldquo;beats&rdquo; relation is a strict order &mdash; <strong>zero</strong> three-cycles.
+      At length 4 the guaranteed edge <em>drops</em> to <strong>9/14</strong> and the relation becomes
+      genuinely non-transitive, with <strong>42</strong> triples where A beats B beats C beats A.
+      &#128308; I expected the cycles at length 3, because that is where this game is always demonstrated.
+      They are not there.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">What is exact here, and what a fraction cannot tell you</h3>
+    <p class="note" style="margin-top:0">
+      Every probability is a rational solved from the chain and confirmed by Conway. What that does
+      <strong>not</strong> give you is variance: 2/3 is the probability of winning a single race, and
+      short sessions will not look like it. The page reports the exact odds of one game, which is the
+      quantity the choice actually turns on &mdash; not a claim about what any particular evening of
+      coin-flipping will look like.
+    </p>
+  </div>
+</main>
+
+<main id="build" class="wrap stack hidden">
+  <div class="card prose">
+    <h2>How it works</h2>
+    <p>
+      A race between two patterns is a Markov chain whose state is <em>the longest suffix of the flips so
+      far that is a prefix of either pattern</em>. That is a finite set, the two patterns are absorbing,
+      and the probability of reaching one before the other is a linear system.
+    </p>
+    <pre>// state after one more flip
+next = longestSuffixPrefix(state + c, a, b);
+
+// and the system, solved over rationals rather than floats
+x[i] = 1/2 * x[next(i,'H')] + 1/2 * x[next(i,'T')]</pre>
+    <p class="note">
+      Conway&rsquo;s algorithm gets the same answer from four numbers: for patterns X and Y, the leading
+      number XY sets bit <em>k</em> when the last <em>k</em> characters of X equal the first <em>k</em> of
+      Y. The odds that B beats A are then (AA &minus; AB) : (BB &minus; BA). No chain, no linear algebra
+      &mdash; which is exactly why it is worth checking against.
+    </p>
+    <h3>Self-check</h3>
+    <p class="note">
+      Runs on load. Several are <strong>controls</strong>: a claim that the second player has an edge
+      means nothing without the length where they do not.
+    </p>
+    <div class="sc" id="selfcheck"></div>
+    <p style="margin-top:20px"><a href="../gamefromzero.php">&larr; GameFromZero</a></p>
+  </div>
+</main>
+
+<script>
+// ===== ENGINE:BEGIN =====
+// ---------------------------------------------------------------------------
+// Penney's ante. You pick a length-3 pattern of heads and tails. I pick one
+// after seeing yours. We flip a fair coin until one of the patterns appears,
+// and whoever's pattern came up first wins.
+//
+// Everything here is EXACT. The waiting game between two patterns is solved as
+// an absorbing Markov chain over rationals with BigInt numerator and
+// denominator, so "I win with probability 2/3" is 2n/3n and not 0.6667. The
+// odds are also cross-checked against Conway's leading-numbers algorithm,
+// which shares no code with the chain.
+//
+// DOM-free, clock-free, Math.random-free.
+// ---------------------------------------------------------------------------
+
+function bgcd(a, b) {
+  a = a < 0n ? -a : a;
+  b = b < 0n ? -b : b;
+  while (b) { const t = a % b; a = b; b = t; }
+  return a;
+}
+
+class Frac {
+  constructor(n, d = 1n) {
+    if (d === 0n) throw new Error("zero denominator");
+    if (d < 0n) { n = -n; d = -d; }
+    const g = bgcd(n, d) || 1n;
+    this.n = n / g;
+    this.d = d / g;
+  }
+  static of(x) { return x instanceof Frac ? x : new Frac(BigInt(x)); }
+  add(o) { o = Frac.of(o); return new Frac(this.n * o.d + o.n * this.d, this.d * o.d); }
+  sub(o) { o = Frac.of(o); return new Frac(this.n * o.d - o.n * this.d, this.d * o.d); }
+  mul(o) { o = Frac.of(o); return new Frac(this.n * o.n, this.d * o.d); }
+  div(o) { o = Frac.of(o); if (o.n === 0n) throw new Error("divide by zero"); return new Frac(this.n * o.d, this.d * o.n); }
+  cmp(o) { o = Frac.of(o); const l = this.n * o.d, r = o.n * this.d; return l < r ? -1 : l > r ? 1 : 0; }
+  isZero() { return this.n === 0n; }
+  toNumber() { return Number(this.n) / Number(this.d); }
+  toString() { return this.d === 1n ? String(this.n) : this.n + "/" + this.d; }
+}
+const F0 = new Frac(0n), F1 = new Frac(1n), HALF = new Frac(1n, 2n);
+
+// --------------------------------------------------------------- the patterns
+function patterns(len = 3) {
+  const out = [];
+  for (let i = 0; i < 1 << len; i++) {
+    let s = "";
+    for (let b = len - 1; b >= 0; b--) s += (i >> b) & 1 ? "T" : "H";
+    out.push(s);
+  }
+  return out;
+}
+
+// --------------------------------------------------- exact rational linear solve
+function solveExact(M, b) {
+  const n = b.length;
+  const a = M.map((row, i) => row.map(Frac.of).concat([Frac.of(b[i])]));
+  for (let col = 0, row = 0; col < n && row < n; col++) {
+    let piv = -1;
+    for (let r = row; r < n; r++) if (!a[r][col].isZero()) { piv = r; break; }
+    if (piv < 0) return null;
+    [a[row], a[piv]] = [a[piv], a[row]];
+    const p = a[row][col];
+    for (let c = col; c <= n; c++) a[row][c] = a[row][c].div(p);
+    for (let r = 0; r < n; r++) {
+      if (r === row || a[r][col].isZero()) continue;
+      const f = a[r][col];
+      for (let c = col; c <= n; c++) a[r][c] = a[r][c].sub(f.mul(a[row][c]));
+    }
+    row++;
+  }
+  const x = new Array(n).fill(F0);
+  for (let r = 0; r < n; r++) {
+    let lead = -1;
+    for (let c = 0; c < n; c++) if (!a[r][c].isZero()) { lead = c; break; }
+    if (lead < 0) { if (!a[r][n].isZero()) return null; continue; }
+    x[lead] = a[r][n];
+  }
+  return x;
+}
+
+// ------------------------------------------------------- the waiting-game chain
+// State = the longest suffix of the flip history that is a prefix of either
+// pattern. Absorbing when it equals a whole pattern. Solved exactly.
+function longestSuffixPrefix(s, a, b) {
+  // the longest suffix of s that is a prefix of a or of b
+  let best = "";
+  for (let k = Math.min(s.length, Math.max(a.length, b.length)); k >= 0; k--) {
+    const suf = s.slice(s.length - k);
+    if (a.startsWith(suf) || b.startsWith(suf)) { best = suf; break; }
+  }
+  return best;
+}
+
+function states(a, b) {
+  const seen = new Set([""]);
+  const queue = [""];
+  while (queue.length) {
+    const s = queue.shift();
+    if (s === a || s === b) continue;
+    for (const c of ["H", "T"]) {
+      const next = longestSuffixPrefix(s + c, a, b);
+      if (!seen.has(next)) { seen.add(next); queue.push(next); }
+    }
+  }
+  return [...seen].sort((x, y) => x.length - y.length || (x < y ? -1 : 1));
+}
+
+// Probability that pattern `a` appears before pattern `b`, starting from empty.
+function winProb(a, b) {
+  if (a === b) throw new Error("identical patterns");
+  const S = states(a, b);
+  const idx = new Map(S.map((s, i) => [s, i]));
+  const n = S.length;
+  const M = [], rhs = [];
+  for (let i = 0; i < n; i++) {
+    const row = new Array(n).fill(0);
+    if (S[i] === a) { row[i] = 1; M.push(row); rhs.push(1); continue; }
+    if (S[i] === b) { row[i] = 1; M.push(row); rhs.push(0); continue; }
+    row[i] = 1;
+    const acc = new Array(n).fill(F0);
+    for (const c of ["H", "T"]) {
+      const j = idx.get(longestSuffixPrefix(S[i] + c, a, b));
+      acc[j] = acc[j].add(HALF);
+    }
+    const r = row.map((v, k) => Frac.of(v).sub(acc[k]));
+    M.push(r);
+    rhs.push(0);
+  }
+  const x = solveExact(M, rhs);
+  if (!x) throw new Error("singular chain for " + a + " vs " + b);
+  return x[idx.get("")];
+}
+
+// --------------------------------------------- Conway's algorithm, independently
+// The odds that B beats A are (AA - AB) : (BB - BA), where XY is the "leading
+// number": for each k, 1 if the last k characters of X equal the first k of Y.
+// Written from the rule, not derived from the chain above - two routes to the
+// same number is the point.
+function leading(x, y) {
+  let v = 0n;
+  const L = x.length;
+  for (let k = 1; k <= L; k++) {
+    if (x.slice(L - k) === y.slice(0, k)) v += 1n << BigInt(k - 1);
+  }
+  return v;
+}
+
+function conwayOdds(a, b) {
+  // odds in favour of b over a
+  const num = leading(a, a) - leading(a, b);
+  const den = leading(b, b) - leading(b, a);
+  return { num, den };
+}
+
+function conwayWinProb(a, b) {
+  // probability that a beats b
+  const o = conwayOdds(a, b);           // odds b : a  =  num : den
+  return new Frac(o.den, o.num + o.den);
+}
+
+// ---------------------------------------------------------------- the table
+function table(len = 3) {
+  const P = patterns(len);
+  const rows = P.map((a) => ({
+    pattern: a,
+    // the best reply, and what it wins
+    best: null,
+    vs: P.map((b) => (a === b ? null : winProb(b, a))),   // prob b beats a
+  }));
+  for (const r of rows) {
+    let bi = -1, bv = F0;
+    r.vs.forEach((p, i) => {
+      if (p && p.cmp(bv) > 0) { bv = p; bi = i; }
+    });
+    r.best = { reply: P[bi], prob: bv };
+  }
+  return { patterns: P, rows };
+}
+
+// Is the relation non-transitive? Find a cycle a < b < c < a.
+function cycles(len = 3) {
+  const P = patterns(len);
+  const beats = (x, y) => winProb(x, y).cmp(HALF) > 0;   // x beats y
+  const out = [];
+  for (const a of P) for (const b of P) for (const c of P) {
+    if (a === b || b === c || a === c) continue;
+    if (beats(a, b) && beats(b, c) && beats(c, a)) out.push([a, b, c]);
+  }
+  return out;
+}
+
+// The naive intuition: "the pattern that appears soonest on average is best".
+// Expected waiting time for one pattern alone, by Conway: sum of 2^k over the
+// k where the pattern overlaps itself. Exact, and an integer.
+function expectedWait(p) {
+  return leading(p, p) * 2n;   // in flips; 2^k weights doubled by the fair coin
+}
+
+const ENGINE = {
+  Frac, F0, F1, HALF, patterns, solveExact, longestSuffixPrefix, states,
+  winProb, leading, conwayOdds, conwayWinProb, table, cycles, expectedWait,
+};
+if (typeof module !== "undefined" && module.exports) module.exports = ENGINE;
+
+// ===== ENGINE:END =====
+</script>
+
+<script>
+function showTab(name) {
+  for (const t of ["look", "und", "build"]) document.getElementById(t).classList.toggle("hidden", t !== name);
+  document.getElementById("tabLook").classList.toggle("tab-active", name === "look");
+  document.getElementById("tabUnd").classList.toggle("tab-active", name === "und");
+  document.getElementById("tabBuild").classList.toggle("tab-active", name === "build");
+}
+const el = (id) => document.getElementById(id);
+function table(id, head, rows) {
+  el(id).innerHTML =
+    "<tr>" + head.map((h) => "<th>" + h + "</th>").join("") + "</tr>" +
+    rows.map((r) => "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + ">" +
+      r.cells.map((c, i) => "<td" + (i === 0 ? ' class="txt"' : "") + ">" + c + "</td>").join("") + "</tr>").join("");
+}
+function selfCheckPanel(fn) {
+  const out = []; let n = 0, bad = 0;
+  const t = (label, cond, detail = "") => {
+    n += 1; if (!cond) bad += 1;
+    out.push('<div><span class="' + (cond ? "ok" : "warn") + '">' + (cond ? "PASS" : "FAIL") +
+      '</span><span>' + label + '</span><span class="m">' + detail + "</span></div>");
+  };
+  fn(t);
+  el("selfcheck").innerHTML =
+    '<p class="note" style="margin:0 0 8px"><b class="' + (bad ? "warn" : "ok") + '">' +
+    (n - bad) + " of " + n + " checks pass</b>" + (bad ? " &mdash; " + bad + " FAILED" : "") + ".</p>" + out.join("");
+}
+
+const CACHE = new Map();
+function tableFor(len) {
+  if (!CACHE.has(len)) CACHE.set(len, ENGINE.table(len));
+  return CACHE.get(len);
+}
+const fr = (f) => f.toString();
+
+function fillMine() {
+  const len = parseInt(el("len").value, 10);
+  const T = tableFor(len);
+  el("mine").innerHTML = T.patterns.map((p) => '<option value="' + p + '">' + p + "</option>").join("");
+  render();
+}
+
+function render() {
+  const len = parseInt(el("len").value, 10);
+  const T = tableFor(len);
+  const mine = el("mine").value || T.patterns[0];
+  const row = T.rows.find((r) => r.pattern === mine);
+
+  el("kReply").textContent = row.best.reply;
+  el("kProb").textContent = fr(row.best.prob);
+  el("kProbDec").textContent = (row.best.prob.toNumber() * 100).toFixed(2) + "% of races";
+  el("kWait").textContent = String(ENGINE.expectedWait(mine));
+  el("kWait2").textContent = String(ENGINE.expectedWait(row.best.reply));
+  el("kWaitNote").innerHTML = ENGINE.expectedWait(mine) === ENGINE.expectedWait(row.best.reply)
+    ? "<b>the same wait</b> &mdash; and it still wins"
+    : ENGINE.expectedWait(row.best.reply) > ENGINE.expectedWait(mine)
+      ? "<b class=\"warn\">longer</b> on its own, and it still wins"
+      : "shorter on its own";
+
+  table("tAgainst", ["if I reply with"].concat(T.patterns.map((p) => p)),
+    [{
+      cells: ["it beats your " + mine].concat(T.patterns.map((p, i) => {
+        if (p === mine) return "&mdash;";
+        const v = row.vs[i];
+        const win = v.cmp(ENGINE.HALF) > 0;
+        return (win ? '<b class="warn">' : "<span>") + fr(v) + (win ? "</b>" : "</span>");
+      })),
+    }]);
+}
+el("len").addEventListener("change", fillMine);
+el("mine").addEventListener("change", render);
+fillMine();
+
+function renderBest() {
+  const T = tableFor(3);
+  table("tBest", ["you pick", "waits alone", "my reply", "it waits", "I win", "as a decimal"],
+    T.rows.map((r) => ({
+      cls: r.best.prob.cmp(new ENGINE.Frac(3n, 4n)) >= 0 ? "here" : "",
+      cells: [r.pattern, String(ENGINE.expectedWait(r.pattern)), "<b>" + r.best.reply + "</b>",
+        String(ENGINE.expectedWait(r.best.reply)), "<b>" + fr(r.best.prob) + "</b>",
+        r.best.prob.toNumber().toFixed(4)],
+    })));
+}
+renderBest();
+
+const T3 = tableFor(3);
+const WAITS = {};
+for (const p of T3.patterns) {
+  const w = String(ENGINE.expectedWait(p));
+  (WAITS[w] = WAITS[w] || []).push(p);
+}
+table("tWait", ["average wait, alone", "patterns with that wait", "do they behave the same?"],
+  Object.keys(WAITS).sort((a, b) => a - b).map((w) => {
+    const group = WAITS[w];
+    let note = "only one pattern";
+    if (group.length > 1) {
+      const a = group[0], b = group[1];
+      const p = ENGINE.winProb(b, a);
+      note = "<b>no</b> &mdash; " + b + " beats " + a + " " + fr(p) + " of the time";
+    }
+    return { cls: group.length > 2 ? "here" : "", cells: [w + " flips", group.join(", "), note] };
+  }));
+
+table("tWhy", ["your pattern", "my reply", "I win", "why, in one line"],
+  [
+    ["HHH", "THH", "unless the first three flips are HHH, a T arrives first - and that T plus your HH is my pattern"],
+    ["HHT", "THH", "your H H must be preceded by something; if it is ever a T, I have already won"],
+    ["HTH", "HHT", "the HT you need is the front of my pattern too, and my third flip is the commoner one"],
+    ["TTT", "HTT", "the mirror of HHH - unless it lands immediately, an H arrives and completes me first"],
+  ].map(([a, b, why]) => ({
+    cells: [a, "<b>" + b + "</b>", "<b>" + fr(ENGINE.winProb(b, a)) + "</b>", why],
+  })));
+
+table("tLen", ["pattern length", "patterns", "worst case for the second player", "three-cycles", "verdict"],
+  [2, 3, 4].map((L) => {
+    const T = tableFor(L);
+    let mn = null;
+    for (const r of T.rows) if (!mn || r.best.prob.cmp(mn) < 0) mn = r.best.prob;
+    const cyc = ENGINE.cycles(L).length;
+    return {
+      cls: L === 3 ? "here" : "",
+      cells: [L, T.patterns.length, "<b>" + fr(mn) + "</b>", cyc,
+        mn.cmp(ENGINE.HALF) === 0 ? '<span class="pill good">no advantage at all</span>'
+          : cyc === 0 ? '<span class="pill stop">an edge, and a strict order</span>'
+          : '<span class="pill bad">an edge, and genuinely cyclic</span>'],
+    };
+  }));
+
+selfCheckPanel((t) => {
+  t("1/3 + 1/6 is exactly 1/2",
+    new ENGINE.Frac(1n, 3n).add(new ENGINE.Frac(1n, 6n)).cmp(new ENGINE.Frac(1n, 2n)) === 0);
+  t("CONTROL: the same sum in floating point does not close", 0.1 + 0.2 !== 0.3);
+  t("a zero denominator throws", (() => { try { new ENGINE.Frac(1n, 0n); return false; } catch { return true; } })());
+
+  t("there are 8 patterns of length 3", T3.patterns.length === 8);
+  t("the chain and Conway agree on every ordered pair", (() => {
+    for (const a of T3.patterns) for (const b of T3.patterns) {
+      if (a === b) continue;
+      if (ENGINE.winProb(a, b).cmp(ENGINE.conwayWinProb(a, b)) !== 0) return false;
+    }
+    return true;
+  })(), "56 pairs, two independent methods");
+  t("a pattern beats its opponent exactly as often as it loses the other way", (() => {
+    for (const a of T3.patterns) for (const b of T3.patterns) {
+      if (a === b) continue;
+      if (ENGINE.winProb(a, b).add(ENGINE.winProb(b, a)).cmp(ENGINE.F1) !== 0) return false;
+    }
+    return true;
+  })(), "the two probabilities sum to exactly 1");
+
+  t("every pattern has a beating reply", T3.rows.every((r) => r.best.prob.cmp(ENGINE.HALF) > 0));
+  t("the worst case for the second player is 2/3", (() => {
+    let mn = null;
+    for (const r of T3.rows) if (!mn || r.best.prob.cmp(mn) < 0) mn = r.best.prob;
+    return mn.cmp(new ENGINE.Frac(2n, 3n)) === 0;
+  })());
+  t("HHH is beaten 7/8 of the time",
+    ENGINE.winProb("THH", "HHH").cmp(new ENGINE.Frac(7n, 8n)) === 0);
+  t("THH beats HHT exactly 3/4",
+    ENGINE.winProb("THH", "HHT").cmp(new ENGINE.Frac(3n, 4n)) === 0);
+  t("...and they wait the same 8 flips alone",
+    ENGINE.expectedWait("THH") === 8n && ENGINE.expectedWait("HHT") === 8n);
+  t("four patterns share a wait of 8", T3.patterns.filter((p) => ENGINE.expectedWait(p) === 8n).length === 4);
+  t("HHH waits 14 and TTT waits 14",
+    ENGINE.expectedWait("HHH") === 14n && ENGINE.expectedWait("TTT") === 14n);
+
+  t("CONTROL: at length 2 the second player has NO advantage", (() => {
+    const T = tableFor(2);
+    let mn = null;
+    for (const r of T.rows) if (!mn || r.best.prob.cmp(mn) < 0) mn = r.best.prob;
+    return mn.cmp(ENGINE.HALF) === 0;
+  })(), "best reply wins exactly 1/2");
+  t("at length 3 there are no three-cycles", ENGINE.cycles(3).length === 0);
+  t("at length 4 there are 42", ENGINE.cycles(4).length === 42);
+  t("a pattern never races itself", (() => {
+    try { ENGINE.winProb("HHH", "HHH"); return false; } catch { return true; }
+  })());
+});
+
+</script>
+</body>
+</html>

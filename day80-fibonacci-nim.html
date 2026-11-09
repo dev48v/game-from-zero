@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero &middot; Day 80 &mdash; Fibonacci nim</title>
+<style>
+  :root { --ink:#0f172a; --sub:#475569; --line:#e2e8f0; --bg:#f8fafc; --accent:#0e7490; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Inter",system-ui,sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:1152px; margin:0 auto; padding:16px; }
+  @media (min-width:768px){ .wrap { padding:24px; } }
+  header { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .kicker { font-size:12px; font-weight:800; letter-spacing:.16em; color:var(--accent); margin:0 0 8px; }
+  h1 { font-size:19px; line-height:1.5; font-weight:900; margin:0 0 12px; }
+  @media (min-width:768px){ h1 { font-size:22px; } }
+  h2 { font-size:24px; font-weight:900; margin:0 0 8px; }
+  h3 { font-size:19px; font-weight:800; margin:20px 0 6px; }
+  p { line-height:1.6; margin:0 0 12px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+  .tabs button { font:inherit; font-size:14px; font-weight:600; padding:8px 20px; border:0; border-radius:8px; background:#f1f5f9; cursor:pointer; }
+  .tabs button.tab-active { background:#0f172a; color:#fff; }
+  .hidden { display:none; }
+  .card { background:#fff; border-radius:16px; box-shadow:0 1px 3px rgba(15,23,42,.12); padding:20px; min-width:0; }
+  .stack > * + * { margin-top:20px; }
+  .grid2 { display:grid; gap:20px; grid-template-columns:minmax(0,1fr); }
+  .grid3 { display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  .grid4 { display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:900px){ .grid2 { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+  @media (min-width:768px){ .grid3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+                            .grid4 { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+  .lbl { font-size:12px; font-weight:800; letter-spacing:.1em; color:#64748b; margin:0 0 8px; }
+  .big { font-size:24px; font-weight:900; font-variant-numeric:tabular-nums; margin:0; }
+  .note { font-size:12.5px; color:#475569; margin:8px 0 0; line-height:1.55; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:11.5px; overflow-x:auto; line-height:1.35; margin:0; white-space:pre; }
+  code { background:#f1f5f9; padding:1px 4px; border-radius:4px; font-size:.92em; }
+  .tblwrap { overflow-x:auto; }
+  table.num { border-collapse:collapse; width:100%; min-width:520px; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid var(--line); }
+  table.num tr.here td { background:#ecfeff; font-weight:700; }
+  table.num tr.dim td { color:#94a3b8; }
+  table.num td.txt { text-align:left; font-size:11.5px; }
+  table.grid { border-collapse:collapse; width:100%; min-width:520px; }
+  table.grid td { padding:6px 4px; text-align:center; font-size:12px; font-variant-numeric:tabular-nums; border:1px solid var(--line); }
+  table.grid td.L { background:#cffafe; color:#155e75; font-weight:800; }
+  table.grid td.W { color:#94a3b8; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:99px; font-size:11px; font-weight:800; }
+  .good { background:#dcfce7; color:#166534; }
+  .stop { background:#fef3c7; color:#92400e; }
+  .bad { background:#fee2e2; color:#991b1b; }
+  .ok { color:#166534; font-weight:800; }
+  .warn { color:#991b1b; font-weight:800; }
+  select, input[type=range], input[type=text], input[type=number] { border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; font:inherit; font-size:13px; width:100%; margin-top:4px; background:#fff; }
+  input[type=range] { padding:0; }
+  label.f { font-size:13px; display:block; }
+  .callout { background:#ecfeff; border-left:4px solid var(--accent); padding:14px; border-radius:0 8px 8px 0; }
+  .callout p { font-size:13.5px; margin:0; }
+  a { color:var(--accent); }
+  .prose { max-width:760px; margin:0 auto; }
+  .bar { display:block; height:9px; background:#cffafe; border-radius:3px; position:relative; min-width:110px; }
+  .bar i { position:absolute; top:0; left:0; height:9px; background:var(--accent); border-radius:3px; }
+  .sc { font-size:12.5px; line-height:1.6; }
+  .sc div { display:flex; gap:8px; align-items:baseline; }
+  .sc .m { color:#94a3b8; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">GAMEFROMZERO &middot; DAY 80</p>
+    <h1>
+      &#129518; Fibonacci nim &mdash; one pile of <em>n</em> counters. You open by taking anything from 1 to
+      <em>n</em>&minus;1, never the whole pile, and after that nobody may take more than <strong>twice what
+      the opponent just took</strong>. Whoever lifts the last counter wins. The whole game collapses into a
+      single question about <em>n</em>, and nothing here is simulated: every position is solved by
+      definition over integers.
+      &#128308; <strong>The player who moves first loses exactly when <em>n</em> is a Fibonacci number.</strong>
+      Brute force over all <strong>45,150</strong> reachable <code>(remaining, cap)</code> states agrees with
+      an independently written Fibonacci test on all <strong>299</strong> piles from 2 to 300 &mdash;
+      <strong>zero</strong> disagreements, and the <strong>11</strong> losing piles are exactly 2, 3, 5, 8,
+      13, 21, 34, 55, 89, 144 and 233.
+      &#128308; <strong>The winning move is tiny, and greed loses outright.</strong> Across the 288 winnable
+      piles the correct opening take averages under <strong>4</strong> counters and never exceeds
+      <strong>2/7</strong> of the pile. Taking the maximum you are allowed wins <strong>0</strong> of them.
+      So does taking half.
+      &#128308; And the theorem is weaker than its usual statement: it hands you <em>a</em> winning move, not
+      <em>the</em> winning move. <strong>218 of the 288</strong> winnable piles have more than one winning
+      opening &mdash; up to three &mdash; and the extra ones need not be Fibonacci numbers at all. At
+      <em>n</em>&nbsp;=&nbsp;72 the winning opens are <strong>1, 4 and 17</strong>.
+    </h1>
+
+    <div class="tabs">
+      <button id="tabLook" class="tab-active" onclick="showTab('look')">&#128065; LOOK</button>
+      <button id="tabUnd" onclick="showTab('und')">&#129504; UNDERSTAND</button>
+      <button id="tabBuild" onclick="showTab('build')">&#128296; BUILD</button>
+    </div>
+  </div>
+</header>
+
+<main id="look" class="wrap stack">
+  <div class="callout">
+    <p>
+      <strong>Answered twice, by two routes that share no reasoning.</strong> The solver knows only the
+      rules: a position is a win if some legal take leaves the opponent in a loss. The Zeckendorf side
+      knows only arithmetic: every positive integer is a sum of non-consecutive Fibonacci numbers in
+      exactly one way. Neither is told about the other. They agree on every pile and on every state.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Name a pile. I will tell you who has already lost.</h2>
+    <div class="grid2" style="margin:12px 0">
+      <label class="f">Pile size <em>n</em>
+        <input type="number" id="pileN" min="2" max="300" step="1" value="20" />
+      </label>
+      <label class="f">or drag it
+        <input type="range" id="pileR" min="2" max="300" step="1" value="20" />
+      </label>
+    </div>
+    <div class="grid4">
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">FIRST PLAYER</p><p class="big" id="kVerdict">&mdash;</p>
+        <p class="note" id="kFib"></p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">OPENING TAKE</p><p class="big" id="kTake">&mdash;</p>
+        <p class="note" id="kTakeNote"></p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">ZECKENDORF</p><p class="big" id="kZeck" style="font-size:17px">&mdash;</p>
+        <p class="note" id="kZeckNote"></p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">WINNING OPENINGS</p><p class="big" id="kOpens">&mdash;</p>
+        <p class="note" id="kOpensNote"></p></div>
+    </div>
+    <div class="tblwrap" style="margin-top:16px"><table class="num" id="tPlay"></table></div>
+    <p class="note">
+      The winner always takes the smallest term of the Zeckendorf representation of whatever is left. The
+      player who is lost has no winning reply at all, so here they grab the largest amount the rule permits
+      &mdash; the most natural wrong instinct, and it never rescues them.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Every pile from 2 to 61</h2>
+    <div class="tblwrap"><table class="grid" id="tGrid"></table></div>
+    <p class="note">
+      Shaded cells are the piles where the player to move first has already lost. There are
+      <strong id="nGridLoss">&mdash;</strong> of them in this window, and the gaps between them grow
+      geometrically &mdash; which is the entire shape of the answer.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>The losing piles, and how thin they get</h2>
+    <div class="tblwrap"><table class="num" id="tLoss"></table></div>
+    <p class="note">
+      Every gap is the previous gap plus the one before it, because the gaps between Fibonacci numbers are
+      Fibonacci numbers. The share of piles that are lost keeps falling: it is the reason a large random
+      pile is almost always a win for whoever moves first.
+    </p>
+  </div>
+</main>
+
+<main id="und" class="wrap stack hidden">
+  <div class="card">
+    <h3 style="margin-top:0">1. <em>n</em> alone does not decide a position &mdash; the cap does</h3>
+    <p>
+      The headline is about the opening pile, where the cap is <em>n</em>&minus;1 and effectively
+      unlimited. Mid-game it is not. The real rule the solver discovers is about the <em>pair</em>: the
+      player to move wins if and only if the <strong>smallest Zeckendorf term of what remains</strong> is
+      within the cap.
+    </p>
+    <div class="tblwrap"><table class="num" id="tState"></table></div>
+    <p class="note">
+      Same 21 counters, four different caps, two different answers. 21 is a Fibonacci number, so its
+      Zeckendorf representation is the single term 21 &mdash; and until the cap reaches 21 the mover cannot
+      get there. That is exactly why a Fibonacci opening pile is lost: the opening cap is
+      <em>n</em>&minus;1, one short.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">2. Why the smallest term, and not the largest</h3>
+    <p>
+      Take the smallest Zeckendorf term <em>z</em> of <em>n</em>. What is left is <em>n</em>&minus;<em>z</em>,
+      whose own Zeckendorf representation is simply the remaining terms &mdash; so its smallest term is the
+      <em>next</em> Fibonacci up from <em>z</em>, and the non-consecutive rule means that is more than
+      twice <em>z</em>. The opponent's cap is exactly 2<em>z</em>. They cannot reach it. That gap is the
+      whole mechanism.
+    </p>
+    <div class="tblwrap"><table class="num" id="tWhy"></table></div>
+    <p class="note">
+      The last two columns are the thing to look at: the opponent is left needing strictly more than they
+      are allowed to take, every single time. Taking the <em>largest</em> term instead hands them a cap
+      they can use &mdash; measured in the next table.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">3. Openings that feel right and lose</h3>
+    <div class="tblwrap"><table class="num" id="tStrat"></table></div>
+    <p class="note">
+      &#128308; Every intuitive opening is worthless. Taking the maximum allowed, taking half, taking the
+      largest Fibonacci that fits, taking the largest Zeckendorf term &mdash; each of them wins
+      <strong>0</strong> piles. Only the smallest Zeckendorf term wins, and it wins every pile that is
+      winnable at all. &ldquo;Always take 1&rdquo; is the interesting near-miss: it is right whenever the
+      representation contains a 1, and wrong the rest of the time.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">4. A winning move, not the winning move</h3>
+    <div class="tblwrap"><table class="num" id="tMult"></table></div>
+    <p class="note">
+      &#128308; This is the part the textbook statement hides. Only <strong>70</strong> of the 288 winnable
+      piles have a unique winning opening; <strong>143</strong> have two and <strong>75</strong> have
+      three. The Zeckendorf term is always the <em>smallest</em> of them &mdash; a real, checkable property
+      &mdash; but the others have no tidy description and are usually not Fibonacci numbers at all. At
+      <em>n</em>&nbsp;=&nbsp;72 they are 4 and 17; at <em>n</em>&nbsp;=&nbsp;300 they are 12 and 67.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">What is exact here, and what it does not claim</h3>
+    <p class="note" style="margin-top:0">
+      Everything is integer arithmetic over a finite, fully enumerated state space, so there is no
+      tolerance, no sampling and no float anywhere in the engine. What that does <strong>not</strong> give
+      you is a proof: 299 piles agreeing is strong evidence for the theorem, it is not the theorem. The
+      page verifies the range it computes and says which range that is. Nor does it claim the strategy is
+      easy to play &mdash; finding the smallest Zeckendorf term of 300 counters at a table is exactly as
+      awkward as it sounds.
+    </p>
+  </div>
+</main>
+
+<main id="build" class="wrap stack hidden">
+  <div class="card prose">
+    <h2>How it works</h2>
+    <p>
+      The solver knows the rules and nothing else. A state is <code>(remaining, cap)</code>: how many
+      counters are left, and the most the player to move may take. It is a win if <em>some</em> legal take
+      either finishes the pile or leaves the opponent in a loss.
+    </p>
+    <pre>// the definition, memoised - no theory in here at all
+function solveState(rem, cap) {
+  cap = Math.min(cap, rem);
+  for (let k = 1; k &lt;= cap; k++) {
+    if (k === rem) return true;              // took the last counter
+    if (!solveState(rem - k, 2 * k)) return true;
+  }
+  return false;
+}
+firstPlayerWins(n) = solveState(n, n - 1)    // never the whole pile</pre>
+    <p class="note">
+      The Zeckendorf side is written from arithmetic and never looks at the game. Greedily subtract the
+      largest Fibonacci that fits; the terms that come out are automatically non-consecutive, and the
+      representation turns out to be unique &mdash; which the page brute-forces rather than assumes, by
+      enumerating every non-consecutive subset that sums to <em>n</em>.
+    </p>
+    <pre>// independent of the solver in every way
+function zeckendorf(n) {
+  const out = [];
+  let i = FIBS.length - 1;
+  while (n &gt; 0) {
+    while (FIBS[i] &gt; n) i--;
+    out.push(FIBS[i]);
+    n -= FIBS[i];
+  }
+  return out;                                // descending, non-consecutive
+}</pre>
+    <p class="note">
+      The comparison is then one line per pile. The constructive half is not asserted but
+      <em>replayed</em>: from every winning position, play the smallest Zeckendorf term and ask the solver
+      whether the opponent is now lost. If the strategy were wrong anywhere, the solver &mdash; which has
+      never heard of Fibonacci &mdash; would be the one to say so.
+    </p>
+    <pre>// the strategy is demonstrated, not claimed
+for (const n of winnablePiles) {
+  const z = smallestZeckTerm(n);
+  assert(z &lt;= n - 1);                        // legal opening
+  assert(solveState(n - z, 2 * z) === false); // opponent is now lost
+}</pre>
+    <h3>Self-check</h3>
+    <p class="note">
+      Runs on load, over the full range 2&ndash;300. Several are <strong>controls</strong>: a claim that a
+      strategy wins means nothing without the strategies that do not.
+    </p>
+    <div class="sc" id="selftest"></div>
+    <p style="margin-top:20px"><a href="../gamefromzero.php">&larr; GameFromZero</a></p>
+  </div>
+</main>
+
+<script>
+// ===== ENGINE:BEGIN =====
+// ---------------------------------------------------------------------------
+// Fibonacci nim. One pile of n counters. The first player takes 1..n-1 - never
+// the whole pile. After that a player may take 1..2*(what the opponent just
+// took). Whoever takes the last counter wins.
+//
+// Two independent halves live here and are never allowed to talk to each other:
+//
+//   1. solveState(rem, cap) - the game solved from the DEFINITION by memoised
+//      search. It knows the rules and nothing else. No Fibonacci anywhere.
+//   2. zeckendorf(n) - every positive integer as a sum of non-consecutive
+//      Fibonacci numbers, by greedy subtraction. It knows arithmetic and
+//      nothing about the game.
+//
+// A third part compares them, and replays the Zeckendorf strategy back through
+// the solver so that the strategy is demonstrated rather than asserted.
+//
+// DOM-free, clock-free, Math.random-free, float-free.
+// ---------------------------------------------------------------------------
+
+// ------------------------------------------------------------- Fibonacci side
+// The sequence used for Zeckendorf starts 1, 2, 3, 5, 8, ... - the duplicate
+// leading 1 is dropped, because 1 + 1 would give some numbers two
+// representations and uniqueness is the property the page relies on.
+function fibsUpTo(limit) {
+  const out = [1, 2];
+  while (out[out.length - 1] <= limit) out.push(out[out.length - 1] + out[out.length - 2]);
+  return out;
+}
+
+const FIBS = fibsUpTo(1000000);
+
+function isFibonacci(n) {
+  if (n < 1) return false;
+  for (let i = 0; i < FIBS.length; i++) {
+    if (FIBS[i] === n) return true;
+    if (FIBS[i] > n) return false;
+  }
+  return false;
+}
+
+// Greedy: repeatedly subtract the largest Fibonacci that fits. The terms come
+// out descending, and two of them can never be adjacent in the sequence.
+function zeckendorf(n) {
+  if (!Number.isInteger(n) || n < 1) throw new Error("zeckendorf needs a positive integer");
+  const out = [];
+  let i = FIBS.length - 1;
+  let left = n;
+  while (left > 0) {
+    while (FIBS[i] > left) i--;
+    out.push(FIBS[i]);
+    left -= FIBS[i];
+    i--;
+  }
+  return out;
+}
+
+function smallestZeckTerm(n) {
+  const terms = zeckendorf(n);
+  return terms[terms.length - 1];
+}
+
+function largestZeckTerm(n) {
+  return zeckendorf(n)[0];
+}
+
+// Position of a Fibonacci number in FIBS, so the non-consecutive property can
+// be checked directly rather than trusted from the greedy loop.
+function fibIndex(f) {
+  return FIBS.indexOf(f);
+}
+
+// Every way of writing n as a sum of distinct non-consecutive Fibonacci
+// numbers. Exponential, so only for small n - it exists to DEMONSTRATE
+// uniqueness rather than to assume it.
+function allZeckRepresentations(n) {
+  const usable = FIBS.filter(function (f) { return f <= n; });
+  const found = [];
+  (function walk(hi, left, picked, lastIdx) {
+    if (left === 0) { found.push(picked.slice()); return; }
+    for (let j = hi; j >= 0; j--) {
+      if (usable[j] > left) continue;
+      if (lastIdx >= 0 && j === lastIdx - 1) continue;   // adjacent - not allowed
+      picked.push(usable[j]);
+      walk(j - 1, left - usable[j], picked, j);
+      picked.pop();
+    }
+  })(usable.length - 1, n, [], -1);
+  return found;
+}
+
+// --------------------------------------------------------------- solver side
+// A state is (remaining, cap): the mover may take 1..min(cap, remaining).
+// Taking the last counter wins outright. Otherwise the mover wins if some take
+// leaves the opponent in a losing state. Memoised on the canonical pair.
+function makeSolver() {
+  const memo = new Map();
+  function solveState(rem, cap) {
+    if (rem <= 0) return false;
+    const c = cap < rem ? cap : rem;
+    if (c < 1) return false;
+    const key = rem * 4096 + c;
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    let win = false;
+    for (let k = 1; k <= c; k++) {
+      if (k === rem) { win = true; break; }
+      if (!solveState(rem - k, 2 * k)) { win = true; break; }
+    }
+    memo.set(key, win);
+    return win;
+  }
+  return {
+    solveState: solveState,
+    // the opening position: the whole pile may not be taken
+    firstPlayerWins: function (n) {
+      if (!Number.isInteger(n) || n < 2) throw new Error("the game needs at least 2 counters");
+      return solveState(n, n - 1);
+    },
+    // every legal opening take that wins, found by the solver alone
+    winningOpenings: function (n) {
+      const out = [];
+      for (let k = 1; k <= n - 1; k++) if (!solveState(n - k, 2 * k)) out.push(k);
+      return out;
+    },
+    winningTakes: function (rem, cap) {
+      const out = [];
+      const c = cap < rem ? cap : rem;
+      for (let k = 1; k <= c; k++) {
+        if (k === rem) { out.push(k); continue; }
+        if (!solveState(rem - k, 2 * k)) out.push(k);
+      }
+      return out;
+    },
+    size: function () { return memo.size; }
+  };
+}
+
+const SOLVER = makeSolver();
+
+// ------------------------------------------------------------ the comparison
+// For every pile in [lo, hi]: does the solver's verdict match "n is Fibonacci"?
+// The identity is "the first player LOSES iff n is Fibonacci", so a pile where
+// firstWins and isFibonacci agree in sign is a MISMATCH.
+function identityCensus(lo, hi) {
+  const losing = [];
+  const winning = [];
+  const mismatches = [];
+  for (let n = lo; n <= hi; n++) {
+    const firstWins = SOLVER.firstPlayerWins(n);
+    const fib = isFibonacci(n);
+    if (firstWins) winning.push(n); else losing.push(n);
+    if (firstWins === fib) mismatches.push(n);
+  }
+  return { lo: lo, hi: hi, piles: hi - lo + 1, losing: losing, winning: winning, mismatches: mismatches };
+}
+
+// The general rule, over the whole state space rather than just the openings:
+// the mover wins iff the smallest Zeckendorf term of `rem` fits under the cap.
+function stateCensus(maxRem) {
+  let states = 0, losing = 0, mismatches = 0;
+  for (let rem = 1; rem <= maxRem; rem++) {
+    const z = smallestZeckTerm(rem);
+    for (let cap = 1; cap <= rem; cap++) {
+      states++;
+      const w = SOLVER.solveState(rem, cap);
+      if (!w) losing++;
+      if (w !== (z <= cap)) mismatches++;
+    }
+  }
+  return { states: states, losing: losing, winning: states - losing, mismatches: mismatches };
+}
+
+// ---------------------------------------------------- the strategy, REPLAYED
+// From a winning position, play the smallest Zeckendorf term and ask the solver
+// whether the opponent is now lost. Nothing is asserted; the solver answers.
+function strategyAudit(lo, hi) {
+  let checked = 0, immediate = 0, broken = 0;
+  const breaks = [];
+  for (let n = lo; n <= hi; n++) {
+    if (!SOLVER.firstPlayerWins(n)) continue;
+    const z = smallestZeckTerm(n);
+    checked++;
+    if (z > n - 1) { broken++; breaks.push([n, z, "move is not legal"]); continue; }
+    if (z === n) { immediate++; continue; }
+    if (SOLVER.solveState(n - z, 2 * z)) { broken++; breaks.push([n, z, "opponent still wins"]); }
+  }
+  return { checked: checked, immediate: immediate, broken: broken, breaks: breaks };
+}
+
+// A full game. The winner plays the smallest Zeckendorf term of what is left.
+// The loser, having no winning reply at all, takes the most the rule allows -
+// the natural greedy instinct. Deterministic, so the line is reproducible.
+function playOut(n) {
+  if (!Number.isInteger(n) || n < 2) throw new Error("the game needs at least 2 counters");
+  const moves = [];
+  let rem = n, cap = n - 1, mover = 1;
+  let guard = 0;
+  while (rem > 0) {
+    if (++guard > 4 * n + 8) throw new Error("play did not terminate");
+    const c = cap < rem ? cap : rem;
+    const z = smallestZeckTerm(rem);
+    let take, why;
+    if (z <= c) { take = z; why = "smallest Zeckendorf term of " + rem; }
+    else { take = c; why = "lost - takes the maximum allowed"; }
+    moves.push({
+      ply: moves.length + 1, mover: mover, rem: rem, cap: c, take: take,
+      after: rem - take, why: why, winning: z <= c
+    });
+    rem -= take;
+    cap = 2 * take;
+    mover = mover === 1 ? 2 : 1;
+  }
+  return { n: n, moves: moves, winner: moves[moves.length - 1].mover };
+}
+
+// --------------------------------------------- control strategies that lose
+// Deliberately plausible openings, so that "the Zeckendorf move wins" has
+// something to be measured against. Returns how many piles in [lo, hi] each one
+// actually wins, judged by the solver.
+function openingScore(lo, hi, choose) {
+  let wins = 0, legal = 0;
+  for (let n = lo; n <= hi; n++) {
+    const k = choose(n);
+    if (!(k >= 1 && k <= n - 1)) continue;
+    legal++;
+    if (!SOLVER.solveState(n - k, 2 * k)) wins++;
+  }
+  return { wins: wins, legal: legal };
+}
+
+const OPENINGS = {
+  smallestZeck: function (n) { return smallestZeckTerm(n); },
+  largestZeck: function (n) { return largestZeckTerm(n); },
+  maximum: function (n) { return n - 1; },
+  half: function (n) { return Math.floor(n / 2); },
+  one: function (n) { return 1; },
+  biggestFibThatFits: function (n) {
+    let best = 1;
+    for (let i = 0; i < FIBS.length; i++) if (FIBS[i] <= n - 1) best = FIBS[i];
+    return best;
+  }
+};
+
+// -------------------------------------------------- multiplicity of openings
+function openingMultiplicity(lo, hi) {
+  const dist = {};
+  let total = 0, zeckIsSmallest = 0, zeckWins = 0, maxOpens = 0;
+  const examples = [];
+  for (let n = lo; n <= hi; n++) {
+    const opens = SOLVER.winningOpenings(n);
+    dist[opens.length] = (dist[opens.length] || 0) + 1;
+    if (opens.length > maxOpens) maxOpens = opens.length;
+    if (opens.length === 0) continue;
+    total++;
+    const z = smallestZeckTerm(n);
+    if (opens[0] === z) zeckIsSmallest++;
+    if (opens.indexOf(z) !== -1) zeckWins++;
+    if (opens.length >= 3 && examples.length < 6) examples.push({ n: n, opens: opens });
+  }
+  return {
+    dist: dist, total: total, maxOpens: maxOpens,
+    zeckIsSmallest: zeckIsSmallest, zeckWins: zeckWins, examples: examples
+  };
+}
+
+// ------------------------------------------------------------- opening sizes
+// Sums, extremes and the largest take/pile ratio - the ratio compared with
+// cross-multiplied integers so that no float ever decides anything.
+function openingSizes(lo, hi) {
+  let count = 0, sum = 0, max = 0, maxAt = 0, ones = 0;
+  let ratioNum = 0, ratioDen = 1, ratioAt = 0;
+  for (let n = lo; n <= hi; n++) {
+    if (!SOLVER.firstPlayerWins(n)) continue;
+    const z = smallestZeckTerm(n);
+    count++;
+    sum += z;
+    if (z === 1) ones++;
+    if (z > max) { max = z; maxAt = n; }
+    if (z * ratioDen > ratioNum * n) { ratioNum = z; ratioDen = n; ratioAt = n; }
+  }
+  return {
+    count: count, sum: sum, max: max, maxAt: maxAt, ones: ones,
+    ratioNum: ratioNum, ratioDen: ratioDen, ratioAt: ratioAt
+  };
+}
+
+const ENGINE = {
+  FIBS: FIBS, fibsUpTo: fibsUpTo, isFibonacci: isFibonacci,
+  zeckendorf: zeckendorf, smallestZeckTerm: smallestZeckTerm, largestZeckTerm: largestZeckTerm,
+  fibIndex: fibIndex, allZeckRepresentations: allZeckRepresentations,
+  makeSolver: makeSolver, SOLVER: SOLVER,
+  identityCensus: identityCensus, stateCensus: stateCensus, strategyAudit: strategyAudit,
+  playOut: playOut, openingScore: openingScore, OPENINGS: OPENINGS,
+  openingMultiplicity: openingMultiplicity, openingSizes: openingSizes
+};
+if (typeof module !== "undefined" && module.exports) module.exports = ENGINE;
+
+// ===== ENGINE:END =====
+</script>
+
+<script>
+function showTab(name) {
+  for (const t of ["look", "und", "build"]) document.getElementById(t).classList.toggle("hidden", t !== name);
+  document.getElementById("tabLook").classList.toggle("tab-active", name === "look");
+  document.getElementById("tabUnd").classList.toggle("tab-active", name === "und");
+  document.getElementById("tabBuild").classList.toggle("tab-active", name === "build");
+}
+const el = (id) => document.getElementById(id);
+function table(id, head, rows) {
+  el(id).innerHTML =
+    "<tr>" + head.map((h) => "<th>" + h + "</th>").join("") + "</tr>" +
+    rows.map((r) => "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + ">" +
+      r.cells.map((c, i) => "<td" + (i === 0 ? ' class="txt"' : "") + ">" + c + "</td>").join("") + "</tr>").join("");
+}
+function selfCheckPanel(fn) {
+  const out = []; let n = 0, bad = 0;
+  const t = (label, cond, detail = "") => {
+    n += 1; if (!cond) bad += 1;
+    out.push('<div><span class="' + (cond ? "ok" : "warn") + '">' + (cond ? "PASS" : "FAIL") +
+      '</span><span>' + label + '</span><span class="m">' + detail + "</span></div>");
+  };
+  fn(t);
+  el("selftest").innerHTML =
+    '<p class="note" style="margin:0 0 8px"><b class="' + (bad ? "warn" : "ok") + '">' +
+    (n - bad) + " of " + n + " checks pass</b>" + (bad ? " &mdash; " + bad + " FAILED" : "") + ".</p>" + out.join("");
+}
+
+const LO = 2, HI = 300;
+const CENSUS = ENGINE.identityCensus(LO, HI);
+const STATES = ENGINE.stateCensus(HI);
+const AUDIT = ENGINE.strategyAudit(LO, HI);
+const MULT = ENGINE.openingMultiplicity(LO, HI);
+const SIZES = ENGINE.openingSizes(LO, HI);
+const SCORE = (key) => ENGINE.openingScore(LO, HI, ENGINE.OPENINGS[key]).wins;
+
+// ------------------------------------------------------------------ the picker
+function render() {
+  const n = Math.max(LO, Math.min(HI, parseInt(el("pileN").value, 10) || LO));
+  el("pileR").value = String(n);
+  const wins = ENGINE.SOLVER.firstPlayerWins(n);
+  const fib = ENGINE.isFibonacci(n);
+  const zk = ENGINE.zeckendorf(n);
+  const opens = ENGINE.SOLVER.winningOpenings(n);
+
+  el("kVerdict").innerHTML = wins ? '<span class="ok">WINS</span>' : '<span class="warn">LOSES</span>';
+  el("kFib").innerHTML = fib
+    ? "<b>" + n + " is Fibonacci</b> &mdash; F" + (ENGINE.fibIndex(n) + 2) + " in 1, 2, 3, 5, 8, &hellip;"
+    : n + " is not a Fibonacci number";
+  el("kTake").textContent = wins ? String(ENGINE.smallestZeckTerm(n)) : "—";
+  el("kTakeNote").textContent = wins
+    ? "leaving " + (n - ENGINE.smallestZeckTerm(n)) + " under a cap of " + (2 * ENGINE.smallestZeckTerm(n))
+    : "no opening take wins";
+  el("kZeck").textContent = zk.join(" + ");
+  el("kZeckNote").textContent = zk.length === 1 ? "a single term - Fibonacci" : zk.length + " terms, none adjacent";
+  el("kOpens").textContent = String(opens.length);
+  el("kOpensNote").textContent = opens.length ? opens.join(", ") : "the position is already lost";
+
+  const g = ENGINE.playOut(n);
+  table("tPlay", ["ply", "to move", "on the table", "may take up to", "takes", "leaves", "why"],
+    g.moves.map((m) => ({
+      cls: m.mover === g.winner ? "here" : "dim",
+      cells: [m.ply, "player " + m.mover, m.rem, m.cap, "<b>" + m.take + "</b>", m.after, m.why]
+    })).concat([{
+      cls: "",
+      cells: ["&mdash;", "<b>player " + g.winner + " wins</b>", 0, "&mdash;", "&mdash;", "&mdash;",
+        "took the last counter on ply " + g.moves.length]
+    }]));
+}
+el("pileN").addEventListener("input", render);
+el("pileR").addEventListener("input", () => { el("pileN").value = el("pileR").value; render(); });
+render();
+
+// --------------------------------------------------------------------- the grid
+{
+  const rows = [];
+  let lost = 0;
+  for (let base = 2; base <= 61; base += 10) {
+    const cells = [];
+    for (let n = base; n < base + 10 && n <= 61; n++) {
+      const w = ENGINE.SOLVER.firstPlayerWins(n);
+      if (!w) lost++;
+      cells.push('<td class="' + (w ? "W" : "L") + '">' + n + "</td>");
+    }
+    rows.push("<tr>" + cells.join("") + "</tr>");
+  }
+  el("tGrid").innerHTML = rows.join("");
+  el("nGridLoss").textContent = String(lost);
+}
+
+// ------------------------------------------------------------- the losing piles
+{
+  const L = CENSUS.losing;
+  table("tLoss", ["losing pile", "is it Fibonacci?", "gap from the previous", "piles up to here", "share that lose"],
+    L.map((n, i) => ({
+      cls: "here",
+      cells: [n,
+        ENGINE.isFibonacci(n) ? '<span class="pill good">yes</span>' : '<span class="pill bad">NO</span>',
+        i === 0 ? "&mdash;" : n - L[i - 1], n - 1,
+        ((100 * (i + 1)) / (n - 1)).toFixed(2) + "%"]
+    })));
+}
+
+// ------------------------------------------------------------- state-level table
+table("tState", ["remaining", "cap", "smallest Zeckendorf term", "does it fit under the cap?", "solver says"],
+  [[21, 8], [21, 13], [21, 20], [21, 21], [20, 1], [20, 2], [34, 33], [7, 2], [7, 4]].map(([r, c]) => {
+    const z = ENGINE.smallestZeckTerm(r);
+    const w = ENGINE.SOLVER.solveState(r, c);
+    return {
+      cls: r === 21 ? "here" : "",
+      cells: [r, c, z, z <= c ? "yes" : "<b>no</b>",
+        w ? '<span class="pill good">mover wins</span>' : '<span class="pill bad">mover loses</span>']
+    };
+  }));
+
+// ------------------------------------------------------------------- why table
+table("tWhy", ["pile", "Zeckendorf", "take", "leaves", "opponent's cap", "opponent needs", "can they?"],
+  [10, 12, 17, 33, 100, 232].map((n) => {
+    const zk = ENGINE.zeckendorf(n);
+    const z = zk[zk.length - 1];
+    const rest = n - z;
+    const need = rest > 0 ? ENGINE.smallestZeckTerm(rest) : 0;
+    return {
+      cls: "",
+      cells: [n, zk.join(" + "), "<b>" + z + "</b>", rest, 2 * z, need,
+        need <= 2 * z ? '<span class="pill bad">yes</span>' : '<span class="pill good">no &mdash; lost</span>']
+    };
+  }));
+
+// ------------------------------------------------------------- strategy table
+table("tStrat", ["opening rule", "piles it wins", "of the 288 winnable", "as a bar", "what it is"],
+  [
+    ["smallest Zeckendorf term", "smallestZeck", "the theorem's move"],
+    ["largest Zeckendorf term", "largestZeck", "the same arithmetic, read from the wrong end"],
+    ["take the maximum allowed", "maximum", "CONTROL: pure greed"],
+    ["take half the pile", "half", "CONTROL: the instinctive split"],
+    ["take the largest Fibonacci that fits", "biggestFibThatFits", "CONTROL: Fibonacci, but not Zeckendorf"],
+    ["always take 1", "one", "CONTROL: minimal commitment"]
+  ].map(([label, key, why]) => {
+    const wins = SCORE(key);
+    const pct = (100 * wins) / CENSUS.winning.length;
+    return {
+      cls: wins === CENSUS.winning.length ? "here" : "",
+      cells: [label, "<b>" + wins + "</b>", pct.toFixed(1) + "%",
+        '<span class="bar"><i style="width:' + pct.toFixed(1) + '%"></i></span>', why]
+    };
+  }));
+
+// ---------------------------------------------------------- multiplicity table
+{
+  const keys = Object.keys(MULT.dist).map(Number).sort((a, b) => a - b);
+  table("tMult", ["winning openings", "how many piles", "share of 2..300", "first example", "its winning opens"],
+    keys.map((k) => {
+      let ex = null;
+      for (let n = LO; n <= HI && ex === null; n++) {
+        if (ENGINE.SOLVER.winningOpenings(n).length === k) ex = n;
+      }
+      const opens = ex === null ? [] : ENGINE.SOLVER.winningOpenings(ex);
+      return {
+        cls: k === 0 ? "here" : "",
+        cells: [k === 0 ? "none &mdash; the pile is lost" : k, MULT.dist[k],
+          ((100 * MULT.dist[k]) / CENSUS.piles).toFixed(1) + "%",
+          ex === null ? "&mdash;" : "n = " + ex,
+          opens.length ? opens.join(", ") : "&mdash;"]
+      };
+    }));
+}
+
+// --------------------------------------------------------------- the self-check
+selfCheckPanel((t) => {
+  // --- the centrepiece
+  t("THE IDENTITY: over 2..300 the first player loses exactly when n is Fibonacci",
+    CENSUS.mismatches.length === 0,
+    CENSUS.piles + " piles, " + CENSUS.losing.length + " losses, 0 mismatches");
+  t("the losing piles are exactly the Fibonacci numbers in range",
+    CENSUS.losing.every((n) => ENGINE.isFibonacci(n)) &&
+    CENSUS.losing.length === ENGINE.FIBS.filter((f) => f >= LO && f <= HI).length,
+    CENSUS.losing.join(", "));
+  t("and no winning pile is Fibonacci",
+    CENSUS.winning.every((n) => !ENGINE.isFibonacci(n)), CENSUS.winning.length + " winnable piles");
+
+  // --- the general state rule
+  t("the same rule holds over the WHOLE state space, not only the openings",
+    STATES.mismatches === 0,
+    STATES.states + " states, " + STATES.losing + " losing, 0 mismatches");
+  t("a Fibonacci pile becomes winnable the moment the cap reaches it",
+    ENGINE.SOLVER.solveState(21, 21) === true && ENGINE.SOLVER.solveState(21, 20) === false,
+    "cap 20 loses, cap 21 wins");
+
+  // --- Zeckendorf, on its own terms
+  t("Zeckendorf terms sum back to n for every n in 1..300", (() => {
+    for (let n = 1; n <= HI; n++) if (ENGINE.zeckendorf(n).reduce((a, b) => a + b, 0) !== n) return false;
+    return true;
+  })());
+  t("every Zeckendorf term is itself a Fibonacci number", (() => {
+    for (let n = 1; n <= HI; n++) for (const f of ENGINE.zeckendorf(n)) if (!ENGINE.isFibonacci(f)) return false;
+    return true;
+  })());
+  t("no two terms are consecutive Fibonaccis", (() => {
+    for (let n = 1; n <= HI; n++) {
+      const z = ENGINE.zeckendorf(n);
+      for (let i = 1; i < z.length; i++) if (ENGINE.fibIndex(z[i - 1]) - ENGINE.fibIndex(z[i]) < 2) return false;
+    }
+    return true;
+  })());
+  t("terms come out strictly decreasing, so none repeats", (() => {
+    for (let n = 1; n <= HI; n++) {
+      const z = ENGINE.zeckendorf(n);
+      for (let i = 1; i < z.length; i++) if (z[i] >= z[i - 1]) return false;
+    }
+    return true;
+  })());
+  t("the representation is UNIQUE - brute-forced, not assumed", (() => {
+    for (let n = 1; n <= 90; n++) if (ENGINE.allZeckRepresentations(n).length !== 1) return false;
+    return true;
+  })(), "every non-consecutive subset enumerated for 1..90");
+  t("a Fibonacci number is its own single term", (() => {
+    for (const f of ENGINE.FIBS.filter((x) => x <= HI)) {
+      const z = ENGINE.zeckendorf(f);
+      if (z.length !== 1 || z[0] !== f) return false;
+    }
+    return true;
+  })());
+
+  // --- the strategy, replayed against the solver
+  t("CONSTRUCTIVE: the smallest Zeckendorf term always lands the opponent in a loss",
+    AUDIT.broken === 0 && AUDIT.checked === CENSUS.winning.length,
+    AUDIT.checked + " winning piles replayed through the solver");
+  t("that move is always a legal opening on a winning pile",
+    CENSUS.winning.every((n) => ENGINE.smallestZeckTerm(n) <= n - 1));
+  t("the Zeckendorf move is the smallest winning opening, every time",
+    MULT.zeckIsSmallest === MULT.total, MULT.total + " winnable piles");
+
+  // --- controls
+  t("CONTROL: taking the maximum allowed wins nothing", SCORE("maximum") === 0);
+  t("CONTROL: taking half the pile wins nothing", SCORE("half") === 0);
+  t("CONTROL: the LARGEST Zeckendorf term wins nothing", SCORE("largestZeck") === 0,
+    "same arithmetic, wrong end");
+  t("CONTROL: the largest Fibonacci that fits wins nothing", SCORE("biggestFibThatFits") === 0);
+  t("CONTROL: always taking 1 wins some piles but not all",
+    SCORE("one") > 0 && SCORE("one") < CENSUS.winning.length,
+    SCORE("one") + " of " + CENSUS.winning.length);
+  t("and the smallest Zeckendorf term wins every one of them",
+    SCORE("smallestZeck") === CENSUS.winning.length);
+
+  // --- the multiplicity finding
+  t("most winnable piles have MORE than one winning opening",
+    MULT.total - (MULT.dist[1] || 0) > 0,
+    (MULT.total - (MULT.dist[1] || 0)) + " of " + MULT.total + " have two or three");
+  t("no pile in range has more than three winning openings", MULT.maxOpens === 3);
+  t("the extra winning openings need not be Fibonacci at all",
+    ENGINE.SOLVER.winningOpenings(72).some((k) => !ENGINE.isFibonacci(k)),
+    "n=72 opens " + ENGINE.SOLVER.winningOpenings(72).join(", "));
+
+  // --- the replayed games are legal and terminate
+  t("every replayed game is legal and ends with the last counter taken", (() => {
+    for (let n = LO; n <= HI; n++) {
+      const g = ENGINE.playOut(n);
+      let rem = n, cap = n - 1;
+      for (const m of g.moves) {
+        if (m.rem !== rem) return false;
+        if (m.take < 1 || m.take > Math.min(cap, rem)) return false;
+        if (rem === n && m.take === n) return false;      // never the whole pile on ply 1
+        rem -= m.take; cap = 2 * m.take;
+      }
+      if (rem !== 0) return false;
+    }
+    return true;
+  })(), (HI - LO + 1) + " games replayed");
+  t("the player the theorem favours is the player who wins the replay", (() => {
+    for (let n = LO; n <= HI; n++) {
+      if ((ENGINE.playOut(n).winner === 1) !== ENGINE.SOLVER.firstPlayerWins(n)) return false;
+    }
+    return true;
+  })());
+
+  // --- guards
+  t("a pile of 1 is not a game", (() => {
+    try { ENGINE.SOLVER.firstPlayerWins(1); return false; } catch { return true; }
+  })());
+  t("zeckendorf(0) throws rather than returning nothing", (() => {
+    try { ENGINE.zeckendorf(0); return false; } catch { return true; }
+  })());
+  t("the opening take never exceeds 2/7 of the pile",
+    SIZES.ratioNum * 7 <= 2 * SIZES.ratioDen,
+    "largest ratio " + SIZES.ratioNum + "/" + SIZES.ratioDen + " at n=" + SIZES.ratioAt);
+  t("CONTROL: yet it is not bounded by a constant - it reaches " + SIZES.max,
+    SIZES.max > 50, "at n=" + SIZES.maxAt);
+});
+</script>
+</body>
+</html>

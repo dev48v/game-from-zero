@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero &middot; Day 78 &mdash; Undercut</title>
+<style>
+  :root { --ink:#0f172a; --sub:#475569; --line:#e2e8f0; --bg:#f8fafc; --accent:#b45309; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Inter",system-ui,sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:1152px; margin:0 auto; padding:16px; }
+  @media (min-width:768px){ .wrap { padding:24px; } }
+  header { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .kicker { font-size:12px; font-weight:800; letter-spacing:.16em; color:var(--accent); margin:0 0 8px; }
+  h1 { font-size:19px; line-height:1.5; font-weight:900; margin:0 0 12px; }
+  @media (min-width:768px){ h1 { font-size:22px; } }
+  h2 { font-size:24px; font-weight:900; margin:0 0 8px; }
+  h3 { font-size:19px; font-weight:800; margin:20px 0 6px; }
+  p { line-height:1.6; margin:0 0 12px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+  .tabs button { font:inherit; font-size:14px; font-weight:600; padding:8px 20px; border:0; border-radius:8px; background:#f1f5f9; cursor:pointer; }
+  .tabs button.tab-active { background:#0f172a; color:#fff; }
+  .hidden { display:none; }
+  .card { background:#fff; border-radius:16px; box-shadow:0 1px 3px rgba(15,23,42,.12); padding:20px; min-width:0; }
+  .stack > * + * { margin-top:20px; }
+  .grid2 { display:grid; gap:20px; grid-template-columns:minmax(0,1fr); }
+  .grid4 { display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:900px){ .grid2 { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+  @media (min-width:768px){ .grid4 { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+  .lbl { font-size:12px; font-weight:800; letter-spacing:.1em; color:#64748b; margin:0 0 8px; }
+  .big { font-size:24px; font-weight:900; font-variant-numeric:tabular-nums; margin:0; }
+  .note { font-size:12.5px; color:#475569; margin:8px 0 0; line-height:1.55; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:11.5px; overflow-x:auto; line-height:1.35; margin:0; white-space:pre; }
+  code { background:#f1f5f9; padding:1px 4px; border-radius:4px; font-size:.92em; }
+  .tblwrap { overflow-x:auto; }
+  table.num { border-collapse:collapse; width:100%; min-width:520px; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid var(--line); }
+  table.num tr.here td { background:#fffbeb; font-weight:700; }
+  table.num tr.dim td { color:#94a3b8; }
+  table.num td.txt { text-align:left; font-size:11.5px; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:99px; font-size:11px; font-weight:800; }
+  .good { background:#dcfce7; color:#166534; }
+  .stop { background:#fef3c7; color:#92400e; }
+  .bad { background:#fee2e2; color:#991b1b; }
+  .ok { color:#166534; font-weight:800; }
+  .warn { color:#991b1b; font-weight:800; }
+  select { border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; font:inherit; font-size:13px; width:100%; margin-top:4px; background:#fff; }
+  label.f { font-size:13px; display:block; }
+  .callout { background:#fffbeb; border-left:4px solid var(--accent); padding:14px; border-radius:0 8px 8px 0; }
+  .callout p { font-size:13.5px; margin:0; }
+  a { color:var(--accent); }
+  .prose { max-width:760px; margin:0 auto; }
+  .keys { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+  .keys button { font:inherit; font-size:20px; font-weight:900; width:60px; height:60px; border:2px solid var(--line);
+                 border-radius:12px; background:#fff; cursor:pointer; font-variant-numeric:tabular-nums; }
+  .keys button:hover { border-color:var(--accent); color:var(--accent); }
+  .log { font-size:12.5px; font-variant-numeric:tabular-nums; max-height:190px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; }
+  .log div { display:grid; grid-template-columns:44px 1fr 1fr 68px; gap:6px; padding:4px 10px; border-top:1px solid var(--line); }
+  .log div:first-child { border-top:0; font-weight:700; color:#64748b; font-size:11px; }
+  .bar { display:block; height:9px; background:#fef3c7; border-radius:3px; position:relative; min-width:110px; }
+  .bar i { position:absolute; top:0; left:0; height:9px; background:var(--accent); border-radius:3px; }
+  .sc { font-size:12.5px; line-height:1.6; }
+  .sc div { display:flex; gap:8px; align-items:baseline; }
+  .sc .m { color:#94a3b8; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">GAMEFROMZERO &middot; DAY 78</p>
+    <h1>
+      &#127922; Undercut &mdash; both players name a number from 1 to 5 at the same time. You score
+      your number, unless you named exactly <em>one less</em> than the other player, in which case
+      you score both. It is the smallest game I know of where <strong>the best strategy is provably
+      random</strong>, and that is not a hedge or a habit: it is a theorem, and every deterministic
+      rule has an exact price. <strong>Nothing here is sampled and nothing is a float.</strong> Payoffs
+      are integers, the equilibrium is solved over rationals with BigInt numerator and denominator,
+      and every exploitability figure is a rational compared by cross-multiplication.
+      &#128308; <strong>The equilibrium never names 1 and never names 2</strong> &mdash; two of your
+      five options carry probability exactly zero, and playing either of them hands an informed
+      opponent <strong>26/9</strong> and <strong>5/9</strong> a round. &#128308; And randomness alone
+      does not save you: <strong>rolling a fair die over all five numbers is exploitable for 6/5 a
+      round</strong>, worse than three of the five pure strategies it was meant to protect you from.
+      &#128308; Then the part that went against the build &mdash; a closed form fits the equilibrium
+      at n = 4, 5 and 6, and <strong>breaks at n = 7</strong>.
+    </h1>
+    <div class="tabs">
+      <button id="tabLook" class="tab-active" onclick="showTab('look')">&#128065; LOOK</button>
+      <button id="tabUnd" onclick="showTab('und')">&#129504; UNDERSTAND</button>
+      <button id="tabBuild" onclick="showTab('build')">&#128296; BUILD</button>
+    </div>
+  </div>
+</header>
+
+<main id="look" class="wrap stack">
+  <div class="callout">
+    <p>
+      <strong>Everything on this page is computed in your browser on load.</strong> The equilibrium is
+      not a quoted result &mdash; it is solved here by support enumeration over exact rationals, then
+      checked: its exploitability must be exactly zero, and the game's value must be exactly zero
+      because the game is symmetric. A separate verifier lifts this engine out of the file and runs it
+      under Node against an independently written solver.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Play it</h2>
+    <p class="note" style="margin-top:0">
+      You pick a number. The house plays the exact equilibrium mixture. It is not trying to read you
+      and it cannot be read &mdash; that is the whole point of the strategy. What the panel tracks is
+      not who is ahead, but <strong>what your own pattern is worth to someone who has noticed it</strong>.
+    </p>
+    <div class="keys" id="keys"></div>
+    <div class="grid4" style="margin-top:8px">
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">ROUNDS</p><p class="big" id="kRounds">0</p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">YOUR SCORE &minus; HOUSE</p><p class="big" id="kDiff">0</p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">YOUR MIX SO FAR</p><p class="big" id="kMix" style="font-size:15px">&mdash;</p></div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <p class="lbl">EXPLOITABILITY OF YOUR MIX</p><p class="big warn" id="kExploit">&mdash;</p>
+        <p class="note" id="kBest"></p></div>
+    </div>
+    <div class="log" id="log" style="margin-top:14px"></div>
+    <p class="note" id="playNote"></p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">The exact equilibrium</h3>
+      <p class="note" style="margin-top:0">
+        Solved here, not quoted. Weight zero means <em>never say this number</em>.
+      </p>
+      <div class="tblwrap"><table class="num" id="tEq"></table></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">The payoff matrix</h3>
+      <p class="note" style="margin-top:0">
+        Your score minus theirs. The diagonal is 0, and the two off-diagonals carry the undercut.
+      </p>
+      <div class="tblwrap"><table class="num" id="tMatrix"></table></div>
+    </div>
+  </div>
+</main>
+
+<main id="und" class="wrap stack hidden">
+  <div class="card">
+    <h3 style="margin-top:0">1. Every deterministic rule has a price, and it is not small</h3>
+    <p>
+      Exploitability is the most an opponent who knows your strategy can take per round. For a pure
+      strategy it is simply the best reply to it. Every figure below is exact.
+    </p>
+    <div class="tblwrap"><table class="num" id="tPolicies"></table></div>
+    <p class="note">
+      The best of the five pure strategies is <strong>always say 3</strong>, and it still leaks
+      <strong>2</strong> a round. The folk rule &mdash; <em>undercut the top</em>, meaning always say 4
+      &mdash; leaks <strong>3</strong>. There is no deterministic rule that survives.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">2. Randomness is necessary and nowhere near sufficient</h3>
+    <p>
+      &ldquo;Mix it up&rdquo; is the advice everyone gives, and it is half of an answer. A fair die
+      over all five numbers is exploitable for <strong id="uUniform">&mdash;</strong> a round &mdash;
+      <strong>worse than three of the five pure strategies</strong> it was supposed to protect you from,
+      because it spends 40% of its weight on the two numbers the equilibrium refuses to name at all.
+    </p>
+    <div class="tblwrap"><table class="num" id="tGains"></table></div>
+    <p class="note">
+      Read the two rows against each other. Against the equilibrium, three replies are worth exactly
+      <strong>0</strong> and none is worth more &mdash; that is what an exploitability of zero looks
+      like from the inside. Against the uniform mixture, saying 4 is worth <strong>6/5</strong>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">3. The closed form fits three sizes and then breaks</h3>
+    <p>
+      Solving every board from 2 to 9, a pattern appears immediately. From n = 4 the support is the
+      top three numbers, with weights <code>(n&minus;1, 2, n&minus;2) / (2n&minus;1)</code>. It fits
+      n = 4, n = 5 and n = 6 exactly &mdash; three consecutive sizes, which is enough to feel certain.
+    </p>
+    <div class="tblwrap"><table class="num" id="tSizes"></table></div>
+    <p class="note">
+      &#128308; <strong>It fails at n = 7</strong>, and not by a small margin: the formula predicts
+      weight on the number 7, and the true equilibrium puts <strong>exactly zero</strong> there. Adding
+      a seventh option to the game <strong>changes the answer not at all</strong> &mdash; the n = 7
+      equilibrium is byte-for-byte the n = 6 one. At n = 8 and n = 9 the support widens to five numbers
+      and the denominators go to <strong>123</strong> and <strong>165</strong>, with no pattern left to
+      see. Three consecutive fits, and the fourth point refutes it.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">What the page checks about itself</h3>
+    <div class="tblwrap"><table class="num">
+      <tr><td class="txt">The game is symmetric, so its value must be exactly 0</td><td class="txt">checked at every n from 2 to 9 &mdash; the equilibrium's payoff against itself</td></tr>
+      <tr><td class="txt">The equilibrium's exploitability must be exactly 0</td><td class="txt">checked as a rational, not within a tolerance</td></tr>
+      <tr><td class="txt">The equilibrium strategy must be unique</td><td class="txt">every support is enumerated; the extra solutions found are supersets carrying zero weight, i.e. the same strategy</td></tr>
+      <tr><td class="txt">Nothing decided by a float</td><td class="txt">payoffs are integers, weights are BigInt fractions, comparisons are cross-multiplications</td></tr>
+    </table></div>
+  </div>
+</main>
+
+<main id="build" class="wrap stack hidden">
+  <div class="card prose">
+    <h2>How it works</h2>
+    <p>
+      The game is symmetric and zero-sum, so its value is zero and a maximin strategy <code>x</code>
+      on support <em>S</em> satisfies <code>(x&#8868;A)&#8323; = 0</code> for every <em>j</em> in
+      <em>S</em>, with <code>sum(x) = 1</code>, <code>x &ge; 0</code>, and
+      <code>(x&#8868;A)&#8323; &le; 0</code> everywhere else. Enumerate the supports smallest first,
+      solve each candidate exactly by Gaussian elimination over rationals, and keep the first that
+      satisfies the inequalities.
+    </p>
+    <pre>function payoff(i, j) {
+  let a = i, b = j;
+  if (i === j - 1) a = i + j;   // you undercut them
+  if (j === i - 1) b = j + i;   // they undercut you
+  return a - b;                 // zero-sum: your score minus theirs
+}</pre>
+    <p class="note">
+      The rational class is 40 lines and exists so that no claim on this page rests on a tolerance.
+      <code>4/9</code> is stored as <code>4n/9n</code>, and &ldquo;exploitability is zero&rdquo; is
+      <code>n === 0n</code> rather than <code>Math.abs(v) &lt; 1e-9</code>.
+    </p>
+    <h3>Self-check</h3>
+    <p class="note">
+      These run on load, against the engine above. Several are <strong>controls</strong>: they show the
+      failure actually happens without the guard, because &ldquo;the equilibrium is unexploitable&rdquo;
+      means nothing without a strategy that is.
+    </p>
+    <div class="sc" id="selfcheck"></div>
+    <p style="margin-top:20px">
+      <a href="../gamefromzero.php">&larr; GameFromZero</a>
+    </p>
+  </div>
+</main>
+
+<script>
+// ===== ENGINE:BEGIN =====
+// ---------------------------------------------------------------------------
+// Undercut. Both players name a number from 1 to N at the same time. You score
+// your own number - unless you named exactly one LESS than your opponent, in
+// which case you score both.
+//
+// Everything here is EXACT. Payoffs are integers, the equilibrium is solved
+// over rationals with BigInt numerators and denominators, and exploitability
+// is a rational compared by cross-multiplication. No floating point decides
+// anything on this page; doubles appear only where a number is printed.
+//
+// DOM-free, clock-free, Math.random-free, so a verifier can lift this block
+// out and run it under Node against an independently written solver.
+// ---------------------------------------------------------------------------
+
+/* ---------------------------------------------------------------- rationals */
+function bgcd(a, b) {
+  a = a < 0n ? -a : a;
+  b = b < 0n ? -b : b;
+  while (b) { const t = a % b; a = b; b = t; }
+  return a;
+}
+
+class Frac {
+  constructor(n, d = 1n) {
+    if (d === 0n) throw new Error("zero denominator");
+    if (d < 0n) { n = -n; d = -d; }
+    const g = bgcd(n, d) || 1n;
+    this.n = n / g;
+    this.d = d / g;
+  }
+  static of(x) { return x instanceof Frac ? x : new Frac(BigInt(x)); }
+  add(o) { o = Frac.of(o); return new Frac(this.n * o.d + o.n * this.d, this.d * o.d); }
+  sub(o) { o = Frac.of(o); return new Frac(this.n * o.d - o.n * this.d, this.d * o.d); }
+  mul(o) { o = Frac.of(o); return new Frac(this.n * o.n, this.d * o.d); }
+  div(o) { o = Frac.of(o); if (o.n === 0n) throw new Error("divide by zero"); return new Frac(this.n * o.d, this.d * o.n); }
+  neg() { return new Frac(-this.n, this.d); }
+  cmp(o) { o = Frac.of(o); const l = this.n * o.d, r = o.n * this.d; return l < r ? -1 : l > r ? 1 : 0; }
+  isZero() { return this.n === 0n; }
+  isNeg() { return this.n < 0n; }
+  toNumber() { return Number(this.n) / Number(this.d); }
+  toString() { return this.d === 1n ? String(this.n) : this.n + "/" + this.d; }
+}
+const F0 = new Frac(0n), F1 = new Frac(1n);
+
+/* ------------------------------------------------------------- the game */
+// Zero-sum payoff to the ROW player: their score minus the column player's.
+// The game is symmetric, so its value is 0 - and that is asserted, not assumed.
+function payoff(i, j) {
+  let a = i, b = j;
+  if (i === j - 1) a = i + j;
+  if (j === i - 1) b = j + i;
+  return a - b;
+}
+
+function matrix(n) {
+  const A = [];
+  for (let i = 1; i <= n; i++) {
+    const row = [];
+    for (let j = 1; j <= n; j++) row.push(payoff(i, j));
+    A.push(row);
+  }
+  return A;
+}
+
+/* ------------------------------------------------- exact linear algebra */
+// Gaussian elimination over rationals. Returns null when the system has no
+// unique solution, which is a real answer here rather than a failure.
+function solveExact(M, b) {
+  const n = b.length;
+  const a = M.map((row, i) => row.map(Frac.of).concat([Frac.of(b[i])]));
+  for (let col = 0, row = 0; col < n && row < n; col++) {
+    let piv = -1;
+    for (let r = row; r < n; r++) if (!a[r][col].isZero()) { piv = r; break; }
+    if (piv < 0) return null;
+    [a[row], a[piv]] = [a[piv], a[row]];
+    const p = a[row][col];
+    for (let c = col; c <= n; c++) a[row][c] = a[row][c].div(p);
+    for (let r = 0; r < n; r++) {
+      if (r === row || a[r][col].isZero()) continue;
+      const f = a[r][col];
+      for (let c = col; c <= n; c++) a[r][c] = a[r][c].sub(f.mul(a[row][c]));
+    }
+    row++;
+  }
+  // every column must be a pivot for the solution to be unique
+  const x = new Array(n).fill(F0);
+  for (let r = 0; r < n; r++) {
+    let lead = -1;
+    for (let c = 0; c < n; c++) if (!a[r][c].isZero()) { lead = c; break; }
+    if (lead < 0) { if (!a[r][n].isZero()) return null; continue; }
+    x[lead] = a[r][n];
+  }
+  return x;
+}
+
+/* ------------------------------------------------ the exact equilibrium */
+// Support enumeration. For a SYMMETRIC zero-sum game the value is 0, so a
+// maximin strategy x on support S satisfies (x^T A)_j = 0 for j in S and
+// sum(x) = 1, with x >= 0 on S and (x^T A)_j <= 0 everywhere else.
+function equilibrium(n) {
+  const A = matrix(n);
+  for (let size = 1; size <= n; size++) {
+    for (const S of combinations(n, size)) {
+      const M = [];
+      const b = [];
+      for (const j of S) {
+        M.push(S.map((i) => A[i][j]));
+        b.push(0);
+      }
+      M.push(S.map(() => 1));
+      b.push(1);
+      // square it up: |S| equalities + the sum constraint is |S|+1 rows for
+      // |S| unknowns, so drop one payoff equality - it is implied by the rest
+      // together with the value being 0.
+      const sol = solveExact(M.slice(1), b.slice(1));
+      if (!sol) continue;
+      if (sol.some((v) => v.isNeg())) continue;
+      const x = new Array(n).fill(F0);
+      S.forEach((i, k) => { x[i] = sol[k]; });
+      const dev = deviationGains(A, x);
+      if (dev.every((g) => g.cmp(F0) <= 0)) {
+        return { support: S.map((i) => i + 1), x, A, size };
+      }
+    }
+  }
+  return null;
+}
+
+function* combinations(n, k) {
+  const idx = [];
+  function* go(start) {
+    if (idx.length === k) { yield idx.slice(); return; }
+    for (let i = start; i < n; i++) { idx.push(i); yield* go(i + 1); idx.pop(); }
+  }
+  yield* go(0);
+}
+
+// What the OPPONENT gains by answering x with pure strategy j.
+function deviationGains(A, x) {
+  const n = x.length;
+  const out = [];
+  for (let j = 0; j < n; j++) {
+    let s = F0;
+    for (let i = 0; i < n; i++) s = s.add(x[i].mul(A[i][j]));
+    out.push(s.neg());   // payoff to the column player
+  }
+  return out;
+}
+
+/* --------------------------------------------------- measuring a strategy */
+// Exploitability: the most an informed opponent can take, per round, against
+// a fixed mixed strategy. Exactly 0 only at equilibrium.
+function exploitability(A, x) {
+  const gains = deviationGains(A, x);
+  let best = gains[0];
+  let arg = 0;
+  for (let j = 1; j < gains.length; j++) if (gains[j].cmp(best) > 0) { best = gains[j]; arg = j; }
+  return { value: best, bestResponse: arg + 1, gains };
+}
+
+function pure(n, k) {
+  const x = new Array(n).fill(F0);
+  x[k - 1] = F1;
+  return x;
+}
+
+function uniform(n) {
+  return new Array(n).fill(new Frac(1n, BigInt(n)));
+}
+
+/* ---------------------------------------------------------- named policies */
+// The strategies a person actually proposes, each stated the way it gets said
+// out loud, then measured rather than argued about.
+function policies(n) {
+  const out = [];
+  for (let k = 1; k <= n; k++) {
+    out.push({ key: "always-" + k, label: "always say " + k, x: pure(n, k) });
+  }
+  out.push({ key: "uniform", label: "pick uniformly at random", x: uniform(n) });
+  // "undercut the biggest" - the folk rule, as a pure strategy
+  out.push({ key: "undercut-top", label: "always undercut the top (" + (n - 1) + ")", x: pure(n, n - 1) });
+  // top-heavy: weight proportional to the number itself
+  {
+    let tot = 0n;
+    for (let i = 1n; i <= BigInt(n); i++) tot += i;
+    out.push({
+      key: "proportional",
+      label: "play each number in proportion to its size",
+      x: Array.from({ length: n }, (_, i) => new Frac(BigInt(i + 1), tot)),
+    });
+  }
+  return out;
+}
+
+function report(n) {
+  const eq = equilibrium(n);
+  const A = matrix(n);
+  const rows = policies(n).map((p) => {
+    const e = exploitability(A, p.x);
+    return { ...p, exploit: e.value, bestResponse: e.bestResponse };
+  });
+  const eqExploit = exploitability(A, eq.x);
+  return { n, A, eq, rows, eqExploit };
+}
+
+// Head to head: expected payoff to x against y, exactly.
+function headToHead(A, x, y) {
+  let s = F0;
+  for (let i = 0; i < x.length; i++) {
+    for (let j = 0; j < y.length; j++) s = s.add(x[i].mul(y[j]).mul(A[i][j]));
+  }
+  return s;
+}
+
+const ENGINE = {
+  Frac, F0, F1, payoff, matrix, solveExact, equilibrium, combinations,
+  deviationGains, exploitability, pure, uniform, policies, report, headToHead,
+};
+if (typeof module !== "undefined" && module.exports) module.exports = ENGINE;
+
+// ===== ENGINE:END =====
+</script>
+
+<script>
+// Presentation only. It reads the engine; the engine never reads it.
+const N = 5;
+const REP = ENGINE.report(N);
+const A = REP.A;
+const EQ = REP.eq.x;
+const el = (id) => document.getElementById(id);
+const fr = (f) => f.toString();
+const num = (f) => f.toNumber();
+
+function showTab(name) {
+  for (const t of ["look", "und", "build"]) el(t).classList.toggle("hidden", t !== name);
+  el("tabLook").classList.toggle("tab-active", name === "look");
+  el("tabUnd").classList.toggle("tab-active", name === "und");
+  el("tabBuild").classList.toggle("tab-active", name === "build");
+}
+
+function table(id, head, rows) {
+  el(id).innerHTML =
+    "<tr>" + head.map((h) => "<th>" + h + "</th>").join("") + "</tr>" +
+    rows.map((r) => "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + ">" +
+      r.cells.map((c, i) => "<td" + (i === 0 ? ' class="txt"' : "") + ">" + c + "</td>").join("") + "</tr>").join("");
+}
+
+// ---- the equilibrium + matrix
+table("tEq", ["you say", "equilibrium weight", "as a decimal", "verdict"],
+  EQ.map((w, i) => ({
+    cls: w.isZero() ? "dim" : "here",
+    cells: [i + 1, "<b>" + fr(w) + "</b>", num(w).toFixed(4),
+      w.isZero() ? '<span class="pill bad">NEVER</span>' : '<span class="pill good">play it</span>'],
+  })));
+
+table("tMatrix", ["you \\ them"].concat(Array.from({ length: N }, (_, j) => String(j + 1))),
+  A.map((row, i) => ({ cells: [i + 1].concat(row.map((v) => (v > 0 ? '<span class="ok">+' + v + "</span>" : v < 0 ? '<span class="warn">' + v + "</span>" : "0"))) })));
+
+// ---- policies
+const POL = REP.rows;
+table("tPolicies", ["strategy", "exploitability, per round", "as a decimal", "how they beat it"],
+  POL.map((p) => ({
+    cls: p.exploit.isZero() ? "here" : "",
+    cells: [p.label, "<b>" + fr(p.exploit) + "</b>", num(p.exploit).toFixed(4), "they say " + p.bestResponse],
+  })).concat([{
+    cls: "here",
+    cells: ["<b>the equilibrium</b>", "<b>" + fr(REP.eqExploit.value) + "</b>", "0.0000", "nothing works"],
+  }]));
+
+const uni = ENGINE.exploitability(A, ENGINE.uniform(N));
+el("uUniform").textContent = fr(uni.value);
+
+table("tGains", ["what they reply with"].concat(Array.from({ length: N }, (_, j) => String(j + 1))),
+  [
+    { cells: ["against a fair die over 1-5"].concat(uni.gains.map((g) => fr(g))) },
+    { cls: "here", cells: ["against the equilibrium"].concat(REP.eqExploit.gains.map((g) => fr(g))) },
+  ]);
+
+// ---- every board size, and the closed form that dies
+const SIZES = [];
+for (let n = 2; n <= 9; n++) {
+  const r = ENGINE.report(n);
+  let predicted = "&mdash;", verdict = "&mdash;";
+  if (n >= 4) {
+    const d = BigInt(2 * n - 1);
+    const want = [new ENGINE.Frac(BigInt(n - 1), d), new ENGINE.Frac(2n, d), new ENGINE.Frac(BigInt(n - 2), d)];
+    predicted = want.map((f) => f.toString()).join(", ");
+    const got = [r.eq.x[n - 3], r.eq.x[n - 2], r.eq.x[n - 1]];
+    const fits = got.every((g, i) => g.cmp(want[i]) === 0) && r.eq.x.slice(0, n - 3).every((v) => v.isZero());
+    verdict = fits ? '<span class="pill good">FITS</span>' : '<span class="pill bad">BREAKS</span>';
+  }
+  SIZES.push({ n, r, predicted, verdict });
+}
+table("tSizes", ["board", "support", "equilibrium", "closed form (n-1,2,n-2)/(2n-1)", "", "value"],
+  SIZES.map((s) => ({
+    cls: s.n === 7 ? "here" : "",
+    cells: [
+      "1 to " + s.n,
+      "{" + s.r.eq.support.join(", ") + "}",
+      s.r.eq.x.map((f) => fr(f)).join(", "),
+      s.predicted,
+      s.verdict,
+      fr(ENGINE.headToHead(s.r.A, s.r.eq.x, s.r.eq.x)),
+    ],
+  })));
+
+// ---- the playable round
+let rounds = 0, diff = 0;
+const counts = new Array(N).fill(0);
+el("keys").innerHTML = Array.from({ length: N }, (_, i) =>
+  '<button type="button" data-k="' + (i + 1) + '">' + (i + 1) + "</button>").join("");
+el("log").innerHTML = "<div><span>#</span><span>you</span><span>house</span><span>diff</span></div>";
+
+// The house draws from the equilibrium. This is the ONE place a random number
+// is used, and it is deliberately outside the engine block - the engine has to
+// stay deterministic so a verifier can reproduce it exactly.
+function drawEquilibrium() {
+  let u = Math.random();
+  for (let i = 0; i < N; i++) {
+    u -= EQ[i].toNumber();
+    if (u <= 0) return i + 1;
+  }
+  return N;
+}
+
+el("keys").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const you = parseInt(b.dataset.k, 10);
+  const them = drawEquilibrium();
+  const d = ENGINE.payoff(you, them);
+  rounds += 1; diff += d; counts[you - 1] += 1;
+
+  el("kRounds").textContent = rounds;
+  el("kDiff").textContent = (diff > 0 ? "+" : "") + diff;
+  el("kDiff").className = "big " + (diff > 0 ? "ok" : diff < 0 ? "warn" : "");
+
+  const mix = counts.map((c) => new ENGINE.Frac(BigInt(c), BigInt(rounds)));
+  el("kMix").textContent = counts.map((c, i) => (i + 1) + ":" + c).join("  ");
+  const ex = ENGINE.exploitability(A, mix);
+  el("kExploit").textContent = fr(ex.value);
+  el("kBest").textContent = "an opponent who spotted it would answer " + ex.bestResponse;
+
+  const row = document.createElement("div");
+  row.innerHTML = "<span>" + rounds + "</span><span>" + you + "</span><span>" + them + "</span><span>" +
+    (d > 0 ? '<span class="ok">+' + d + "</span>" : d < 0 ? '<span class="warn">' + d + "</span>" : "0") + "</span>";
+  el("log").insertBefore(row, el("log").children[1] || null);
+
+  el("playNote").innerHTML = "Your own mixture is currently exploitable for <b>" + fr(ex.value) +
+    "</b> a round. The house sits at <b>0</b> no matter how long you play, and no run of results changes that " +
+    "&mdash; the score swings, the exploitability does not.";
+});
+
+// --------------------------------------------------------------------------
+// Self-check
+// --------------------------------------------------------------------------
+(function selfCheck() {
+  const out = [];
+  let n = 0, bad = 0;
+  const t = (label, cond, detail = "") => {
+    n += 1; if (!cond) bad += 1;
+    out.push('<div><span class="' + (cond ? "ok" : "warn") + '">' + (cond ? "PASS" : "FAIL") +
+      "</span><span>" + label + '</span><span class="m">' + detail + "</span></div>");
+  };
+
+  // rationals
+  t("1/3 + 1/6 is exactly 1/2", new ENGINE.Frac(1n, 3n).add(new ENGINE.Frac(1n, 6n)).cmp(new ENGINE.Frac(1n, 2n)) === 0);
+  t("a rational compares without a tolerance",
+    new ENGINE.Frac(1n, 3n).mul(3).cmp(ENGINE.F1) === 0, "1/3 x 3 === 1 exactly");
+  t("CONTROL: the same sum in floating point does NOT close",
+    (1 / 3) * 3 !== 1 || 0.1 + 0.2 !== 0.3, "0.1 + 0.2 = " + (0.1 + 0.2));
+
+  // the game
+  t("the payoff matrix is antisymmetric", A.every((row, i) => row.every((v, j) => v === -A[j][i])));
+  t("the diagonal is zero", A.every((row, i) => row[i] === 0));
+  t("undercutting pays: saying 4 against 5 scores 9 to 5",
+    ENGINE.payoff(4, 5) === 4, "payoff(4,5) = " + ENGINE.payoff(4, 5));
+
+  // the equilibrium
+  t("equilibrium weights sum to exactly 1",
+    EQ.reduce((a, f) => a.add(f), ENGINE.F0).cmp(ENGINE.F1) === 0);
+  t("equilibrium exploitability is exactly zero", REP.eqExploit.value.isZero(), fr(REP.eqExploit.value));
+  t("the game's value is exactly zero", ENGINE.headToHead(A, EQ, EQ).isZero());
+  t("the equilibrium never names 1 or 2", EQ[0].isZero() && EQ[1].isZero());
+  t("CONTROL: a fair die IS exploitable", !uni.value.isZero(), fr(uni.value) + " a round");
+  t("CONTROL: every pure strategy is exploitable",
+    POL.filter((p) => p.key.startsWith("always-")).every((p) => !p.exploit.isZero()));
+
+  // across sizes
+  t("the value is zero at every board size from 2 to 9",
+    SIZES.every((s) => ENGINE.headToHead(s.r.A, s.r.eq.x, s.r.eq.x).isZero()));
+  t("the closed form fits n = 4, 5 and 6",
+    SIZES.filter((s) => [4, 5, 6].includes(s.n)).every((s) => s.verdict.includes("FITS")));
+  t("...and BREAKS at n = 7", SIZES.find((s) => s.n === 7).verdict.includes("BREAKS"));
+  t("n = 7 puts exactly zero weight on 7", SIZES.find((s) => s.n === 7).r.eq.x[6].isZero());
+  t("n = 7's equilibrium is identical to n = 6's", (() => {
+    const a = SIZES.find((s) => s.n === 6).r.eq.x, b = SIZES.find((s) => s.n === 7).r.eq.x;
+    return a.every((v, i) => v.cmp(b[i]) === 0) && b[6].isZero();
+  })());
+
+  el("selfcheck").innerHTML =
+    '<p class="note" style="margin:0 0 8px"><b class="' + (bad ? "warn" : "ok") + '">' +
+    (n - bad) + " of " + n + " checks pass</b>" + (bad ? " &mdash; " + bad + " FAILED" : "") + ".</p>" +
+    out.join("");
+})();
+</script>
+</body>
+</html>

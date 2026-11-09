@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero &middot; Day 83 &mdash; Nine Men's Morris</title>
+<style>
+  :root { --ink:#0f172a; --sub:#475569; --line:#e2e8f0; --bg:#f8fafc; --accent:#0d9488; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Inter",system-ui,sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:1152px; margin:0 auto; padding:16px; }
+  @media (min-width:768px){ .wrap { padding:24px; } }
+  header { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .kicker { font-size:12px; font-weight:800; letter-spacing:.16em; color:var(--accent); margin:0 0 8px; }
+  h1 { font-size:19px; line-height:1.5; font-weight:900; margin:0 0 12px; }
+  @media (min-width:768px){ h1 { font-size:22px; } }
+  h2 { font-size:24px; font-weight:900; margin:0 0 8px; }
+  h3 { font-size:19px; font-weight:800; margin:20px 0 6px; }
+  p { line-height:1.6; margin:0 0 12px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+  .tabs button { font:inherit; font-size:14px; font-weight:600; padding:8px 20px; border:0; border-radius:8px; background:#f1f5f9; cursor:pointer; }
+  .tabs button.tab-active { background:#0f172a; color:#fff; }
+  .hidden { display:none; }
+  .card { background:#fff; border-radius:16px; box-shadow:0 1px 3px rgba(15,23,42,.12); padding:20px; min-width:0; }
+  .stack > * + * { margin-top:20px; }
+  .grid2 { display:grid; gap:20px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:900px){ .grid2 { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+  .lbl { font-size:12px; font-weight:800; letter-spacing:.1em; color:#64748b; margin:0 0 8px; }
+  .big { font-size:24px; font-weight:900; font-variant-numeric:tabular-nums; margin:0; }
+  .note { font-size:12.5px; color:#475569; margin:8px 0 0; line-height:1.55; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:11.5px; overflow-x:auto; line-height:1.35; margin:0; white-space:pre; }
+  code { background:#f1f5f9; padding:1px 4px; border-radius:4px; font-size:.92em; }
+  .tblwrap { overflow-x:auto; }
+  table.num { border-collapse:collapse; width:100%; min-width:560px; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid var(--line); }
+  table.num td.txt { text-align:left; }
+  tr.here td { background:#f0fdfa; font-weight:700; }
+  tr.dim td { color:#94a3b8; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:800; }
+  .pill.good { background:#dcfce7; color:#166534; }
+  .pill.bad { background:#fee2e2; color:#991b1b; }
+  .ok { color:#166534; font-weight:800; }
+  .warn { color:#991b1b; font-weight:800; }
+  #selftest div { display:grid; grid-template-columns:52px 1fr; gap:8px; font-size:12.5px; padding:3px 0; border-top:1px solid var(--line); align-items:start; }
+  #selftest div span.m { grid-column:2; font-size:11.5px; color:#64748b; }
+  .board { display:inline-block; background:#fff; }
+  .board svg { display:block; width:100%; max-width:392px; height:auto; }
+  .board line { stroke:#94a3b8; stroke-width:2; stroke-linecap:round; }
+  .board circle.pt { fill:#e2e8f0; stroke:#94a3b8; stroke-width:2; }
+  .board circle.pt.w { fill:#f8fafc; stroke:#0f172a; stroke-width:3; }
+  .board circle.pt.b { fill:#0f172a; stroke:#0f172a; stroke-width:3; }
+  .board circle.hit { fill:transparent; stroke:none; cursor:pointer; }
+  .board circle.ring { fill:none; stroke:var(--accent); stroke-width:3; }
+  .board circle.ring.sel { stroke:#ca8a04; }
+  .board circle.ring.tgt { stroke:#dc2626; }
+  .board line.mill { stroke:var(--accent); stroke-width:5; opacity:.35; }
+  .ctl { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 12px; }
+  .ctl input[type=range] { flex:1; min-width:150px; }
+  .ctl input[type=number] { width:74px; font:inherit; padding:5px 7px; border:1px solid var(--line); border-radius:7px; }
+  .ctl select, .ctl button { font:inherit; font-size:13px; font-weight:600; padding:6px 12px;
+                             border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); cursor:pointer; }
+  .ctl button:hover, .ctl select:hover { background:#f1f5f9; }
+  footer { border-top:1px solid var(--line); margin-top:28px; padding:18px 0 40px; font-size:13px; color:#475569; }
+  footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">GAMEFROMZERO &middot; DAY 83</p>
+    <h1>
+      Nine Men's Morris &mdash; three phases, one board, and a capture rule with an
+      exception that decides whole games.
+    </h1>
+    <div class="tabs">
+      <button id="tabPlay" class="tab-active" onclick="showTab('play')">Play</button>
+      <button id="tabUnd" onclick="showTab('und')">Understand</button>
+      <button id="tabBuild" onclick="showTab('build')">Build</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section id="play" class="stack">
+  <div class="card">
+    <h2>The whole game, against a real search</h2>
+    <p>
+      Place nine pieces each, one at a time. Line three of your own up along one of the
+      board's sixteen printed lines and you have a <b>mill</b>, which lets you take an
+      enemy piece off the board. When the hands are empty you slide along the lines
+      instead, and a player down to exactly three pieces may <b>fly</b> anywhere.
+      You lose at two pieces, or the moment you have no legal move at all.
+    </p>
+    <div class="ctl">
+      <span class="lbl" style="margin:0">YOU PLAY</span>
+      <select id="side">
+        <option value="1">White (moves first)</option>
+        <option value="2">Black</option>
+        <option value="0">Watch the search play itself</option>
+      </select>
+      <button id="btnNew">New game</button>
+      <button id="btnUndo">Undo</button>
+    </div>
+    <div class="ctl">
+      <span class="lbl" style="margin:0">AI DEPTH</span>
+      <input type="range" id="depR" min="1" max="5" value="3" />
+      <input type="number" id="depN" min="1" max="5" value="3" />
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="board" id="boardWrap"></div>
+        <p class="note" id="status"></p>
+      </div>
+      <div class="stack">
+        <div class="grid2">
+          <div><p class="lbl">PHASE</p><p class="big" id="kPhase">&mdash;</p><p class="note" id="kPhaseNote"></p></div>
+          <div><p class="lbl">LEGAL MOVES</p><p class="big" id="kMoves">&mdash;</p><p class="note" id="kMovesNote"></p></div>
+        </div>
+        <div class="grid2">
+          <div><p class="lbl">MILLS STANDING</p><p class="big" id="kMills">&mdash;</p><p class="note" id="kMillsNote"></p></div>
+          <div><p class="lbl">NODES LAST SEARCH</p><p class="big" id="kNodes">&mdash;</p><p class="note" id="kNodesNote"></p></div>
+        </div>
+        <div class="tblwrap"><table class="num" id="tState"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>What the board actually is</h2>
+    <p>
+      Nothing on this page stores a picture. The board is sixteen lines of three point
+      numbers, and every other fact &mdash; which points touch, how many lines run through
+      a point, what a legal slide is &mdash; is derived from that list and checked below.
+    </p>
+    <div class="tblwrap"><table class="num" id="tBoardFacts"></table></div>
+    <p class="note" id="boardFactsNote"></p>
+  </div>
+</section>
+
+<section id="und" class="stack hidden">
+  <div class="card">
+    <h2>Step 1 &mdash; the board is a graph, not a grid</h2>
+    <p>
+      Every grid game you have written so far indexed cells by row and column, and
+      neighbours came from adding one to a coordinate. Nine Men's Morris breaks that
+      immediately: its twenty-four points sit on three nested squares, and the corner of
+      the outer square has two neighbours while the middle of the middle square has four.
+      If you store it as a 7&times;7 array you will spend the rest of the build writing
+      special cases for the twenty-five holes. Store it instead as twenty-four numbered
+      points plus an adjacency list, and every rule becomes a list lookup. The drawing is
+      then a separate concern that never touches the rules.
+    </p>
+    <div class="tblwrap"><table class="num" id="tDeg"></table></div>
+    <p class="note" id="degNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 2 &mdash; the sixteen lines come first, and adjacency falls out of them</h2>
+    <p>
+      There is a temptation to type the adjacency list by hand, and that is how boards get
+      silently wrong: one missing pair and a legal move disappears for the rest of the
+      project. The lines are the shorter and more memorable object &mdash; four along each
+      of the three squares, plus the four spokes that join the squares at their midpoints,
+      sixteen in all. Each line of three points contributes exactly two adjacent pairs,
+      the first-to-second and the second-to-third. That gives thirty-two edges with no
+      hand-typing, and it guarantees the two structures can never disagree, because one
+      of them is computed from the other.
+    </p>
+    <div class="tblwrap"><table class="num" id="tLines"></table></div>
+    <p class="note" id="linesNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 3 &mdash; every point lies on exactly two lines</h2>
+    <p>
+      This one is worth checking rather than assuming, because it is the reason mill
+      detection is cheap. When a piece lands on a point you do not scan all sixteen lines
+      to see whether a mill appeared; you look at the two lines that pass through that
+      point and nothing else. Twenty-four points on two lines each is forty-eight
+      memberships, and sixteen lines of three points is also forty-eight, so the count
+      closes exactly. An index from point to its lines is built once at start-up and
+      every mill test afterwards is two array reads. The same index is what makes the
+      capture rule affordable, since that rule asks the mill question about every enemy
+      piece on the board.
+    </p>
+    <div class="tblwrap"><table class="num" id="tLinesAt"></table></div>
+    <p class="note" id="linesAtNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 4 &mdash; three phases, and they are not three games</h2>
+    <p>
+      Players often describe Nine Men's Morris as placing, then moving, then flying, as
+      if the program needed three move generators. It needs one, with a question at the
+      top: if you still have pieces in hand you place on any empty point, otherwise you
+      move, and a mover with exactly three pieces left ignores adjacency. Phase is
+      therefore not stored anywhere &mdash; it is a function of the pieces in hand and the
+      pieces on the board, so it can never drift out of step with the position. The
+      numbers below come from real states the engine built, not from prose. Notice how the
+      branching factor collapses once the hands empty, and then explodes again the moment
+      someone starts to fly.
+    </p>
+    <div class="tblwrap"><table class="num" id="tPhases"></table></div>
+    <p class="note" id="phasesNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 5 &mdash; a mill does not end your turn, it extends it</h2>
+    <p>
+      This is the single detail that breaks a first implementation. Forming a mill does
+      not hand the turn over; it obliges you to remove an enemy piece, and only then does
+      the opponent move. If you model a turn as "one move, then swap sides", there is
+      nowhere for the removal to live, and people usually bolt it on as a modal prompt
+      outside the engine &mdash; at which point the search cannot see captures at all. The
+      fix is to make the removal a move like any other, and to let the state carry a
+      <code>pending</code> flag that says the same player must move again. Move generation
+      then returns removals instead of placements while that flag is set, and the search
+      needs no special case whatsoever.
+    </p>
+    <pre id="codeMill"></pre>
+    <div class="tblwrap"><table class="num" id="tMillTurn"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Step 6 &mdash; the capture exception, which is the rule people get wrong</h2>
+    <p>
+      You may not take an enemy piece that is standing inside a mill &mdash; unless every
+      single enemy piece is inside a mill, in which case the protection lapses and you may
+      take any of them. Drop the exception and a player who gets all their pieces into
+      mills becomes literally invulnerable and the game never ends. Implement it as a
+      filter with a fallback and it is three lines: collect the enemy pieces that are not
+      in a mill, and if that list is empty, return all of them instead. The table below
+      runs both halves on real positions, including the inverted case where the filter
+      returns nothing and the fallback has to fire.
+    </p>
+    <pre id="codeCapture"></pre>
+    <div class="tblwrap"><table class="num" id="tCapture"></table></div>
+    <p class="note" id="capNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 7 &mdash; flying is a rule about count, not about a phase flag</h2>
+    <p>
+      A player reduced to exactly three pieces may move any one of them to any empty
+      point. It is a mercy rule: with three pieces and adjacency you would usually be
+      frozen, and the game would end by blocking rather than by capture. For the engine it
+      matters because it changes the branching factor more than anything else in the game.
+      Three sliding pieces might have six moves between them; three flying pieces have
+      three times however many points are empty, which late in a game is still a large
+      number. The table measures both on the same positions so the jump is a number rather
+      than a claim.
+    </p>
+    <div class="tblwrap"><table class="num" id="tFly"></table></div>
+    <p class="note" id="flyNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 8 &mdash; there are two ways to lose, and the second one is real</h2>
+    <p>
+      The obvious loss is being ground down to two pieces, since two pieces can never make
+      a mill. The other is being blocked: if it is your turn and you have no legal move,
+      you lose on the spot. Beginners treat blocking as a curiosity, but against a search
+      it is a standard winning plan, because a wall of enemy pieces is easier to build
+      than a sequence of captures. In code the two conditions want to live in one place,
+      checked after every single move including the removal half of a mill turn. The
+      engine does exactly that, and the table shows both endings reached from constructed
+      positions.
+    </p>
+    <div class="tblwrap"><table class="num" id="tEnd"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Step 9 &mdash; without draw rules the game does not terminate</h2>
+    <p>
+      Two players with no way through each other will shuffle the same two pieces back and
+      forth forever, and so will two copies of a deterministic search. Real play uses two
+      stoppers: the same position occurring three times is a draw, and fifty moves by each
+      side with no capture is a draw. Both need the engine to carry history, which is the
+      first time a position alone stops being enough state. The repetition key has to
+      include whose turn it is, or two different positions collapse into one. The counter
+      resets on anything irreversible &mdash; a capture, or a placement &mdash; and the
+      table below drives both rules until they actually fire.
+    </p>
+    <div class="tblwrap"><table class="num" id="tDraw"></table></div>
+    <p class="note" id="drawNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 10 &mdash; minimax, alpha-beta, and the ply that does not change sides</h2>
+    <p>
+      The search assumes the two players alternate, and in this game they sometimes do not,
+      because a mill gives the same player a second move. Written as plain negamax, where
+      each level simply negates the level below, that assumption is baked in and captures
+      are scored for the wrong side. The fix is to ask whose turn it is at every node
+      rather than to infer it from the depth, so a pending removal is just another node
+      that happens to maximise again. Alpha-beta then prunes on top of that unchanged, and
+      the saving is worth measuring rather than quoting: the table runs the same position
+      with pruning on and off and reports both node counts and the identical score.
+    </p>
+    <div class="tblwrap"><table class="num" id="tSearch"></table></div>
+    <p class="note" id="searchNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 11 &mdash; what a static evaluation is allowed to know</h2>
+    <p>
+      At the bottom of the search there is no time to play on, so the position gets scored
+      by counting things. Material dominates, because a piece is worth far more than any
+      arrangement. After that come completed mills, lines holding two of your pieces and an
+      empty third, the mobility each side has, and the number of enemy pieces that are
+      completely blocked. Every term is a difference between the two sides, which is what
+      makes the function antisymmetric &mdash; scoring a position for White must give
+      exactly the negation of scoring it for Black, and the self-check asserts that rather
+      than trusting it.
+    </p>
+    <div class="tblwrap"><table class="num" id="tEval"></table></div>
+    <p class="note" id="evalNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Step 12 &mdash; the board has only four different opening moves</h2>
+    <p>
+      Twenty-four empty points look like twenty-four opening choices, and they are not.
+      The board's symmetries &mdash; four rotations, four reflections, and the less obvious
+      swap of the inner and outer squares, which maps the graph onto itself &mdash; group
+      those points into orbits, and a point's orbit is all that distinguishes it. The
+      engine finds the symmetries by searching for every relabelling of the points that
+      preserves adjacency, which is honest work rather than an assumed list. It reports a
+      group of sixteen maps and four orbits, so the opening tree is four times smaller than
+      it looks. That is the kind of fact you want measured, because getting it wrong in
+      either direction silently breaks an opening book.
+    </p>
+    <div class="tblwrap"><table class="num" id="tOrbits"></table></div>
+    <p class="note" id="orbNote"></p>
+  </div>
+</section>
+
+<section id="build" class="stack hidden">
+  <div class="card">
+    <h2>Step 1 &mdash; type the lines, compute the edges</h2>
+    <p>
+      Start from the sixteen lines of three. Walk them once and link each consecutive pair,
+      and you have the adjacency list with no chance of a typo creating a one-way edge. The
+      self-check later asserts symmetry, the edge count, and the degree distribution, so a
+      mistake here cannot survive to the game.
+    </p>
+    <pre id="codeAdj"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Step 2 &mdash; an index from point to line, then mill detection is two lookups</h2>
+    <p>
+      A piece can only complete a mill on a line through the point it just landed on.
+      Precompute, for each point, the indices of the lines passing through it, and the test
+      becomes: for each of those two lines, are all three points mine. This runs on every
+      move in the search, so cheap matters.
+    </p>
+    <pre id="codeMills"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Step 3 &mdash; one move generator, three phases, plus removals</h2>
+    <p>
+      The generator asks four questions in order. Is a removal pending, in which case the
+      legal moves are removals. Are there pieces still in hand, in which case every empty
+      point is a placement. Does this side have exactly three pieces, in which case every
+      piece may go to every empty point. Otherwise slide along adjacency.
+    </p>
+    <pre id="codeMoves"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Step 4 &mdash; applying a move, and the flag that keeps the turn</h2>
+    <p>
+      <code>apply</code> copies the state rather than mutating it, which is what lets the
+      search walk the tree without an undo stack and lets the page keep a history for the
+      undo button. It validates instead of trusting: a placement on an occupied point, a
+      slide between points that are not adjacent, or a removal of a protected piece all
+      throw rather than quietly producing a wrong position.
+    </p>
+    <pre id="codeApply"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Step 5 &mdash; settling the position after every single ply</h2>
+    <p>
+      One function decides whether the game just ended, and it runs after every move
+      including the removal. It checks reduction to two pieces, then no-legal-move, then
+      the two draw rules. Order matters: a player reduced to two pieces usually also has no
+      moves, and reporting the more specific reason is what makes the status line useful.
+    </p>
+    <pre id="codeSettle"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Step 6 &mdash; the evaluation, every term a difference</h2>
+    <p>
+      Material, mills, two-in-a-line threats, mobility and blocked pieces, each weighted
+      and each written as mine minus yours. Keeping that shape is what makes the function
+      antisymmetric, and antisymmetry is what lets one search routine serve both sides.
+    </p>
+    <pre id="codeEval"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Step 7 &mdash; search that asks whose turn it is</h2>
+    <p>
+      The node maximises when the side to move is the side we are searching for, and
+      minimises otherwise. That single line is what makes pending removals correct. The
+      depth-zero cut is skipped while a removal is pending, so the search never scores a
+      position halfway through a capture.
+    </p>
+    <pre id="codeSearch"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Step 8 &mdash; move ordering, because alpha-beta only pays if you help it</h2>
+    <p>
+      Alpha-beta prunes most when the best move is tried first. Mill-forming moves go to
+      the front, and removals are ordered by how much enemy threat they take off the board.
+      The ordering is deterministic, so the same position always produces the same move and
+      the same node count, which is what makes the numbers on this page reproducible.
+    </p>
+    <pre id="codeOrder"></pre>
+  </div>
+
+  <div class="card">
+    <h2>The engine</h2>
+    <pre id="codeEngine"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Self-check</h2>
+    <p class="note" style="margin:0 0 10px">
+      Running in your browser now, against the same engine the game above is played with.
+    </p>
+    <div id="selftest"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p style="margin:0">
+      GameFromZero &middot; Day 83 &middot; Nine Men's Morris.
+      Sixteen lines, thirty-two edges, sixteen symmetries, four distinct opening moves.
+    </p>
+  </div>
+</footer>
+</div>
+
+<script>
+// ===== ENGINE:BEGIN =====
+const ENGINE = (() => {
+
+  // ======================================================================
+  // Nine Men's Morris. Twenty-four points, sixteen printed lines of three.
+  // Everything else in this file is derived from that list of lines - the
+  // adjacency, the mill test, the move generator, the search.
+  //
+  // Points are numbered ring by ring, clockwise from the top-left corner:
+  //
+  //     0--------1--------2
+  //     |        |        |
+  //     |  8-----9----10  |
+  //     |  |     |     |  |
+  //     |  | 16--17--18 |  |
+  //     |  |  |      |  |  |
+  //     7-15-23      19-11-3
+  //     |  |  |      |  |  |
+  //     |  | 22--21--20 |  |
+  //     |  |     |     |  |
+  //     |  14----13----12 |
+  //     |        |        |
+  //     6--------5--------4
+  // ======================================================================
+
+  const EMPTY = 0, W = 1, B = 2;
+
+  // the sixteen lines: four per ring, plus the four spokes joining the rings
+  const MILLS = [
+    [0, 1, 2],    [2, 3, 4],    [4, 5, 6],    [6, 7, 0],
+    [8, 9, 10],   [10, 11, 12], [12, 13, 14], [14, 15, 8],
+    [16, 17, 18], [18, 19, 20], [20, 21, 22], [22, 23, 16],
+    [1, 9, 17],   [3, 11, 19],  [5, 13, 21],  [7, 15, 23]
+  ];
+
+  // where each point is drawn, as [col, row] on a 7x7 lattice. This is used
+  // ONLY for drawing and for the geometry self-check - no rule reads it.
+  const XY = [
+    [0, 0], [3, 0], [6, 0], [6, 3], [6, 6], [3, 6], [0, 6], [0, 3],
+    [1, 1], [3, 1], [5, 1], [5, 3], [5, 5], [3, 5], [1, 5], [1, 3],
+    [2, 2], [3, 2], [4, 2], [4, 3], [4, 4], [3, 4], [2, 4], [2, 3]
+  ];
+
+  // ----------------------------------------------------- adjacency, derived
+  // Each line of three contributes exactly two adjacent pairs. Typing the
+  // adjacency list by hand is how boards get quietly wrong; computing it from
+  // the lines makes the two structures incapable of disagreeing.
+  const ADJ = (() => {
+    const a = [];
+    for (let i = 0; i < 24; i++) a.push([]);
+    const link = (x, y) => {
+      if (a[x].indexOf(y) < 0) a[x].push(y);
+      if (a[y].indexOf(x) < 0) a[y].push(x);
+    };
+    for (const line of MILLS) { link(line[0], line[1]); link(line[1], line[2]); }
+    for (const l of a) l.sort((x, y) => x - y);
+    return a;
+  })();
+
+  // which lines pass through each point - every point is on exactly two
+  const LINES_AT = (() => {
+    const m = [];
+    for (let i = 0; i < 24; i++) m.push([]);
+    MILLS.forEach((line, i) => { for (const p of line) m[p].push(i); });
+    return m;
+  })();
+
+  const EDGES = (() => {
+    const out = [];
+    for (let i = 0; i < 24; i++) for (const j of ADJ[i]) if (j > i) out.push([i, j]);
+    return out;
+  })();
+
+  const opp = (p) => (p === W ? B : W);
+
+  // ------------------------------------------------------------- the state
+  // b        - 24 points, 0 empty / 1 white / 2 black
+  // hand[p]  - pieces not yet placed
+  // on[p]    - pieces on the board
+  // pending  - true when this player has just closed a mill and owes a removal
+  // since    - plies since the last capture or placement (the fifty-move rule)
+  // reps     - how often each position key has occurred (threefold repetition)
+  const DRAW_PLIES = 100;        // fifty moves by each side
+  const REPEATS = 3;
+
+  function initial() {
+    return {
+      b: new Array(24).fill(EMPTY),
+      turn: W,
+      hand: [0, 9, 9],
+      on: [0, 0, 0],
+      pending: false,
+      since: 0,
+      ply: 0,
+      reps: Object.create(null),
+      over: null
+    };
+  }
+
+  // the repetition key MUST include the side to move, or two genuinely
+  // different positions are counted as one
+  function key(s) {
+    return s.b.join("") + "|" + s.turn + "|" + s.hand[1] + "," + s.hand[2] + "|" + (s.pending ? "r" : "-");
+  }
+
+  // phase is DERIVED, never stored, so it cannot drift from the position
+  function phase(s, p) {
+    if (s.hand[p] > 0) return "placing";
+    return s.on[p] === 3 ? "flying" : "moving";
+  }
+
+  // ------------------------------------------------------------ mill tests
+  function millAt(b, i, p) {
+    for (const li of LINES_AT[i]) {
+      const L = MILLS[li];
+      if (b[L[0]] === p && b[L[1]] === p && b[L[2]] === p) return true;
+    }
+    return false;
+  }
+
+  function millsOf(b, p) {
+    let n = 0;
+    for (const L of MILLS) if (b[L[0]] === p && b[L[1]] === p && b[L[2]] === p) n++;
+    return n;
+  }
+
+  function millLines(b) {
+    const out = [];
+    MILLS.forEach((L, i) => {
+      const v = b[L[0]];
+      if (v !== EMPTY && b[L[1]] === v && b[L[2]] === v) out.push(i);
+    });
+    return out;
+  }
+
+  // ----------------------------------------------------- the capture rule
+  // You may not take a piece standing in a mill - UNLESS every enemy piece is
+  // in a mill, in which case the protection lapses entirely. Without that
+  // fallback a player whose pieces are all milled is invulnerable and the game
+  // never ends, which is exactly the bug the inversion check downstairs pins.
+  function removable(s, victim) {
+    const all = [], free = [];
+    for (let i = 0; i < 24; i++) {
+      if (s.b[i] !== victim) continue;
+      all.push(i);
+      if (!millAt(s.b, i, victim)) free.push(i);
+    }
+    return free.length ? free : all;
+  }
+
+  // -------------------------------------------------------- move generation
+  // One generator. The phase is a question asked at the top, not three
+  // separate code paths kept in sync by hand.
+  function moves(s) {
+    if (s.over) return [];
+    const p = s.turn;
+    if (s.pending) return removable(s, opp(p)).map((at) => ({ t: "r", at }));
+    const out = [];
+    if (s.hand[p] > 0) {
+      for (let i = 0; i < 24; i++) if (s.b[i] === EMPTY) out.push({ t: "p", to: i });
+      return out;
+    }
+    const fly = s.on[p] === 3;
+    for (let i = 0; i < 24; i++) {
+      if (s.b[i] !== p) continue;
+      if (fly) {
+        for (let j = 0; j < 24; j++) if (s.b[j] === EMPTY) out.push({ t: "m", from: i, to: j });
+      } else {
+        for (const j of ADJ[i]) if (s.b[j] === EMPTY) out.push({ t: "m", from: i, to: j });
+      }
+    }
+    return out;
+  }
+
+  const moveKey = (mv) =>
+    mv.t === "p" ? "p" + mv.to : mv.t === "r" ? "r" + mv.at : "m" + mv.from + ">" + mv.to;
+
+  // ------------------------------------------------------------ settlement
+  // Runs after EVERY ply, the removal included. Order matters: a player on two
+  // pieces usually also has no moves, and the specific reason is the useful one.
+  function settle(n, track) {
+    if (track && n.hand[W] === 0 && n.hand[B] === 0 && !n.pending) {
+      const k = key(n);
+      n.reps[k] = (n.reps[k] || 0) + 1;
+      if (n.reps[k] >= REPEATS) {
+        n.over = { winner: 0, reason: "draw by threefold repetition" };
+        return;
+      }
+    }
+    const t = n.turn;
+    if (n.hand[t] === 0 && n.on[t] <= 2) {
+      n.over = { winner: opp(t), reason: "reduced to two pieces" };
+      return;
+    }
+    if (moves(n).length === 0) {
+      n.over = { winner: opp(t), reason: "no legal move" };
+      return;
+    }
+    if (n.since >= DRAW_PLIES) n.over = { winner: 0, reason: "draw by the fifty-move rule" };
+  }
+
+  // ----------------------------------------------------------------- apply
+  // Copies rather than mutates: the search walks the tree with no undo stack,
+  // and the page keeps the old states for its undo button. It validates rather
+  // than trusts - every illegal move throws.
+  function apply(s, mv, track) {
+    const n = {
+      b: s.b.slice(),
+      turn: s.turn,
+      hand: s.hand.slice(),
+      on: s.on.slice(),
+      pending: false,
+      since: s.since,
+      ply: s.ply + 1,
+      reps: track ? Object.assign(Object.create(null), s.reps) : s.reps,
+      over: null
+    };
+    const p = s.turn;
+    if (s.over) throw new Error("the game is over: " + s.over.reason);
+
+    if (mv.t === "p") {
+      if (s.pending) throw new Error("a removal is owed before any other move");
+      if (n.hand[p] === 0) throw new Error("no pieces left in hand");
+      if (n.b[mv.to] !== EMPTY) throw new Error("point " + mv.to + " is not empty");
+      n.b[mv.to] = p; n.hand[p]--; n.on[p]++;
+      n.since = 0;                                   // a placement is irreversible
+      if (millAt(n.b, mv.to, p)) n.pending = true; else n.turn = opp(p);
+
+    } else if (mv.t === "m") {
+      if (s.pending) throw new Error("a removal is owed before any other move");
+      if (n.hand[p] > 0) throw new Error("pieces are still in hand");
+      if (n.b[mv.from] !== p) throw new Error("no piece of yours at " + mv.from);
+      if (n.b[mv.to] !== EMPTY) throw new Error("point " + mv.to + " is not empty");
+      if (n.on[p] !== 3 && ADJ[mv.from].indexOf(mv.to) < 0)
+        throw new Error("points " + mv.from + " and " + mv.to + " are not adjacent");
+      n.b[mv.from] = EMPTY; n.b[mv.to] = p;
+      n.since = s.since + 1;
+      if (millAt(n.b, mv.to, p)) n.pending = true; else n.turn = opp(p);
+
+    } else if (mv.t === "r") {
+      if (!s.pending) throw new Error("nothing to remove");
+      if (removable(s, opp(p)).indexOf(mv.at) < 0)
+        throw new Error("point " + mv.at + " may not be taken");
+      n.b[mv.at] = EMPTY; n.on[opp(p)]--;
+      n.since = 0;                                   // a capture is irreversible
+      n.turn = opp(p);
+
+    } else throw new Error("unknown move type " + mv.t);
+
+    settle(n, !!track);
+    return n;
+  }
+
+  // build a position directly, for tables and tests
+  function position(str, o) {
+    o = o || {};
+    const b = [];
+    for (const ch of String(str)) {
+      if (ch === " " || ch === "\n") continue;
+      if (ch === "W") b.push(W);
+      else if (ch === "B") b.push(B);
+      else if (ch === ".") b.push(EMPTY);
+      else throw new Error("a position uses W, B and . - got " + ch);
+    }
+    if (b.length !== 24) throw new Error("a position is 24 points, got " + b.length);
+    const s = initial();
+    s.b = b;
+    s.hand = [0, o.whiteInHand || 0, o.blackInHand || 0];
+    s.on = [0, b.filter((v) => v === W).length, b.filter((v) => v === B).length];
+    s.turn = o.turn || W;
+    s.pending = !!o.pending;
+    s.since = o.since || 0;
+    settle(s, false);
+    return s;
+  }
+
+  // ------------------------------------------------------------ evaluation
+  // Every term is MINE MINUS YOURS, which is what makes the function exactly
+  // antisymmetric - evaluate(s, WHITE) === -evaluate(s, BLACK), asserted below.
+  const WIN = 1000000;
+
+  function mobility(b, p, fly) {
+    let n = 0, empties = 0;
+    if (fly) { for (let j = 0; j < 24; j++) if (b[j] === EMPTY) empties++; }
+    for (let i = 0; i < 24; i++) {
+      if (b[i] !== p) continue;
+      if (fly) n += empties;
+      else for (const j of ADJ[i]) if (b[j] === EMPTY) n++;
+    }
+    return n;
+  }
+
+  function blockedCount(b, p) {
+    let n = 0;
+    for (let i = 0; i < 24; i++) {
+      if (b[i] !== p) continue;
+      let free = false;
+      for (const j of ADJ[i]) if (b[j] === EMPTY) { free = true; break; }
+      if (!free) n++;
+    }
+    return n;
+  }
+
+  // lines holding two of p and one empty point - a mill one move away
+  function twoInLine(b, p) {
+    let n = 0;
+    for (const L of MILLS) {
+      let mine = 0, empty = 0;
+      for (const q of L) { if (b[q] === p) mine++; else if (b[q] === EMPTY) empty++; }
+      if (mine === 2 && empty === 1) n++;
+    }
+    return n;
+  }
+
+  function evaluate(s, me) {
+    const you = opp(me);
+    const flyMe = s.hand[me] === 0 && s.on[me] === 3;
+    const flyYou = s.hand[you] === 0 && s.on[you] === 3;
+    let v = 0;
+    v += 120 * ((s.on[me] + s.hand[me]) - (s.on[you] + s.hand[you]));   // material
+    v += 30 * (millsOf(s.b, me) - millsOf(s.b, you));                   // mills standing
+    v += 14 * (twoInLine(s.b, me) - twoInLine(s.b, you));               // threats
+    v += 2 * (mobility(s.b, me, flyMe) - mobility(s.b, you, flyYou));   // room to move
+    v += 18 * (blockedCount(s.b, you) - blockedCount(s.b, me));         // frozen pieces
+    if (s.pending) v += (s.turn === me ? 60 : -60);                     // a capture is owed
+    return v;
+  }
+
+  // ----------------------------------------------------------- the search
+  // Minimax with alpha-beta. The node asks WHOSE TURN IT IS rather than
+  // inferring it from the depth, because a mill gives the same player another
+  // ply. Written as plain negamax that assumption is baked in and every capture
+  // is scored for the wrong side.
+  function ordered(s, ms) {
+    const p = s.turn;
+    const scored = ms.map((mv, i) => {
+      let k = 0;
+      if (mv.t === "p") {
+        const b = s.b.slice(); b[mv.to] = p;
+        if (millAt(b, mv.to, p)) k = 100;
+      } else if (mv.t === "m") {
+        const b = s.b.slice(); b[mv.from] = EMPTY; b[mv.to] = p;
+        if (millAt(b, mv.to, p)) k = 100;
+      } else {
+        const b = s.b.slice(); b[mv.at] = EMPTY;
+        k = 50 - twoInLine(b, opp(p));
+      }
+      return { mv, k, i };
+    });
+    scored.sort((x, y) => y.k - x.k || x.i - y.i);
+    return scored.map((x) => x.mv);
+  }
+
+  function search(s, depth, alpha, beta, me, ctr, ply, prune) {
+    ctr.nodes++;
+    if (s.over) {
+      if (s.over.winner === 0) return 0;
+      return s.over.winner === me ? WIN - ply : -WIN + ply;
+    }
+    // never score a position halfway through a capture
+    if (depth <= 0 && !s.pending) return evaluate(s, me);
+    const ms = ordered(s, moves(s));
+    if (!ms.length) return evaluate(s, me);
+    const maxing = s.turn === me;
+    let best = maxing ? -Infinity : Infinity;
+    for (const mv of ms) {
+      const v = search(apply(s, mv, false), depth - 1, alpha, beta, me, ctr, ply + 1, prune);
+      if (maxing) { if (v > best) best = v; if (best > alpha) alpha = best; }
+      else { if (v < best) best = v; if (best < beta) beta = best; }
+      if (prune && beta <= alpha) { ctr.cuts++; break; }
+    }
+    return best;
+  }
+
+  function bestMove(s, depth, opts) {
+    const o = opts || {};
+    const prune = o.prune !== false;
+    const ctr = { nodes: 0, cuts: 0 };
+    const me = s.turn;
+    const ms = ordered(s, moves(s));
+    if (!ms.length) return { move: null, score: 0, nodes: 0, cuts: 0, considered: 0 };
+    let best = null, bestV = -Infinity, alpha = -Infinity;
+    for (const mv of ms) {
+      const v = search(apply(s, mv, false), depth - 1, prune ? alpha : -Infinity, Infinity,
+                       me, ctr, 1, prune);
+      if (best === null || v > bestV) {
+        bestV = v; best = mv;
+        if (prune && v > alpha) alpha = v;
+      }
+    }
+    return { move: best, score: bestV, nodes: ctr.nodes, cuts: ctr.cuts, considered: ms.length };
+  }
+
+  // a whole game, engine against itself - the only honest way to show that the
+  // draw rules actually terminate a deterministic engine
+  function selfPlay(depth, cap) {
+    let s = initial();
+    let plies = 0;
+    while (!s.over && plies < cap) {
+      const r = bestMove(s, depth);
+      if (!r.move) break;
+      s = apply(s, r.move, true);
+      plies++;
+    }
+    return { plies, over: s.over, state: s };
+  }
+
+  // ---------------------------------------------------------- the symmetries
+  // Every relabelling of the points that preserves adjacency. Found by search,
+  // not assumed: the points are visited in breadth-first order so each new one
+  // already has an assigned neighbour, which keeps the candidates to that
+  // neighbour's image's neighbours and makes the walk finish instantly.
+  function automorphisms() {
+    const order = [], seen = new Array(24).fill(false);
+    order.push(0); seen[0] = true;
+    for (let qi = 0; qi < order.length; qi++) {
+      for (const j of ADJ[order[qi]]) if (!seen[j]) { seen[j] = true; order.push(j); }
+    }
+    const img = new Array(24).fill(-1), used = new Array(24).fill(false), out = [];
+    const adjacent = (x, y) => ADJ[x].indexOf(y) >= 0;
+
+    function go(k) {
+      if (k === 24) { out.push(img.slice()); return; }
+      const v = order[k];
+      let cands = null;
+      for (let j = 0; j < k; j++) {
+        if (adjacent(v, order[j])) { cands = ADJ[img[order[j]]]; break; }
+      }
+      if (!cands) { cands = []; for (let i = 0; i < 24; i++) cands.push(i); }
+      for (const c of cands) {
+        if (used[c]) continue;
+        if (ADJ[c].length !== ADJ[v].length) continue;
+        let ok = true;
+        for (let j = 0; j < k; j++) {
+          const u = order[j];
+          if (adjacent(v, u) !== adjacent(c, img[u])) { ok = false; break; }
+        }
+        if (!ok) continue;
+        img[v] = c; used[c] = true;
+        go(k + 1);
+        used[c] = false; img[v] = -1;
+      }
+    }
+    go(0);
+    return out;
+  }
+
+  // the orbits of the points under those symmetries - distinct opening moves
+  function orbits() {
+    const auts = automorphisms();
+    const label = new Array(24).fill(-1);
+    const out = [];
+    for (let i = 0; i < 24; i++) {
+      if (label[i] >= 0) continue;
+      const group = [];
+      for (const a of auts) if (label[a[i]] < 0) { label[a[i]] = out.length; group.push(a[i]); }
+      group.sort((x, y) => x - y);
+      out.push(group);
+    }
+    return out;
+  }
+
+  return {
+    EMPTY, W, B, MILLS, ADJ, LINES_AT, EDGES, XY, WIN, DRAW_PLIES, REPEATS,
+    opp, initial, key, phase, millAt, millsOf, millLines, removable, moves, moveKey,
+    apply, settle, position, evaluate, mobility, blockedCount, twoInLine,
+    ordered, search, bestMove, selfPlay, automorphisms, orbits
+  };
+})();
+// ===== ENGINE:END =====
+</script>
+
+<script>
+function showTab(name) {
+  for (const t of ["play", "und", "build"]) document.getElementById(t).classList.toggle("hidden", t !== name);
+  document.getElementById("tabPlay").classList.toggle("tab-active", name === "play");
+  document.getElementById("tabUnd").classList.toggle("tab-active", name === "und");
+  document.getElementById("tabBuild").classList.toggle("tab-active", name === "build");
+}
+const el = (id) => document.getElementById(id);
+function table(id, head, rows) {
+  el(id).innerHTML =
+    "<tr>" + head.map((h) => "<th>" + h + "</th>").join("") + "</tr>" +
+    rows.map((r) => "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + ">" +
+      r.cells.map((c, i) => "<td" + (i === 0 ? ' class="txt"' : "") + ">" + c + "</td>").join("") + "</tr>").join("");
+}
+function selfCheckPanel(fn) {
+  const out = []; let n = 0, bad = 0;
+  const t = (label, cond, detail = "") => {
+    n += 1; if (!cond) bad += 1;
+    out.push('<div><span class="' + (cond ? "ok" : "warn") + '">' + (cond ? "PASS" : "FAIL") +
+      '</span><span>' + label + '</span><span class="m">' + detail + "</span></div>");
+  };
+  fn(t);
+  el("selftest").innerHTML =
+    '<p class="note" style="margin:0 0 8px"><b class="' + (bad ? "warn" : "ok") + '">' +
+    (n - bad) + " of " + n + " checks pass</b>" + (bad ? " &mdash; " + bad + " FAILED" : "") + ".</p>" + out.join("");
+}
+
+// -------------------------------------------------------------------- drawing
+const PAD = 26, SPAN = 340;
+const px = (i) => [PAD + ENGINE.XY[i][0] * (SPAN / 6), PAD + ENGINE.XY[i][1] * (SPAN / 6)];
+
+function drawBoard(s, ui) {
+  const size = SPAN + PAD * 2;
+  let g = '<svg viewBox="0 0 ' + size + " " + size + '" role="img" aria-label="Nine Men\'s Morris board">';
+  g += '<rect x="0" y="0" width="' + size + '" height="' + size + '" fill="#ffffff" rx="12"/>';
+  for (const [i, j] of ENGINE.EDGES) {
+    const a = px(i), b = px(j);
+    g += '<line x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '"/>';
+  }
+  for (const li of ENGINE.millLines(s.b)) {
+    const L = ENGINE.MILLS[li], a = px(L[0]), b = px(L[2]);
+    g += '<line class="mill" x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '"/>';
+  }
+  for (let i = 0; i < 24; i++) {
+    const [x, y] = px(i);
+    const v = s.b[i];
+    const cls = v === ENGINE.W ? "pt w" : v === ENGINE.B ? "pt b" : "pt";
+    g += '<circle class="' + cls + '" cx="' + x + '" cy="' + y + '" r="' + (v ? 13 : 6) + '"/>';
+    if (ui.dests.has(i)) g += '<circle class="ring" cx="' + x + '" cy="' + y + '" r="12"/>';
+    if (ui.sel === i) g += '<circle class="ring sel" cx="' + x + '" cy="' + y + '" r="17"/>';
+    if (ui.targets.has(i)) g += '<circle class="ring tgt" cx="' + x + '" cy="' + y + '" r="17"/>';
+    g += '<circle class="hit" data-i="' + i + '" cx="' + x + '" cy="' + y + '" r="19"/>';
+  }
+  return g + "</svg>";
+}
+
+// ------------------------------------------------------------------ the game
+const G = { s: ENGINE.initial(), hist: [], sel: null, you: 1, depth: 3, nodes: 0, cuts: 0, timer: 0 };
+const SIDE = { 1: "White", 2: "Black" };
+
+function uiSets() {
+  const dests = new Set(), targets = new Set(), sources = new Set();
+  const human = G.you !== 0 && G.s.turn === G.you && !G.s.over;
+  if (human) {
+    const ms = ENGINE.moves(G.s);
+    if (G.s.pending) for (const m of ms) targets.add(m.at);
+    else if (G.s.hand[G.s.turn] > 0) for (const m of ms) dests.add(m.to);
+    else {
+      for (const m of ms) sources.add(m.from);
+      if (G.sel !== null) for (const m of ms) if (m.from === G.sel) dests.add(m.to);
+    }
+  }
+  return { dests, targets, sources, sel: G.sel, human };
+}
+
+function render() {
+  const ui = uiSets();
+  el("boardWrap").innerHTML = drawBoard(G.s, ui);
+  const ms = ENGINE.moves(G.s);
+  const p = G.s.turn;
+
+  let msg;
+  if (G.s.over) {
+    msg = G.s.over.winner === 0
+      ? '<b class="warn">Drawn</b> &mdash; ' + G.s.over.reason
+      : '<b class="ok">' + SIDE[G.s.over.winner] + " wins</b> &mdash; " + G.s.over.reason;
+  } else if (!ui.human) {
+    msg = "<b>" + SIDE[p] + "</b> is thinking&hellip;";
+  } else if (G.s.pending) {
+    msg = "<b>" + SIDE[p] + "</b> closed a mill &mdash; take one of the "
+        + ms.length + " pieces ringed in red.";
+  } else if (G.s.hand[p] > 0) {
+    msg = "<b>" + SIDE[p] + "</b> to place (" + G.s.hand[p] + " still in hand).";
+  } else if (G.sel !== null) {
+    msg = "<b>" + SIDE[p] + "</b> &mdash; point " + G.sel + " selected, "
+        + ms.filter((m) => m.from === G.sel).length + " destinations.";
+  } else {
+    msg = "<b>" + SIDE[p] + "</b> to " + (G.s.on[p] === 3 ? "fly" : "slide")
+        + " &mdash; tap one of your own pieces.";
+  }
+  el("status").innerHTML = msg;
+
+  el("kPhase").textContent = G.s.pending ? "capture" : ENGINE.phase(G.s, p);
+  el("kPhaseNote").textContent = G.s.over ? "game over" : SIDE[p] + " to move";
+  el("kMoves").textContent = String(ms.length);
+  el("kMovesNote").textContent = G.s.pending ? "pieces that may be taken"
+    : G.s.hand[p] > 0 ? "empty points" : "slides available";
+  el("kMills").textContent = String(ENGINE.millsOf(G.s.b, 1) + ENGINE.millsOf(G.s.b, 2));
+  el("kMillsNote").innerHTML = "White " + ENGINE.millsOf(G.s.b, 1) + " &middot; Black " + ENGINE.millsOf(G.s.b, 2);
+  el("kNodes").textContent = G.nodes.toLocaleString("en-US");
+  el("kNodesNote").textContent = G.cuts.toLocaleString("en-US") + " alpha-beta cutoffs";
+
+  table("tState", ["", "White", "Black"], [
+    { cells: ["in hand", G.s.hand[1], G.s.hand[2]] },
+    { cells: ["on the board", G.s.on[1], G.s.on[2]] },
+    { cells: ["mills standing", ENGINE.millsOf(G.s.b, 1), ENGINE.millsOf(G.s.b, 2)] },
+    { cells: ["lines with two and a gap", ENGINE.twoInLine(G.s.b, 1), ENGINE.twoInLine(G.s.b, 2)] },
+    { cells: ["pieces with nowhere to go", ENGINE.blockedCount(G.s.b, 1), ENGINE.blockedCount(G.s.b, 2)] },
+    { cells: ["phase", ENGINE.phase(G.s, 1), ENGINE.phase(G.s, 2)] },
+    { cls: G.s.since > 70 ? "here" : "", cells: ["plies since a capture", G.s.since, G.s.since] },
+    { cells: ["ply", G.s.ply, G.s.ply] }
+  ]);
+}
+
+function doMove(mv) {
+  G.hist.push(G.s);
+  G.s = ENGINE.apply(G.s, mv, true);
+  G.sel = null;
+  render();
+  schedule();
+}
+
+function schedule() {
+  if (G.timer) { clearTimeout(G.timer); G.timer = 0; }
+  if (G.s.over) return;
+  if (G.you !== 0 && G.s.turn === G.you) return;
+  G.timer = setTimeout(aiStep, 160);
+}
+
+function aiStep() {
+  G.timer = 0;
+  if (G.s.over) return;
+  const r = ENGINE.bestMove(G.s, G.depth);
+  if (!r.move) return;
+  G.nodes = r.nodes; G.cuts = r.cuts;
+  G.hist.push(G.s);
+  G.s = ENGINE.apply(G.s, r.move, true);
+  render();
+  schedule();
+}
+
+function onPoint(i) {
+  if (G.s.over) return;
+  if (G.you === 0 || G.s.turn !== G.you) return;
+  const ms = ENGINE.moves(G.s);
+  if (G.s.pending) {
+    const mv = ms.find((m) => m.at === i);
+    if (mv) doMove(mv);
+    return;
+  }
+  if (G.s.hand[G.s.turn] > 0) {
+    const mv = ms.find((m) => m.to === i);
+    if (mv) doMove(mv);
+    return;
+  }
+  if (G.s.b[i] === G.s.turn) { G.sel = (G.sel === i ? null : i); render(); return; }
+  if (G.sel !== null) {
+    const mv = ms.find((m) => m.from === G.sel && m.to === i);
+    if (mv) doMove(mv);
+  }
+}
+
+function newGame() {
+  if (G.timer) { clearTimeout(G.timer); G.timer = 0; }
+  G.s = ENGINE.initial(); G.hist = []; G.sel = null; G.nodes = 0; G.cuts = 0;
+  render(); schedule();
+}
+
+function undo() {
+  if (G.timer) { clearTimeout(G.timer); G.timer = 0; }
+  if (!G.hist.length) return;
+  G.s = G.hist.pop();
+  // step back past the engine's reply so the human is on move again
+  while (G.hist.length && G.you !== 0 && G.s.turn !== G.you) G.s = G.hist.pop();
+  G.sel = null;
+  render(); schedule();
+}
+
+el("boardWrap").addEventListener("click", (e) => {
+  const hit = e.target.closest ? e.target.closest("[data-i]") : null;
+  if (hit) onPoint(parseInt(hit.getAttribute("data-i"), 10));
+});
+el("btnNew").addEventListener("click", newGame);
+el("btnUndo").addEventListener("click", undo);
+el("side").addEventListener("change", () => { G.you = parseInt(el("side").value, 10); newGame(); });
+function setDepth(v) {
+  const d = Math.max(1, Math.min(5, parseInt(v, 10) || 3));
+  G.depth = d; el("depR").value = String(d); el("depN").value = String(d);
+}
+el("depR").addEventListener("input", () => setDepth(el("depR").value));
+el("depN").addEventListener("input", () => setDepth(el("depN").value));
+newGame();
+
+// --------------------------------------------------------------- the tables
+const AUT = ENGINE.automorphisms();
+const ORB = ENGINE.orbits();
+const DEG = (() => { const d = {}; for (let i = 0; i < 24; i++) d[ENGINE.ADJ[i].length] = (d[ENGINE.ADJ[i].length] || 0) + 1; return d; })();
+
+// a fixed moving-phase position used for every measured search number
+const MID = "W.W.B.B..W.B.W.BW.B.W.B.";
+const MIDS = ENGINE.position(MID, { turn: 1 });
+const FLY = ENGINE.position("W.W...B.....W...B.B.....", { turn: 1 });
+
+// the measured searches are reused by the tables AND by the self-check, so
+// each (depth, pruning) pair is run exactly once
+const SCACHE = new Map();
+function midSearch(depth, prune) {
+  const k = depth + (prune ? "p" : "n");
+  if (!SCACHE.has(k)) SCACHE.set(k, ENGINE.bestMove(MIDS, depth, { prune }));
+  return SCACHE.get(k);
+}
+let SELFPLAY = null;
+function selfPlayOnce() {
+  if (!SELFPLAY) SELFPLAY = ENGINE.selfPlay(1, 600);
+  return SELFPLAY;
+}
+
+{
+  table("tBoardFacts", ["fact", "value", "where it comes from"], [
+    { cls: "here", cells: ["lines of three", ENGINE.MILLS.length, "typed once, by hand"] },
+    { cells: ["points", 24, "three rings of eight"] },
+    { cells: ["edges", ENGINE.EDGES.length, "two per line, de-duplicated"] },
+    { cells: ["point-to-line memberships", ENGINE.MILLS.length * 3, "16 lines x 3 points"] },
+    { cells: ["lines through each point", 2, "48 memberships / 24 points"] },
+    { cells: ["symmetries of the graph", AUT.length, "found by search, not assumed"] },
+    { cells: ["distinct opening moves", ORB.length, "orbits of the points"] },
+    { cells: ["legal first moves", ENGINE.moves(ENGINE.initial()).length, "every point is empty"] }
+  ]);
+  el("boardFactsNote").innerHTML =
+    "Twenty-four points and " + ENGINE.EDGES.length + " edges, every one of them derived from the " +
+    ENGINE.MILLS.length + " lines above. The <b>" + ORB.length + "</b> distinct opening moves are the " +
+    "interesting number: the board looks like it offers 24 and the symmetry group of order <b>" +
+    AUT.length + "</b> collapses them to four.";
+}
+
+{
+  const byDeg = [2, 3, 4].map((d) => {
+    const pts = [];
+    for (let i = 0; i < 24; i++) if (ENGINE.ADJ[i].length === d) pts.push(i);
+    return {
+      cls: d === 4 ? "here" : "",
+      cells: [
+        d === 2 ? "corner of a ring" : d === 3 ? "midpoint of the outer or inner ring" : "midpoint of the middle ring",
+        d, pts.length, pts.join(" ")
+      ]
+    };
+  });
+  table("tDeg", ["kind of point", "neighbours", "how many", "which points"], byDeg);
+  el("degNote").innerHTML =
+    "Degrees " + Object.keys(DEG).sort().join(", ") + " on one board &mdash; " +
+    DEG[2] + " points with two neighbours, " + DEG[3] + " with three and " + DEG[4] + " with four. " +
+    "A row-and-column grid cannot express that, which is why the board is stored as a graph. " +
+    "The degrees sum to " + (2 * ENGINE.EDGES.length) + ", exactly twice the " + ENGINE.EDGES.length + " edges.";
+}
+
+{
+  const rows = ENGINE.MILLS.map((L, i) => ({
+    cls: i >= 12 ? "here" : "",
+    cells: [i < 4 ? "outer ring" : i < 8 ? "middle ring" : i < 12 ? "inner ring" : "spoke",
+      L.join(" - "), L[0] + "-" + L[1] + ", " + L[1] + "-" + L[2],
+      ENGINE.ADJ[L[0]].length + "/" + ENGINE.ADJ[L[1]].length + "/" + ENGINE.ADJ[L[2]].length]
+  }));
+  table("tLines", ["group", "the line", "edges it contributes", "degrees"], rows);
+  el("linesNote").innerHTML =
+    ENGINE.MILLS.length + " lines x 2 pairs = " + (ENGINE.MILLS.length * 2) +
+    " edge contributions, and after de-duplication exactly <b>" + ENGINE.EDGES.length +
+    "</b> distinct edges &mdash; none of the pairs collide, which is itself a check on the list of lines.";
+}
+
+{
+  const rows = [];
+  for (const i of [0, 1, 8, 9, 16, 17, 23]) {
+    rows.push({
+      cls: ENGINE.ADJ[i].length === 4 ? "here" : "",
+      cells: ["point " + i, ENGINE.LINES_AT[i].length,
+        ENGINE.LINES_AT[i].map((li) => ENGINE.MILLS[li].join("-")).join("  and  "),
+        ENGINE.ADJ[i].join(" ")]
+    });
+  }
+  table("tLinesAt", ["point", "lines through it", "which lines", "neighbours"], rows);
+  let allTwo = true;
+  for (let i = 0; i < 24; i++) if (ENGINE.LINES_AT[i].length !== 2) allTwo = false;
+  el("linesAtNote").innerHTML =
+    (allTwo ? "<b>Every</b> one of the 24 points lies on exactly two lines" :
+      '<b class="warn">Some point does not lie on two lines</b>') +
+    ", so a mill test after a move reads two lines rather than sixteen &mdash; an eight-fold saving on the " +
+    "hottest function in the search.";
+}
+
+{
+  // real states, built by playing real moves
+  const open = ENGINE.initial();
+  const afterOne = ENGINE.apply(open, { t: "p", to: 0 }, false);
+  const afterTwo = ENGINE.apply(afterOne, { t: "p", to: 1 }, false);
+  const slide = MIDS;
+  const flyW = FLY;
+  const rows = [
+    { cells: ["opening", "placing", "0 / 0", ENGINE.moves(open).length, "every empty point"] },
+    { cells: ["after one placement", "placing", "1 / 0", ENGINE.moves(afterOne).length, "one point fewer"] },
+    { cells: ["after two placements", "placing", "1 / 1", ENGINE.moves(afterTwo).length, "one point fewer again"] },
+    { cls: "here", cells: ["mid-game", "moving", slide.on[1] + " / " + slide.on[2],
+        ENGINE.moves(slide).length, "slides along adjacency only"] },
+    { cells: ["White down to three", "flying", flyW.on[1] + " / " + flyW.on[2],
+        ENGINE.moves(flyW).length, "3 pieces x every empty point"] }
+  ];
+  table("tPhases", ["position", "phase", "pieces W / B", "legal moves", "what they are"], rows);
+  el("phasesNote").innerHTML =
+    "Branching falls from <b>" + ENGINE.moves(open).length + "</b> in the opening to <b>" +
+    ENGINE.moves(slide).length + "</b> once the pieces have to slide, then jumps back to <b>" +
+    ENGINE.moves(flyW).length + "</b> the moment a side starts to fly. The search feels all three.";
+}
+
+{
+  // a mill in the placing phase: the same player stays on move
+  const s0 = ENGINE.position("WW..B.B.................", { turn: 1, whiteInHand: 7, blackInHand: 7 });
+  const s1 = ENGINE.apply(s0, { t: "p", to: 2 }, false);        // completes 0-1-2
+  const s2 = ENGINE.apply(s1, { t: "r", at: 4 }, false);        // and takes a piece
+  const kind = (s) => (s.over ? "none - game over" :
+    ENGINE.moves(s)[0].t === "p" ? "placements" : ENGINE.moves(s)[0].t === "r" ? "removals" : "slides");
+  table("tMillTurn", ["after", "side to move", "removal owed", "legal moves", "what they are"], [
+    { cells: ["two Whites and two Blacks placed", "White", String(s0.pending), ENGINE.moves(s0).length, kind(s0)] },
+    { cls: "here", cells: ["White completes 0-1-2", s1.turn === 1 ? "White" : "Black", String(s1.pending),
+      ENGINE.moves(s1).length, kind(s1)] },
+    { cells: ["the removal is played", s2.turn === 1 ? "White" : "Black", String(s2.pending),
+      ENGINE.moves(s2).length, kind(s2)] }
+  ]);
+}
+
+{
+  // a board where every black piece is inside a mill
+  const allMilled = ENGINE.position("WWW.....BBB.....BBB.....", { turn: 1, pending: true });
+  const mixed = ENGINE.position("WWW.....BBB.....B.B.....", { turn: 1, pending: true });
+  const rows = [
+    { cells: ["Black has a loose piece", mixed.on[2],
+        ENGINE.removable(mixed, 2).length,
+        ENGINE.removable(mixed, 2).join(" "),
+        '<span class="pill good">milled pieces protected</span>'] },
+    { cls: "here", cells: ["every Black piece is milled", allMilled.on[2],
+        ENGINE.removable(allMilled, 2).length,
+        ENGINE.removable(allMilled, 2).join(" "),
+        '<span class="pill bad">protection lapses</span>'] }
+  ];
+  table("tCapture", ["position", "Black pieces", "may be taken", "which points", "the rule in force"], rows);
+  el("capNote").innerHTML =
+    "With one loose Black piece the capture list is <b>" + ENGINE.removable(mixed, 2).length +
+    "</b> long. With every Black piece inside a mill it becomes <b>" +
+    ENGINE.removable(allMilled, 2).length + "</b> &mdash; all of them &mdash; because the exception " +
+    "fires. Drop the exception and that second number is zero, the mover has no legal move, and the " +
+    "engine reports a loss for the side that is winning.";
+}
+
+{
+  const rows = [];
+  for (const [name, s] of [["White on six, sliding", MIDS], ["White on three, flying", FLY]]) {
+    const empties = s.b.filter((v) => v === 0).length;
+    const fly = s.on[1] === 3;
+    rows.push({
+      cls: fly ? "here" : "",
+      cells: [name, s.on[1], empties, ENGINE.moves(s).length,
+        fly ? s.on[1] + " x " + empties : "sum of empty neighbours"]
+    });
+  }
+  table("tFly", ["position", "White pieces", "empty points", "White's legal moves", "the arithmetic"], rows);
+  const slid = ENGINE.moves(MIDS).length;
+  const flew = ENGINE.moves(FLY).length;
+  el("flyNote").innerHTML =
+    "Sliding gave <b>" + slid + "</b> moves from six pieces; flying gives <b>" + flew +
+    "</b> from three. Flying is the single biggest jump in branching factor in the whole game, " +
+    "which is why the search slows down exactly when the position gets sharp.";
+}
+
+{
+  const twoLeft = ENGINE.position("WW......BBBB............", { turn: 1 });
+  const boxed = ENGINE.position("WWWB...BBWB......B......", { turn: 1 });
+  const rows = [
+    { cls: "here", cells: ["White reduced to two", twoLeft.on[1], ENGINE.moves(twoLeft).length,
+        twoLeft.over ? twoLeft.over.reason : "still running",
+        twoLeft.over && twoLeft.over.winner === 2 ? '<span class="pill good">Black wins</span>' : '<span class="pill bad">not detected</span>'] },
+    { cls: "here", cells: ["White has four pieces but no move", boxed.on[1], ENGINE.moves(boxed).length,
+        boxed.over ? boxed.over.reason : "still running",
+        boxed.over && boxed.over.winner === 2 ? '<span class="pill good">Black wins</span>' : '<span class="pill bad">not detected</span>'] }
+  ];
+  table("tEnd", ["position", "White pieces", "White's legal moves", "verdict", "result"], rows);
+}
+
+{
+  // the shuffle: White 0<->1, Black 16<->17, forever
+  const CYCLE = [
+    { t: "m", from: 0, to: 1 }, { t: "m", from: 16, to: 17 },
+    { t: "m", from: 1, to: 0 }, { t: "m", from: 17, to: 16 }
+  ];
+  const START = "W.W.W.W.........B.B.B.B.";
+
+  let rep = ENGINE.position(START, { turn: 1 }), rn = 0;
+  while (!rep.over && rn < 60) { rep = ENGINE.apply(rep, CYCLE[rn % 4], true); rn++; }
+
+  let fifty = ENGINE.position(START, { turn: 1 }), fn = 0;
+  while (!fifty.over && fn < 400) { fifty = ENGINE.apply(fifty, CYCLE[fn % 4], false); fn++; }
+
+  const sp = selfPlayOnce();
+
+  table("tDraw", ["rule", "driven by", "plies until it fired", "verdict"], [
+    { cls: "here", cells: ["threefold repetition", "a four-ply shuffle, history tracked", rn,
+        rep.over ? rep.over.reason : "never fired"] },
+    { cells: ["fifty moves without a capture", "the same shuffle, history off", fn,
+        fifty.over ? fifty.over.reason : "never fired"] },
+    { cells: ["a whole game, depth 1, engine vs engine", "no human input", sp.plies,
+        sp.over ? sp.over.reason : "hit the ply cap"] }
+  ]);
+  el("drawNote").innerHTML =
+    "With history tracked the shuffle is drawn after <b>" + rn + "</b> plies; with history off it runs " +
+    "to the fifty-move limit at <b>" + fn + "</b>. Both stoppers are needed: repetition catches the " +
+    "shuffle, the fifty-move counter catches a side that keeps finding new positions and no progress. " +
+    "A deterministic engine playing itself at depth 1 finishes in <b>" + sp.plies + "</b> plies &mdash; " +
+    (sp.over ? sp.over.reason : "it did not finish") + ".";
+}
+
+{
+  const rows = [];
+  for (const d of [1, 2, 3, 4]) {
+    const on = midSearch(d, true);
+    const off = midSearch(d, false);
+    rows.push({
+      cls: d === 4 ? "here" : "",
+      cells: ["depth " + d, off.nodes.toLocaleString("en-US"), on.nodes.toLocaleString("en-US"),
+        (off.nodes / on.nodes).toFixed(1) + "x", on.cuts.toLocaleString("en-US"),
+        on.score === off.score ? '<span class="pill good">same score</span>'
+                               : '<span class="pill bad">scores differ</span>']
+    });
+  }
+  table("tSearch", ["search", "plain minimax", "with alpha-beta", "saving", "cutoffs", "agreement"], rows);
+  const d4on = midSearch(4, true);
+  const d4off = midSearch(4, false);
+  el("searchNote").innerHTML =
+    "At depth 4 on this position plain minimax visits <b>" + d4off.nodes.toLocaleString("en-US") +
+    "</b> nodes and alpha-beta visits <b>" + d4on.nodes.toLocaleString("en-US") + "</b> &mdash; <b>" +
+    (d4off.nodes / d4on.nodes).toFixed(1) + "x</b> fewer, for the same score of <b>" + d4on.score +
+    "</b> and the same chosen move. Pruning changes the cost, never the answer, and the self-check " +
+    "asserts that at every depth rather than taking it on trust.";
+}
+
+{
+  const s = MIDS;
+  const rows = [
+    { cells: ["material (pieces on board + in hand)", 120, s.on[1] + s.hand[1], s.on[2] + s.hand[2]] },
+    { cells: ["mills standing", 30, ENGINE.millsOf(s.b, 1), ENGINE.millsOf(s.b, 2)] },
+    { cells: ["lines with two and an empty third", 14, ENGINE.twoInLine(s.b, 1), ENGINE.twoInLine(s.b, 2)] },
+    { cells: ["mobility", 2, ENGINE.mobility(s.b, 1, false), ENGINE.mobility(s.b, 2, false)] },
+    { cells: ["enemy pieces with nowhere to go", 18, ENGINE.blockedCount(s.b, 2), ENGINE.blockedCount(s.b, 1)] },
+    { cls: "here", cells: ["score for White", "", ENGINE.evaluate(s, 1), ENGINE.evaluate(s, 2)] }
+  ];
+  table("tEval", ["term", "weight", "White", "Black"], rows);
+  el("evalNote").innerHTML =
+    "Scoring the same position for White gives <b>" + ENGINE.evaluate(s, 1) + "</b> and for Black <b>" +
+    ENGINE.evaluate(s, 2) + "</b>. Those must be exact negations of each other, because every term is " +
+    "written as mine minus yours &mdash; and that antisymmetry is what lets one search routine serve " +
+    "both players without a sign bug.";
+}
+
+{
+  const orbName = (g) => {
+    const d = ENGINE.ADJ[g[0]].length;
+    if (d === 4) return "midpoints of the middle ring";
+    if (d === 3) return "midpoints of the outer and inner rings";
+    return g.indexOf(8) >= 0 ? "corners of the middle ring" : "corners of the outer and inner rings";
+  };
+  table("tOrbits", ["orbit", "points in it", "which points", "neighbours each"],
+    ORB.map((g) => ({
+      cls: ENGINE.ADJ[g[0]].length === 4 ? "here" : "",
+      cells: [orbName(g), g.length, g.join(" "), ENGINE.ADJ[g[0]].length]
+    })));
+  el("orbNote").innerHTML =
+    "The search for adjacency-preserving relabellings returns <b>" + AUT.length + "</b> of them &mdash; " +
+    "four rotations and four reflections of the square, each combined with the swap of the inner and " +
+    "outer rings, which is a symmetry of the graph even though it is not a symmetry of the drawing. " +
+    "They split the 24 points into <b>" + ORB.length + "</b> orbits, so there are only " + ORB.length +
+    " genuinely different opening moves, not 24.";
+}
+
+// -------------------------------------------------------------- code blocks
+el("codeMill").textContent = [
+  "// forming a mill does NOT pass the turn - it owes you a removal",
+  "if (millAt(n.b, mv.to, p)) n.pending = true;",
+  "else n.turn = opp(p);",
+  "",
+  "// ...and the move generator answers the pending flag first",
+  "if (s.pending) return removable(s, opp(p)).map(at => ({ t: 'r', at }));"
+].join("\n");
+
+el("codeCapture").textContent = String(ENGINE.removable);
+el("codeAdj").textContent = [
+  "// the sixteen lines, typed once",
+  "const MILLS = [",
+  "  [0,1,2], [2,3,4], [4,5,6], [6,7,0],            // outer ring",
+  "  [8,9,10], [10,11,12], [12,13,14], [14,15,8],   // middle ring",
+  "  [16,17,18], [18,19,20], [20,21,22], [22,23,16],// inner ring",
+  "  [1,9,17], [3,11,19], [5,13,21], [7,15,23]      // the four spokes",
+  "];",
+  "",
+  "// adjacency is COMPUTED from them: two pairs per line, de-duplicated",
+  "const ADJ = Array.from({ length: 24 }, () => []);",
+  "const link = (x, y) => { if (!ADJ[x].includes(y)) ADJ[x].push(y);",
+  "                         if (!ADJ[y].includes(x)) ADJ[y].push(x); };",
+  "for (const [a, b, c] of MILLS) { link(a, b); link(b, c); }"
+].join("\n");
+
+el("codeMills").textContent = String(ENGINE.millAt);
+el("codeMoves").textContent = String(ENGINE.moves);
+el("codeApply").textContent = String(ENGINE.apply);
+el("codeSettle").textContent = String(ENGINE.settle);
+el("codeEval").textContent = String(ENGINE.evaluate);
+el("codeSearch").textContent = String(ENGINE.search);
+el("codeOrder").textContent = String(ENGINE.ordered);
+
+el("codeEngine").textContent = [
+  "// the board, derived from the lines",
+  String(ENGINE.millAt), "",
+  "// the capture rule, exception included",
+  String(ENGINE.removable), "",
+  "// one move generator for all three phases plus removals",
+  String(ENGINE.moves), "",
+  "// alpha-beta that asks whose turn it is rather than assuming",
+  String(ENGINE.search)
+].join("\n");
+
+// --------------------------------------------------------------- the self-check
+selfCheckPanel((t) => {
+  const E = ENGINE;
+  const W = 1, B = 2;
+
+  // --- the board ---------------------------------------------------------
+  t("there are exactly 16 lines of three", E.MILLS.length === 16,
+    "4 per ring x 3 rings + 4 spokes");
+
+  t("every line holds three distinct points inside 0..23", (() => {
+    for (const L of E.MILLS) {
+      if (L.length !== 3) return false;
+      if (new Set(L).size !== 3) return false;
+      for (const p of L) if (!Number.isInteger(p) || p < 0 || p > 23) return false;
+    }
+    return true;
+  })());
+
+  t("every point lies on exactly two lines", (() => {
+    for (let i = 0; i < 24; i++) if (E.LINES_AT[i].length !== 2) return false;
+    return true;
+  })(), "24 x 2 = 48 = 16 lines x 3 points");
+
+  t("adjacency derived from the lines gives 32 edges", E.EDGES.length === 32,
+    "16 lines x 2 pairs, with no collisions");
+
+  t("adjacency is symmetric", (() => {
+    for (let i = 0; i < 24; i++) for (const j of E.ADJ[i]) if (E.ADJ[j].indexOf(i) < 0) return false;
+    return true;
+  })());
+
+  t("no point is adjacent to itself and no pair is listed twice", (() => {
+    for (let i = 0; i < 24; i++) {
+      if (E.ADJ[i].indexOf(i) >= 0) return false;
+      if (new Set(E.ADJ[i]).size !== E.ADJ[i].length) return false;
+    }
+    return true;
+  })());
+
+  t("degrees are 2, 3 and 4 - twelve, eight and four points", (() => {
+    const c = { 2: 0, 3: 0, 4: 0 };
+    for (let i = 0; i < 24; i++) {
+      const d = E.ADJ[i].length;
+      if (d < 2 || d > 4) return false;
+      c[d]++;
+    }
+    return c[2] === 12 && c[3] === 8 && c[4] === 4;
+  })(), "degrees sum to 64 = 2 x 32 edges");
+
+  t("the board graph is connected", (() => {
+    const seen = new Array(24).fill(false), q = [0];
+    seen[0] = true;
+    for (let i = 0; i < q.length; i++) for (const j of E.ADJ[q[i]]) if (!seen[j]) { seen[j] = true; q.push(j); }
+    return q.length === 24;
+  })());
+
+  t("every edge is a straight unit step on the drawing lattice", (() => {
+    // geometry is never read by a rule, but it must agree with the rules
+    for (const [i, j] of E.EDGES) {
+      const a = E.XY[i], b = E.XY[j];
+      if (a[0] !== b[0] && a[1] !== b[1]) return false;          // not a straight segment
+      // nothing else may lie between them
+      for (let k = 0; k < 24; k++) {
+        if (k === i || k === j) continue;
+        const c = E.XY[k];
+        const onX = a[0] === b[0] && c[0] === a[0] && c[1] > Math.min(a[1], b[1]) && c[1] < Math.max(a[1], b[1]);
+        const onY = a[1] === b[1] && c[1] === a[1] && c[0] > Math.min(a[0], b[0]) && c[0] < Math.max(a[0], b[0]);
+        if (onX || onY) return false;
+      }
+    }
+    return true;
+  })(), "the picture and the rules describe the same board");
+
+  // --- symmetry ----------------------------------------------------------
+  t("the adjacency-preserving relabellings number 16", AUT.length === 16,
+    "4 rotations x 2 reflections x the inner/outer ring swap");
+
+  t("every symmetry maps a line of three onto a line of three", (() => {
+    const keys = new Set(E.MILLS.map((L) => L.slice().sort((x, y) => x - y).join(",")));
+    for (const a of AUT) {
+      for (const L of E.MILLS) {
+        const img = L.map((p) => a[p]).sort((x, y) => x - y).join(",");
+        if (!keys.has(img)) return false;
+      }
+    }
+    return true;
+  })(), "mills are preserved, not only edges");
+
+  t("the 24 points fall into 4 orbits - only four different opening moves",
+    ORB.length === 4 && ORB.reduce((n, g) => n + g.length, 0) === 24,
+    ORB.map((g) => g.length).join(" + ") + " = 24");
+
+  // --- the rules ---------------------------------------------------------
+  t("the opening offers 24 placements and nothing else", (() => {
+    const ms = E.moves(E.initial());
+    return ms.length === 24 && ms.every((m) => m.t === "p");
+  })());
+
+  t("placing uses up the hand and fills the board", (() => {
+    let s = E.initial();
+    const order = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 16];
+    for (const to of order) {
+      if (s.pending) return false;                 // none of these forms a mill
+      s = E.apply(s, { t: "p", to }, false);
+    }
+    return s.hand[1] === 0 && s.hand[2] === 0 && s.on[1] === 9 && s.on[2] === 9;
+  })(), "18 placements, 9 each, no mill among them");
+
+  t("forming a mill keeps the turn and owes a removal", (() => {
+    const s = E.position("WW..B.B.................", { turn: W, whiteInHand: 7, blackInHand: 6 });
+    const n = E.apply(s, { t: "p", to: 2 }, false);
+    return n.turn === W && n.pending === true;
+  })(), "0-1-2 completed by White");
+
+  t("while a removal is owed, every legal move is a removal", (() => {
+    const s = E.position("WW..B.B.................", { turn: W, whiteInHand: 7, blackInHand: 6 });
+    const n = E.apply(s, { t: "p", to: 2 }, false);
+    const ms = E.moves(n);
+    return ms.length > 0 && ms.every((m) => m.t === "r");
+  })());
+
+  t("a piece standing in a mill may not be taken while a loose one exists", (() => {
+    const s = E.position("WWW.....BBB.....B.B.....", { turn: W, pending: true });
+    const r = E.removable(s, B);
+    // 8,9,10 is a black mill; 16 and 18 are loose
+    return r.length === 2 && r.indexOf(8) < 0 && r.indexOf(16) >= 0 && r.indexOf(18) >= 0;
+  })(), "the milled pieces 8, 9 and 10 are protected");
+
+  t("INVERSION: when every enemy piece is milled, the protection lapses", (() => {
+    const s = E.position("WWW.....BBB.....BBB.....", { turn: W, pending: true });
+    const r = E.removable(s, B);
+    return r.length === 6;
+  })(), "without the fallback this list is empty and the game cannot end");
+
+  t("apply() refuses a removal the rules protect", (() => {
+    const s = E.position("WWW.....BBB.....B.B.....", { turn: W, pending: true });
+    try { E.apply(s, { t: "r", at: 8 }, false); return false; } catch { return true; }
+  })());
+
+  t("apply() refuses a slide between points that are not adjacent", (() => {
+    if (MIDS.b[0] !== W || MIDS.b[12] !== 0) return false;
+    try { E.apply(MIDS, { t: "m", from: 0, to: 12 }, false); return false; } catch { return true; }
+  })(), "point 0 is White, point 12 is empty, and they do not touch");
+
+  t("sliding is limited to adjacency", (() => {
+    const s = MIDS;
+    let expect = 0;
+    for (let i = 0; i < 24; i++) {
+      if (s.b[i] !== W) continue;
+      for (const j of E.ADJ[i]) if (s.b[j] === 0) expect++;
+    }
+    const ms = E.moves(s);
+    return ms.length === expect && ms.every((m) => E.ADJ[m.from].indexOf(m.to) >= 0);
+  })(), E.moves(MIDS).length + " slides from six pieces");
+
+  t("a side on exactly three pieces may fly to any empty point", (() => {
+    const s = FLY;
+    if (s.on[1] !== 3) return false;
+    const empties = s.b.filter((v) => v === 0).length;
+    const ms = E.moves(s);
+    return ms.length === 3 * empties && ms.some((m) => E.ADJ[m.from].indexOf(m.to) < 0);
+  })(), "3 x empty points, including non-adjacent destinations");
+
+  t("a side reduced to two pieces has lost", (() => {
+    const s = E.position("WW......BBBB............", { turn: W });
+    return !!s.over && s.over.winner === B && /two pieces/.test(s.over.reason);
+  })());
+
+  t("a side with pieces but no legal move has lost", (() => {
+    const s = E.position("WWWB...BBWB......B......", { turn: W });
+    return !!s.over && s.over.winner === B && E.moves(s).length === 0;
+  })(), "blocked, not captured - four White pieces still on the board");
+
+  t("the fifty-move counter resets on a placement and on a capture", (() => {
+    const a = E.position("W.......B...............", { turn: W, whiteInHand: 2, blackInHand: 2, since: 40 });
+    const afterPlace = E.apply(a, { t: "p", to: 5 }, false);
+    const c = E.position("WWW.....B.B.............", { turn: W, pending: true, since: 40 });
+    const afterTake = E.apply(c, { t: "r", at: 8 }, false);
+    return afterPlace.since === 0 && afterTake.since === 0;
+  })());
+
+  t("a shuffle with history tracked is drawn by threefold repetition", (() => {
+    const CY = [{ t: "m", from: 0, to: 1 }, { t: "m", from: 16, to: 17 },
+                { t: "m", from: 1, to: 0 }, { t: "m", from: 17, to: 16 }];
+    let s = E.position("W.W.W.W.........B.B.B.B.", { turn: W });
+    let n = 0;
+    while (!s.over && n < 60) { s = E.apply(s, CY[n % 4], true); n++; }
+    return !!s.over && s.over.winner === 0 && /repetition/.test(s.over.reason) && n < 60;
+  })());
+
+  t("the same shuffle with history off is drawn by the fifty-move rule", (() => {
+    const CY = [{ t: "m", from: 0, to: 1 }, { t: "m", from: 16, to: 17 },
+                { t: "m", from: 1, to: 0 }, { t: "m", from: 17, to: 16 }];
+    let s = E.position("W.W.W.W.........B.B.B.B.", { turn: W });
+    let n = 0;
+    while (!s.over && n < 400) { s = E.apply(s, CY[n % 4], false); n++; }
+    return !!s.over && s.over.winner === 0 && /fifty/.test(s.over.reason) && n === E.DRAW_PLIES;
+  })(), "fires at exactly " + E.DRAW_PLIES + " plies");
+
+  t("the repetition key separates positions by side to move", (() => {
+    const a = E.position("W.W.W.W.........B.B.B.B.", { turn: W });
+    const b = E.position("W.W.W.W.........B.B.B.B.", { turn: B });
+    return E.key(a) !== E.key(b);
+  })());
+
+  t("apply() does not mutate the state it was given", (() => {
+    const s = E.initial();
+    const before = JSON.stringify([s.b, s.turn, s.hand, s.on, s.pending, s.since]);
+    E.apply(s, { t: "p", to: 9 }, true);
+    return JSON.stringify([s.b, s.turn, s.hand, s.on, s.pending, s.since]) === before;
+  })());
+
+  // --- the search --------------------------------------------------------
+  t("the search returns a move from the legal list, at every depth", (() => {
+    for (const [s, depths] of [[E.initial(), [1, 2, 3]], [MIDS, [1, 2, 3]], [FLY, [1, 2]]]) {
+      const legal = new Set(E.moves(s).map(E.moveKey));
+      for (const d of depths) {
+        const r = E.bestMove(s, d);
+        if (!r.move || !legal.has(E.moveKey(r.move))) return false;
+      }
+    }
+    return true;
+  })(), "the opening, a sliding position and a flying one");
+
+  t("alpha-beta returns exactly the score plain minimax returns", (() => {
+    for (const d of [1, 2, 3, 4]) {
+      const on = midSearch(d, true), off = midSearch(d, false);
+      if (on.score !== off.score) return false;
+      if (E.moveKey(on.move) !== E.moveKey(off.move)) return false;
+    }
+    return true;
+  })(), "same score and same move at depths 1 to 4");
+
+  t("alpha-beta visits strictly fewer nodes beyond depth 1", (() => {
+    for (const d of [2, 3, 4]) if (!(midSearch(d, true).nodes < midSearch(d, false).nodes)) return false;
+    return true;
+  })(), midSearch(4, false).nodes.toLocaleString("en-US") + " -> " +
+        midSearch(4, true).nodes.toLocaleString("en-US") + " at depth 4");
+
+  t("the search finds a forced win and plays the only move that gives it", (() => {
+    // White slides 3->2, closing 0-1-2, and the removal takes Black to two pieces
+    const s = E.position("WW.W....W.......B...B.B.", { turn: W });
+    if (s.on[1] !== 4 || s.on[2] !== 3) return false;
+    const r = E.bestMove(s, 3);
+    return r.score > E.WIN - 100 && r.move.t === "m" && r.move.from === 3 && r.move.to === 2;
+  })(), "a win must be scored above every static evaluation");
+
+  t("and the forced win really does end the game when played out", (() => {
+    let s = E.position("WW.W....W.......B...B.B.", { turn: W });
+    s = E.apply(s, { t: "m", from: 3, to: 2 }, true);
+    if (!s.pending) return false;
+    s = E.apply(s, E.moves(s)[0], true);
+    return !!s.over && s.over.winner === W;
+  })());
+
+  t("the search takes a free mill when one is on offer", (() => {
+    const s = E.position("WW......B.B.............", { turn: W, whiteInHand: 5, blackInHand: 5 });
+    const r = E.bestMove(s, 2);
+    return r.move.t === "p" && r.move.to === 2;
+  })(), "completing 0-1-2 is worth a piece");
+
+  t("evaluation is exactly antisymmetric", (() => {
+    const tests = [E.initial(), MIDS, FLY,
+      E.position("WWW.....BBB.....B.B.....", { turn: W }),
+      E.position("WWW.....BBB.....B.B.....", { turn: B, pending: true })];
+    for (const s of tests) if (E.evaluate(s, W) !== -E.evaluate(s, B)) return false;
+    return true;
+  })(), "scoring for White is the negation of scoring for Black");
+
+  t("a deterministic engine playing itself still terminates",
+    !!selfPlayOnce().over && selfPlayOnce().plies < 600,
+    selfPlayOnce().plies + " plies, " + (selfPlayOnce().over ? selfPlayOnce().over.reason : "no result"));
+
+  t("a finished game accepts no further move", (() => {
+    const s = E.position("WW......BBBB............", { turn: W });
+    try { E.apply(s, { t: "m", from: 0, to: 1 }, false); return false; } catch { return true; }
+  })());
+});
+</script>
+</body>
+</html>

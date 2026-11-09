@@ -78,6 +78,13 @@ Every lesson is a single, self-contained HTML file with three tabs — 👁 **LO
 - [GameFromZero · Day 74 — Kuhn Poker](https://dev48.infy.uk/game/day74-kuhn-poker.html) — `day74-kuhn-poker.html`
 - [GameFromZero · Day 75 — Blue-Red Hackenbush](https://dev48.infy.uk/game/day75-hackenbush.html) — `day75-hackenbush.html`
 - [GameFromZero · Day 76 — Wythoff's Game](https://dev48.infy.uk/game/day76-wythoff.html) — `day76-wythoff.html`
+- [GameFromZero · Day 77 — Sim](https://dev48.in/game/day77-sim-ramsey-game.html) — `day77-sim-ramsey-game.html`
+- [GameFromZero · Day 78 — Undercut](https://dev48.in/game/day78-undercut.html) — `day78-undercut.html`
+- [GameFromZero · Day 79 — Penney's ante](https://dev48.in/game/day79-penney-ante.html) — `day79-penney-ante.html`
+- [GameFromZero · Day 80 — Fibonacci nim](https://dev48.in/game/day80-fibonacci-nim.html) — `day80-fibonacci-nim.html`
+- [GameFromZero · Day 81 — Slitherlink](https://dev48.in/game/day81-slitherlink.html) — `day81-slitherlink.html`
+- [GameFromZero · Day 82 — Kakuro](https://dev48.in/game/day82-kakuro.html) — `day82-kakuro.html`
+- [GameFromZero · Day 83 — Nine Men's Morris](https://dev48.in/game/day83-nine-mens-morris.html) — `day83-nine-mens-morris.html`
 
 ---
 Part of **Zero to Hero** — build something real from scratch, every day: https://dev48v.infy.uk

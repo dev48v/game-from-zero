@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameFromZero &middot; Day 81 &mdash; Slitherlink</title>
+<style>
+  :root { --ink:#0f172a; --sub:#475569; --line:#e2e8f0; --bg:#f8fafc; --accent:#7c3aed; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Inter",system-ui,sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:1152px; margin:0 auto; padding:16px; }
+  @media (min-width:768px){ .wrap { padding:24px; } }
+  header { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .kicker { font-size:12px; font-weight:800; letter-spacing:.16em; color:var(--accent); margin:0 0 8px; }
+  h1 { font-size:19px; line-height:1.5; font-weight:900; margin:0 0 12px; }
+  @media (min-width:768px){ h1 { font-size:22px; } }
+  h2 { font-size:24px; font-weight:900; margin:0 0 8px; }
+  h3 { font-size:19px; font-weight:800; margin:20px 0 6px; }
+  p { line-height:1.6; margin:0 0 12px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+  .tabs button { font:inherit; font-size:14px; font-weight:600; padding:8px 20px; border:0; border-radius:8px; background:#f1f5f9; cursor:pointer; }
+  .tabs button.tab-active { background:#0f172a; color:#fff; }
+  .hidden { display:none; }
+  .card { background:#fff; border-radius:16px; box-shadow:0 1px 3px rgba(15,23,42,.12); padding:20px; min-width:0; }
+  .stack > * + * { margin-top:20px; }
+  .grid2 { display:grid; gap:20px; grid-template-columns:minmax(0,1fr); }
+  .grid3 { display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  .grid4 { display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:900px){ .grid2 { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+  @media (min-width:768px){ .grid3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+                            .grid4 { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+  .lbl { font-size:12px; font-weight:800; letter-spacing:.1em; color:#64748b; margin:0 0 8px; }
+  .big { font-size:24px; font-weight:900; font-variant-numeric:tabular-nums; margin:0; }
+  .note { font-size:12.5px; color:#475569; margin:8px 0 0; line-height:1.55; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:11.5px; overflow-x:auto; line-height:1.35; margin:0; white-space:pre; }
+  code { background:#f1f5f9; padding:1px 4px; border-radius:4px; font-size:.92em; }
+  .tblwrap { overflow-x:auto; }
+  table.num { border-collapse:collapse; width:100%; min-width:520px; }
+  table.num td, table.num th { padding:4px 9px; font-variant-numeric:tabular-nums; }
+  table.num th { font-size:11px; letter-spacing:.05em; color:#64748b; text-align:right; font-weight:700; }
+  table.num th:first-child, table.num td:first-child { text-align:left; }
+  table.num td { text-align:right; font-size:12.5px; border-top:1px solid var(--line); }
+  table.num td.txt { text-align:left; }
+  tr.here td { background:#faf5ff; font-weight:700; }
+  tr.dim td { color:#94a3b8; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:800; }
+  .pill.good { background:#dcfce7; color:#166534; }
+  .pill.bad { background:#fee2e2; color:#991b1b; }
+  .ok { color:#166534; font-weight:800; }
+  .warn { color:#991b1b; font-weight:800; }
+  #selftest div { display:grid; grid-template-columns:52px 1fr; gap:8px; font-size:12.5px; padding:3px 0; border-top:1px solid var(--line); align-items:start; }
+  #selftest div span.m { grid-column:2; font-size:11.5px; color:#64748b; }
+  .board { display:inline-block; background:#fff; padding:10px; border-radius:10px; }
+  .board svg { display:block; }
+  .leg { font-size:12px; color:#475569; margin:8px 0 0; }
+  .ctl { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 12px; }
+  .ctl input[type=range] { flex:1; min-width:160px; }
+  .ctl input[type=number] { width:74px; font:inherit; padding:5px 7px; border:1px solid var(--line); border-radius:7px; }
+  .ctl button { font:inherit; font-size:13px; font-weight:700; padding:6px 14px; border:1px solid var(--line); border-radius:8px; background:#fff; cursor:pointer; }
+  footer { border-top:1px solid var(--line); margin-top:28px; padding:18px 0 40px; font-size:13px; color:#475569; }
+  footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">GAMEFROMZERO &middot; DAY 81</p>
+    <h1>
+      Slitherlink &mdash; the puzzle where satisfying every clue, at every vertex,
+      can still leave you with the wrong answer.
+    </h1>
+    <div class="tabs">
+      <button id="tabLook" class="tab-active" onclick="showTab('look')">Look</button>
+      <button id="tabUnd" onclick="showTab('und')">Understand</button>
+      <button id="tabBuild" onclick="showTab('build')">Build</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section id="look" class="stack">
+  <div class="card">
+    <h2>Draw one closed loop. The numbers say how many of their four sides it uses.</h2>
+    <p>
+      A Slitherlink grid is a block of cells. Some cells carry a number from 0 to 3.
+      You draw segments along the grid lines, and when you are finished the segments
+      you drew must form <b>one single closed loop</b> &mdash; no branches, no loose
+      ends, and no second loop sitting somewhere else on the board.
+      A cell marked 3 must have exactly three of its four sides on that loop. A cell
+      marked 0 must have none. Blank cells say nothing at all.
+    </p>
+    <div class="ctl">
+      <span class="lbl" style="margin:0">PUZZLE</span>
+      <input type="range" id="puzR" min="0" max="5" value="4" />
+      <input type="number" id="puzN" min="0" max="5" value="4" />
+      <button onclick="step(-1)">&larr;</button>
+      <button onclick="step(1)">&rarr;</button>
+    </div>
+    <div class="grid2">
+      <div><div class="board" id="boardWrap"></div><p class="leg" id="boardLeg"></p></div>
+      <div class="stack">
+        <div class="grid2">
+          <div><p class="lbl">SOLUTIONS</p><p class="big" id="kSol">&mdash;</p><p class="note" id="kSolNote"></p></div>
+          <div><p class="lbl">LOOP LENGTH</p><p class="big" id="kLen">&mdash;</p><p class="note" id="kLenNote"></p></div>
+        </div>
+        <div class="grid2">
+          <div><p class="lbl">CLUED CELLS</p><p class="big" id="kClue">&mdash;</p><p class="note" id="kClueNote"></p></div>
+          <div><p class="lbl">SEARCH NODES</p><p class="big" id="kNodes">&mdash;</p><p class="note" id="kNodesNote"></p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>The trap: every clue right, every corner right, still wrong</h2>
+    <p>
+      The two local rules are easy to check. Every clue counts its own four sides.
+      Every vertex of the lattice must have either <b>0</b> segments touching it or
+      exactly <b>2</b> &mdash; one in, one out &mdash; because anything else is a loose
+      end or a junction. Beginners write a solver that enforces exactly those two
+      rules, and it looks finished.
+    </p>
+    <p>
+      It is not finished. Both rules are <b>local</b>. Nothing in either of them
+      forbids the segments from forming <b>two separate rings</b>. Below is every
+      assignment on a 3&times;3 board that satisfies every clue and leaves every
+      vertex at degree 0 or 2, split by how many loops it actually drew.
+    </p>
+    <div class="tblwrap"><table class="num" id="tTrap"></table></div>
+    <p class="note" id="trapNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>How hard is a board, by the clues you are given</h2>
+    <p>
+      Every 2&times;2 board, over every way of filling its four cells with
+      <code>0 1 2 3</code> or a blank. 625 boards in all. The table counts how many
+      have no solution, exactly one, or more than one &mdash; a real puzzle needs
+      exactly one.
+    </p>
+    <div class="tblwrap"><table class="num" id="tCensus"></table></div>
+  </div>
+</section>
+
+<section id="und" class="stack hidden">
+  <div class="card">
+    <h2>Why degree 0 or 2 is necessary but nowhere near sufficient</h2>
+    <p>
+      Think of the drawn segments as the edges of a graph whose vertices are the
+      lattice points. A closed loop visits each of its vertices exactly once and
+      leaves again, so each vertex it touches has degree 2, and each vertex it
+      misses has degree 0. That is the necessary half, and it is the half that is
+      easy to test.
+    </p>
+    <p>
+      The converse fails. A graph in which every vertex has degree 0 or 2 is a
+      <b>disjoint union of cycles</b> &mdash; it may be one cycle, or two, or five.
+      Slitherlink demands exactly one. That last condition is <b>global</b>: no
+      amount of looking at one cell or one corner can see it. You have to walk the
+      edges and count components.
+    </p>
+    <h3>What the counting looks like</h3>
+    <div class="tblwrap"><table class="num" id="tDeg"></table></div>
+    <p class="note">
+      Each row is an edge assignment on the 3&times;3 board above. The first two
+      columns are the local tests. The third is the global one that the local tests
+      cannot reach.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>The solver, and the pruning that makes it finish</h2>
+    <p>
+      The search assigns one edge at a time, on or off. Brute force over a
+      3&times;3 board means 2<sup>24</sup> assignments &mdash; sixteen million, and a
+      4&times;4 is already 2<sup>40</sup>. Two cheap prunes collapse that.
+    </p>
+    <p>
+      <b>Close a cell as soon as its last side is decided.</b> Once all four edges of
+      a clued cell have values, its count is final: if it does not match the clue,
+      abandon the branch now rather than at the leaf.
+      <b>Close a vertex the same way.</b> Once every edge touching a vertex is
+      decided, its degree is final and must be 0 or 2.
+      Both tests fire deep inside the tree, long before a full assignment exists.
+    </p>
+    <div class="tblwrap"><table class="num" id="tPrune"></table></div>
+    <p class="note" id="pruneNote"></p>
+  </div>
+
+  <div class="card">
+    <h2>Counting the loops</h2>
+    <p>
+      Once an assignment survives both local tests, the on-edges form a disjoint
+      union of cycles, so counting loops is a plain walk: pick any vertex with
+      degree 2 that you have not visited, follow its edges until you return, and
+      mark everything you saw. Repeat. The number of walks is the number of loops.
+      Exactly one, and at least one edge drawn, is a solution.
+    </p>
+    <pre id="codeLoop"></pre>
+  </div>
+</section>
+
+<section id="build" class="stack hidden">
+  <div class="card">
+    <h2>The whole engine</h2>
+    <p>
+      No framework and no dependency. Edges are numbered: all horizontal edges
+      first, then all vertical ones, so an assignment is one flat array of booleans
+      and every lookup is arithmetic.
+    </p>
+    <pre id="codeEngine"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Self-check</h2>
+    <p class="note" style="margin:0 0 10px">
+      These run in your browser, right now, against the same engine the page uses
+      above. Nothing here is a recorded result.
+    </p>
+    <div id="selftest"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p style="margin:0">
+      GameFromZero &middot; Day 81 &middot; Slitherlink.
+      Tomorrow: Kakuro &mdash; cross-sums, and why the candidate sets matter more than the arithmetic.
+    </p>
+  </div>
+</footer>
+</div>
+
+<script>
+// ===== ENGINE:BEGIN =====
+const ENGINE = (() => {
+
+  // ---------------------------------------------------------------- geometry
+  // A puzzle is R rows x C cols of clues; clue is null (blank) or 0..3.
+  // Lattice vertices are (R+1) x (C+1). Edges are numbered in one flat run:
+  //   horizontal edge (r,c) joins vertex (r,c)-(r,c+1)   0<=r<=R, 0<=c<C
+  //   vertical   edge (r,c) joins vertex (r,c)-(r+1,c)   0<=r<R,  0<=c<=C
+  // Horizontals occupy [0, (R+1)*C), verticals follow.
+
+  const dims = (clues) => ({ R: clues.length, C: clues[0].length });
+  const hCount = (R, C) => (R + 1) * C;
+  const edgeCount = (R, C) => hCount(R, C) + R * (C + 1);
+
+  const hIndex = (R, C, r, c) => r * C + c;
+  const vIndex = (R, C, r, c) => hCount(R, C) + r * (C + 1) + c;
+
+  // the four edges bounding cell (r,c): top, bottom, left, right
+  function cellEdges(R, C, r, c) {
+    return [hIndex(R, C, r, c), hIndex(R, C, r + 1, c), vIndex(R, C, r, c), vIndex(R, C, r, c + 1)];
+  }
+
+  // every edge touching lattice vertex (r,c)
+  function vertexEdges(R, C, r, c) {
+    const out = [];
+    if (c > 0) out.push(hIndex(R, C, r, c - 1));
+    if (c < C) out.push(hIndex(R, C, r, c));
+    if (r > 0) out.push(vIndex(R, C, r - 1, c));
+    if (r < R) out.push(vIndex(R, C, r, c));
+    return out;
+  }
+
+  // the two lattice vertices an edge joins
+  function endpoints(R, C, e) {
+    if (e < hCount(R, C)) {
+      const r = Math.floor(e / C), c = e % C;
+      return [[r, c], [r, c + 1]];
+    }
+    const k = e - hCount(R, C), r = Math.floor(k / (C + 1)), c = k % (C + 1);
+    return [[r, c], [r + 1, c]];
+  }
+
+  const vKey = (C, r, c) => r * (C + 1) + c;
+
+  // ------------------------------------------------------------- local tests
+  function cluesSatisfied(clues, on) {
+    const { R, C } = dims(clues);
+    for (let r = 0; r < R; r++) {
+      for (let c = 0; c < C; c++) {
+        const want = clues[r][c];
+        if (want === null) continue;
+        let got = 0;
+        for (const e of cellEdges(R, C, r, c)) if (on[e]) got++;
+        if (got !== want) return false;
+      }
+    }
+    return true;
+  }
+
+  function degreesLegal(clues, on) {
+    const { R, C } = dims(clues);
+    for (let r = 0; r <= R; r++) {
+      for (let c = 0; c <= C; c++) {
+        let d = 0;
+        for (const e of vertexEdges(R, C, r, c)) if (on[e]) d++;
+        if (d !== 0 && d !== 2) return false;
+      }
+    }
+    return true;
+  }
+
+  // ------------------------------------------------------- the global test
+  // Precondition: every vertex has degree 0 or 2, so the on-edges are a
+  // disjoint union of cycles. Walk each one and count how many there are.
+  function loopCount(clues, on) {
+    const { R, C } = dims(clues);
+    const inc = new Map();                       // vertex key -> incident ON edges
+    for (let e = 0; e < on.length; e++) {
+      if (!on[e]) continue;
+      for (const [r, c] of endpoints(R, C, e)) {
+        const k = vKey(C, r, c);
+        if (!inc.has(k)) inc.set(k, []);
+        inc.get(k).push(e);
+      }
+    }
+    const seen = new Set();
+    let loops = 0;
+    for (const start of inc.keys()) {
+      if (seen.has(start)) continue;
+      loops++;
+      let v = start, prevEdge = -1;
+      for (;;) {
+        seen.add(v);
+        const opts = inc.get(v) || [];
+        let next = -1;
+        for (const e of opts) if (e !== prevEdge) { next = e; break; }
+        if (next === -1) break;                  // only possible on a malformed input
+        const [[ar, ac], [br, bc]] = endpoints(R, C, next);
+        const a = vKey(C, ar, ac), b = vKey(C, br, bc);
+        v = (v === a) ? b : a;
+        prevEdge = next;
+        if (v === start) break;
+      }
+    }
+    return loops;
+  }
+
+  const edgesOn = (on) => on.reduce((a, b) => a + (b ? 1 : 0), 0);
+
+  // A full Slitherlink solution: clues met, degrees legal, exactly one loop,
+  // and that loop is non-empty.
+  function isSolution(clues, on) {
+    if (!cluesSatisfied(clues, on)) return false;
+    if (!degreesLegal(clues, on)) return false;
+    if (edgesOn(on) === 0) return false;
+    return loopCount(clues, on) === 1;
+  }
+
+  // ------------------------------------------------------------- the search
+  // Assign edges in index order. The moment the last edge of a clued cell or of
+  // a vertex is decided, that constraint is final - test it and prune.
+
+  // cell (r,c) is final once its highest-numbered edge is assigned; same for a
+  // vertex. Precompute, per edge, which constraints it closes.
+  function closers(clues) {
+    const { R, C } = dims(clues);
+    const E = edgeCount(R, C);
+    const closesCell = Array.from({ length: E }, () => []);
+    const closesVert = Array.from({ length: E }, () => []);
+    for (let r = 0; r < R; r++) {
+      for (let c = 0; c < C; c++) {
+        if (clues[r][c] === null) continue;
+        closesCell[Math.max(...cellEdges(R, C, r, c))].push([r, c]);
+      }
+    }
+    for (let r = 0; r <= R; r++) {
+      for (let c = 0; c <= C; c++) {
+        const es = vertexEdges(R, C, r, c);
+        if (es.length) closesVert[Math.max(...es)].push([r, c]);
+      }
+    }
+    return { closesCell, closesVert };
+  }
+
+  function cellOkAt(clues, on, r, c) {
+    const { R, C } = dims(clues);
+    let got = 0;
+    for (const e of cellEdges(R, C, r, c)) if (on[e]) got++;
+    return got === clues[r][c];
+  }
+  function vertOkAt(clues, on, r, c) {
+    const { R, C } = dims(clues);
+    let d = 0;
+    for (const e of vertexEdges(R, C, r, c)) if (on[e]) d++;
+    return d === 0 || d === 2;
+  }
+
+  function solveAll(clues, limit = Infinity) {
+    const { R, C } = dims(clues);
+    const E = edgeCount(R, C);
+    const on = new Array(E).fill(false);
+    const { closesCell, closesVert } = closers(clues);
+    const out = [];
+    let nodes = 0;
+
+    function rec(i) {
+      if (out.length >= limit) return;
+      if (i === E) {
+        nodes++;
+        if (edgesOn(on) > 0 && loopCount(clues, on) === 1) out.push(on.slice());
+        return;
+      }
+      for (const val of [false, true]) {
+        on[i] = val;
+        nodes++;
+        let ok = true;
+        for (const [r, c] of closesCell[i]) if (!cellOkAt(clues, on, r, c)) { ok = false; break; }
+        if (ok) for (const [r, c] of closesVert[i]) if (!vertOkAt(clues, on, r, c)) { ok = false; break; }
+        if (ok) rec(i + 1);
+        if (out.length >= limit) { on[i] = false; return; }
+      }
+      on[i] = false;
+    }
+    rec(0);
+    return { solutions: out, nodes };
+  }
+
+  // Every assignment that passes BOTH local tests, regardless of loop count.
+  // This is the solver a beginner writes. It uses the SAME prunes as solveAll -
+  // the prunes only enforce the local rules, so they cannot hide a multi-loop
+  // board. The difference is purely what happens at the leaf: solveAll demands
+  // one loop, this one records however many it found.
+  function locallyLegal(clues, keepSample = false) {
+    const { R, C } = dims(clues);
+    const E = edgeCount(R, C);
+    const on = new Array(E).fill(false);
+    const { closesCell, closesVert } = closers(clues);
+    const byLoops = new Map();
+    const sample = new Map();
+    let total = 0;
+
+    function rec(i) {
+      if (i === E) {
+        const k = edgesOn(on) === 0 ? 0 : loopCount(clues, on);
+        byLoops.set(k, (byLoops.get(k) || 0) + 1);
+        if (keepSample && !sample.has(k)) sample.set(k, on.slice());
+        total++;
+        return;
+      }
+      for (const val of [false, true]) {
+        on[i] = val;
+        let ok = true;
+        for (const [r, c] of closesCell[i]) if (!cellOkAt(clues, on, r, c)) { ok = false; break; }
+        if (ok) for (const [r, c] of closesVert[i]) if (!vertOkAt(clues, on, r, c)) { ok = false; break; }
+        if (ok) rec(i + 1);
+      }
+      on[i] = false;
+    }
+    rec(0);
+    return { total, byLoops, sample };
+  }
+
+  // ------------------------------------------------------------- the census
+  // Every 2x2 board over clues {null,0,1,2,3}^4 = 625 boards.
+  function census2x2() {
+    const vals = [null, 0, 1, 2, 3];
+    let none = 0, unique = 0, many = 0;
+    const uniqueBoards = [];
+    for (const a of vals) for (const b of vals) for (const c of vals) for (const d of vals) {
+      const clues = [[a, b], [c, d]];
+      const { solutions } = solveAll(clues, 2);
+      if (solutions.length === 0) none++;
+      else if (solutions.length === 1) { unique++; uniqueBoards.push(clues); }
+      else many++;
+    }
+    return { none, unique, many, total: none + unique + many, uniqueBoards };
+  }
+
+  // -------------------------------------------------------------- the boards
+  const BOARDS = [
+    { name: "one clue on a 2x2 - ambiguous", clues: [[null, null], [null, 3]] },
+    { name: "a 0 in the corner", clues: [[0, null], [null, 2]] },
+    { name: "three threes", clues: [[3, null, 3], [null, null, null], [3, null, null]] },
+    { name: "a ring of twos", clues: [[null, 2, null], [2, null, 2], [null, 2, null]] },
+    { name: "the 3x3 with a hole", clues: [[3, 3, null], [null, null, null], [null, 3, 3]] },
+    { name: "sparse 3x3", clues: [[null, 1, null], [null, null, null], [null, 3, null]] }
+  ];
+
+  function pretty(clues) {
+    return clues.map((row) => row.map((v) => (v === null ? "." : String(v))).join(" ")).join("\n");
+  }
+
+  return {
+    dims, edgeCount, hCount, hIndex, vIndex, cellEdges, vertexEdges, endpoints, vKey,
+    cluesSatisfied, degreesLegal, loopCount, edgesOn, isSolution,
+    solveAll, locallyLegal, census2x2, BOARDS, pretty
+  };
+})();
+// ===== ENGINE:END =====
+</script>
+
+<script>
+function showTab(name) {
+  for (const t of ["look", "und", "build"]) document.getElementById(t).classList.toggle("hidden", t !== name);
+  document.getElementById("tabLook").classList.toggle("tab-active", name === "look");
+  document.getElementById("tabUnd").classList.toggle("tab-active", name === "und");
+  document.getElementById("tabBuild").classList.toggle("tab-active", name === "build");
+}
+const el = (id) => document.getElementById(id);
+function table(id, head, rows) {
+  el(id).innerHTML =
+    "<tr>" + head.map((h) => "<th>" + h + "</th>").join("") + "</tr>" +
+    rows.map((r) => "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + ">" +
+      r.cells.map((c, i) => "<td" + (i === 0 ? ' class="txt"' : "") + ">" + c + "</td>").join("") + "</tr>").join("");
+}
+function selfCheckPanel(fn) {
+  const out = []; let n = 0, bad = 0;
+  const t = (label, cond, detail = "") => {
+    n += 1; if (!cond) bad += 1;
+    out.push('<div><span class="' + (cond ? "ok" : "warn") + '">' + (cond ? "PASS" : "FAIL") +
+      '</span><span>' + label + '</span><span class="m">' + detail + "</span></div>");
+  };
+  fn(t);
+  el("selftest").innerHTML =
+    '<p class="note" style="margin:0 0 8px"><b class="' + (bad ? "warn" : "ok") + '">' +
+    (n - bad) + " of " + n + " checks pass</b>" + (bad ? " &mdash; " + bad + " FAILED" : "") + ".</p>" + out.join("");
+}
+
+// ------------------------------------------------------------------- drawing
+function drawBoard(clues, on) {
+  const { R, C } = ENGINE.dims(clues);
+  const S = 46, P = 16;
+  const W = C * S + 2 * P, H = R * S + 2 * P;
+  const px = (c) => P + c * S, py = (r) => P + r * S;
+  let s = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '">';
+  // faint lattice dots
+  for (let r = 0; r <= R; r++) for (let c = 0; c <= C; c++) {
+    s += '<circle cx="' + px(c) + '" cy="' + py(r) + '" r="2.4" fill="#cbd5e1"/>';
+  }
+  // clue digits
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+    if (clues[r][c] === null) continue;
+    s += '<text x="' + (px(c) + S / 2) + '" y="' + (py(r) + S / 2 + 5) + '" text-anchor="middle" ' +
+      'font-family="system-ui,sans-serif" font-size="16" font-weight="800" fill="#0f172a">' + clues[r][c] + "</text>";
+  }
+  // the loop
+  if (on) {
+    for (let e = 0; e < on.length; e++) {
+      if (!on[e]) continue;
+      const [[ar, ac], [br, bc]] = ENGINE.endpoints(R, C, e);
+      s += '<line x1="' + px(ac) + '" y1="' + py(ar) + '" x2="' + px(bc) + '" y2="' + py(br) +
+        '" stroke="#7c3aed" stroke-width="4" stroke-linecap="round"/>';
+    }
+  }
+  s += "</svg>";
+  return s;
+}
+
+// ------------------------------------------------------------------ the picker
+function render() {
+  const i = Math.max(0, Math.min(ENGINE.BOARDS.length - 1, parseInt(el("puzN").value, 10) || 0));
+  el("puzR").value = String(i);
+  el("puzN").value = String(i);
+  const B = ENGINE.BOARDS[i];
+  const { solutions, nodes } = ENGINE.solveAll(B.clues, 3);
+  const sol = solutions[0] || null;
+  const { R, C } = ENGINE.dims(B.clues);
+
+  el("boardWrap").innerHTML = drawBoard(B.clues, sol);
+  el("boardLeg").innerHTML = "<b>" + B.name + "</b> &mdash; " + R + "&times;" + C +
+    ", " + ENGINE.edgeCount(R, C) + " candidate segments";
+
+  el("kSol").innerHTML = solutions.length === 1
+    ? '<span class="ok">1</span>'
+    : '<span class="warn">' + (solutions.length >= 3 ? "3+" : solutions.length) + "</span>";
+  el("kSolNote").textContent = solutions.length === 1
+    ? "exactly one - a real puzzle"
+    : solutions.length === 0 ? "no loop satisfies these clues" : "ambiguous, not a real puzzle";
+
+  el("kLen").textContent = sol ? String(ENGINE.edgesOn(sol)) : "—";
+  el("kLenNote").textContent = sol ? "segments in the closed loop" : "nothing to measure";
+
+  const clued = B.clues.flat().filter((v) => v !== null).length;
+  el("kClue").textContent = String(clued);
+  el("kClueNote").textContent = "of " + R * C + " cells carry a number";
+
+  el("kNodes").textContent = nodes.toLocaleString("en-US");
+  el("kNodesNote").textContent = "against 2^" + ENGINE.edgeCount(R, C) + " = " +
+    Math.pow(2, ENGINE.edgeCount(R, C)).toLocaleString("en-US") + " brute force";
+}
+function step(d) {
+  const i = parseInt(el("puzN").value, 10) || 0;
+  el("puzN").value = String(Math.max(0, Math.min(ENGINE.BOARDS.length - 1, i + d)));
+  render();
+}
+
+// ---------------------------------------------------------------- the tables
+const TRAP = ENGINE.BOARDS[3];                       // a ring of twos - the richest loop spectrum
+const LOCAL = ENGINE.locallyLegal(TRAP.clues, true);
+const TRUE_SOL = ENGINE.solveAll(TRAP.clues).solutions.length;
+
+{
+  const rows = [...LOCAL.byLoops.entries()].sort((a, b) => a[0] - b[0]).map(([k, v]) => ({
+    cls: k === 1 ? "here" : "",
+    cells: [
+      k === 0 ? "nothing drawn at all" : k === 1 ? "one loop &mdash; a real solution" : k + " separate loops",
+      v,
+      ((100 * v) / LOCAL.total).toFixed(1) + "%",
+      k === 1 ? '<span class="pill good">accept</span>' : '<span class="pill bad">must reject</span>'
+    ]
+  }));
+  table("tTrap", ["what the segments actually drew", "assignments", "share", "verdict"], rows);
+  const bad = LOCAL.total - (LOCAL.byLoops.get(1) || 0);
+  el("trapNote").innerHTML =
+    "<b>" + LOCAL.total + " assignments pass both local tests, and only " +
+    (LOCAL.byLoops.get(1) || 0) + " of them is a Slitherlink solution.</b> " +
+    "A solver that stops at clues-and-degrees accepts " + bad + " boards it should refuse on this grid alone.";
+}
+
+{
+  const C = ENGINE.census2x2();
+  table("tCensus", ["how many loops satisfy the board", "boards", "share of 625", "is it a puzzle?"], [
+    { cls: "", cells: ["none &mdash; the clues contradict", C.none, ((100 * C.none) / C.total).toFixed(1) + "%",
+      '<span class="pill bad">no</span>'] },
+    { cls: "here", cells: ["exactly one", C.unique, ((100 * C.unique) / C.total).toFixed(1) + "%",
+      '<span class="pill good">yes</span>'] },
+    { cls: "", cells: ["more than one &mdash; ambiguous", C.many, ((100 * C.many) / C.total).toFixed(1) + "%",
+      '<span class="pill bad">no</span>'] }
+  ]);
+}
+
+{
+  const rows = [...LOCAL.sample.entries()].sort((a, b) => a[0] - b[0]).map(([k, a]) => ({
+    cls: k === 1 ? "here" : "",
+    cells: [
+      k === 0 ? "the empty board" : k === 1 ? "a single ring" : k + " rings at once",
+      ENGINE.cluesSatisfied(TRAP.clues, a) ? '<span class="pill good">pass</span>' : '<span class="pill bad">fail</span>',
+      ENGINE.degreesLegal(TRAP.clues, a) ? '<span class="pill good">pass</span>' : '<span class="pill bad">fail</span>',
+      k,
+      k === 1 ? '<span class="pill good">solution</span>' : '<span class="pill bad">rejected</span>',
+      ENGINE.edgesOn(a)
+    ]
+  }));
+  table("tDeg", ["the assignment", "clues", "every vertex 0 or 2", "loops", "Slitherlink says", "segments"], rows);
+}
+
+{
+  const rows = ENGINE.BOARDS.map((B) => {
+    const { R, C } = ENGINE.dims(B.clues);
+    const E = ENGINE.edgeCount(R, C);
+    const { solutions, nodes } = ENGINE.solveAll(B.clues);
+    const brute = Math.pow(2, E);
+    return {
+      cls: solutions.length === 1 ? "here" : "",
+      cells: [B.name, R + "&times;" + C, E, brute.toLocaleString("en-US"),
+        nodes.toLocaleString("en-US"), ((100 * nodes) / brute).toFixed(4) + "%", solutions.length]
+    };
+  });
+  table("tPrune", ["board", "size", "segments", "brute force leaves", "nodes the search touched",
+    "fraction", "solutions"], rows);
+  const worst = Math.max(...ENGINE.BOARDS.map((B) => {
+    const { R, C } = ENGINE.dims(B.clues);
+    return (100 * ENGINE.solveAll(B.clues).nodes) / Math.pow(2, ENGINE.edgeCount(R, C));
+  }));
+  el("pruneNote").innerHTML =
+    "The worst board here still only reaches <b>" + worst.toFixed(4) +
+    "%</b> of the brute-force tree. The prunes are not a micro-optimisation; without them the 3&times;3 boards do not finish.";
+}
+
+el("codeLoop").textContent = String(ENGINE.loopCount);
+el("codeEngine").textContent = [
+  "// the two local tests - each sees one cell, or one corner, and nothing else",
+  String(ENGINE.cluesSatisfied), "", String(ENGINE.degreesLegal), "",
+  "// the global one, which neither of them can reach",
+  String(ENGINE.isSolution), "",
+  "// the search: assign an edge, and close every constraint that edge completes",
+  String(ENGINE.solveAll)
+].join("\n");
+
+el("puzN").addEventListener("input", render);
+el("puzR").addEventListener("input", () => { el("puzN").value = el("puzR").value; render(); });
+render();
+
+// --------------------------------------------------------------- the self-check
+selfCheckPanel((t) => {
+  const B3 = ENGINE.BOARDS[4].clues;
+  const sol3 = ENGINE.solveAll(B3).solutions;
+
+  // --- geometry
+  t("edge numbering is a bijection onto 0..E-1", (() => {
+    for (const [R, C] of [[1, 1], [2, 2], [2, 3], [3, 3]]) {
+      const seen = new Set();
+      for (let r = 0; r <= R; r++) for (let c = 0; c < C; c++) seen.add(ENGINE.hIndex(R, C, r, c));
+      for (let r = 0; r < R; r++) for (let c = 0; c <= C; c++) seen.add(ENGINE.vIndex(R, C, r, c));
+      if (seen.size !== ENGINE.edgeCount(R, C)) return false;
+      if (Math.max(...seen) !== ENGINE.edgeCount(R, C) - 1 || Math.min(...seen) !== 0) return false;
+    }
+    return true;
+  })(), "checked on 1x1, 2x2, 2x3, 3x3");
+
+  t("every cell has exactly 4 distinct edges", (() => {
+    for (const [R, C] of [[2, 2], [3, 3], [2, 4]]) {
+      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+        const es = ENGINE.cellEdges(R, C, r, c);
+        if (new Set(es).size !== 4) return false;
+      }
+    }
+    return true;
+  })());
+
+  t("a vertex has 2, 3 or 4 incident edges - corners, sides, interior", (() => {
+    const R = 3, C = 3, hist = {};
+    for (let r = 0; r <= R; r++) for (let c = 0; c <= C; c++) {
+      const d = ENGINE.vertexEdges(R, C, r, c).length;
+      hist[d] = (hist[d] || 0) + 1;
+    }
+    return hist[2] === 4 && hist[3] === 4 * (C - 1) && hist[4] === (R - 1) * (C - 1);
+  })(), "4 corners of degree 2, 8 sides of degree 3, 4 interior of degree 4");
+
+  t("endpoints() inverts the edge indexing", (() => {
+    const R = 3, C = 3;
+    for (let e = 0; e < ENGINE.edgeCount(R, C); e++) {
+      const [[ar, ac], [br, bc]] = ENGINE.endpoints(R, C, e);
+      const back = (ar === br) ? ENGINE.hIndex(R, C, ar, Math.min(ac, bc))
+                               : ENGINE.vIndex(R, C, Math.min(ar, br), ac);
+      if (back !== e) return false;
+    }
+    return true;
+  })());
+
+  t("edge e touches vertex v if and only if v is one of its endpoints", (() => {
+    const R = 2, C = 3;
+    for (let r = 0; r <= R; r++) for (let c = 0; c <= C; c++) {
+      const inc = new Set(ENGINE.vertexEdges(R, C, r, c));
+      for (let e = 0; e < ENGINE.edgeCount(R, C); e++) {
+        const touches = ENGINE.endpoints(R, C, e).some(([a, b]) => a === r && b === c);
+        if (touches !== inc.has(e)) return false;
+      }
+    }
+    return true;
+  })(), "cross-checked both directions on a 2x3");
+
+  // --- the solutions themselves
+  t("the 3x3 board has exactly one solution", sol3.length === 1,
+    sol3.length + " found");
+
+  t("that solution really is a single closed loop", (() => {
+    if (sol3.length !== 1) return false;
+    return ENGINE.loopCount(B3, sol3[0]) === 1 && ENGINE.edgesOn(sol3[0]) > 0;
+  })(), ENGINE.edgesOn(sol3[0] || []) + " segments");
+
+  t("every vertex on that loop has degree exactly 0 or 2",
+    sol3.length === 1 && ENGINE.degreesLegal(B3, sol3[0]));
+
+  t("every clue on that board is met exactly",
+    sol3.length === 1 && ENGINE.cluesSatisfied(B3, sol3[0]));
+
+  t("a loop has as many vertices of degree 2 as it has segments", (() => {
+    if (sol3.length !== 1) return false;
+    const { R, C } = ENGINE.dims(B3);
+    let two = 0;
+    for (let r = 0; r <= R; r++) for (let c = 0; c <= C; c++) {
+      let d = 0;
+      for (const e of ENGINE.vertexEdges(R, C, r, c)) if (sol3[0][e]) d++;
+      if (d === 2) two++;
+    }
+    return two === ENGINE.edgesOn(sol3[0]);
+  })(), "a closed walk has equal counts of edges and vertices");
+
+  // --- the headline: local tests are not sufficient
+  t("assignments exist that pass BOTH local tests and are NOT solutions",
+    LOCAL.total > (LOCAL.byLoops.get(1) || 0),
+    LOCAL.total + " locally legal, " + (LOCAL.byLoops.get(1) || 0) + " actually a solution");
+
+  t("and the surplus is exactly the multi-loop ones, nothing else", (() => {
+    let multi = 0;
+    for (const [k, v] of LOCAL.byLoops) if (k !== 1) multi += v;
+    return LOCAL.total - (LOCAL.byLoops.get(1) || 0) === multi;
+  })());
+
+  t("CONTROL: the local-only solver would return " +
+    (LOCAL.total - 1) + " wrong boards on this grid",
+    LOCAL.total - (LOCAL.byLoops.get(1) || 0) > 0);
+
+  t("the empty assignment passes both local tests on a board with no 1,2,3 clue", (() => {
+    const blank = [[null, null], [null, null]];
+    const E = ENGINE.edgeCount(2, 2);
+    const off = new Array(E).fill(false);
+    return ENGINE.cluesSatisfied(blank, off) && ENGINE.degreesLegal(blank, off) &&
+           !ENGINE.isSolution(blank, off);
+  })(), "which is why isSolution also demands at least one segment");
+
+  // --- the search against brute force
+  t("the pruned search finds exactly what brute force finds", (() => {
+    const B = ENGINE.BOARDS[0].clues;                  // 2x2, small enough to enumerate
+    const { R, C } = ENGINE.dims(B);
+    const E = ENGINE.edgeCount(R, C);
+    let brute = 0;
+    const on = new Array(E).fill(false);
+    for (let mask = 0; mask < (1 << E); mask++) {
+      for (let e = 0; e < E; e++) on[e] = !!(mask & (1 << e));
+      if (ENGINE.isSolution(B, on)) brute++;
+    }
+    return brute === ENGINE.solveAll(B).solutions.length;
+  })(), "2^12 assignments enumerated directly");
+
+  t("no two solutions of one board are the same edge set", (() => {
+    for (const B of ENGINE.BOARDS) {
+      const sols = ENGINE.solveAll(B.clues).solutions.map((s) => s.join(""));
+      if (new Set(sols).size !== sols.length) return false;
+    }
+    return true;
+  })());
+
+  t("every returned solution passes isSolution independently", (() => {
+    for (const B of ENGINE.BOARDS) {
+      for (const s of ENGINE.solveAll(B.clues).solutions) if (!ENGINE.isSolution(B.clues, s)) return false;
+    }
+    return true;
+  })());
+
+  // --- the census
+  t("the 2x2 census covers all 625 boards", (() => {
+    const C = ENGINE.census2x2();
+    return C.total === 625 && C.none + C.unique + C.many === 625;
+  })());
+
+  t("most 2x2 boards are not puzzles at all", (() => {
+    const C = ENGINE.census2x2();
+    return C.unique < C.none;
+  })(), (() => { const C = ENGINE.census2x2(); return C.unique + " with a unique loop, " + C.none + " with none"; })());
+
+  t("every board the census calls unique really has one solution", (() => {
+    const C = ENGINE.census2x2();
+    for (const clues of C.uniqueBoards.slice(0, 40)) {
+      if (ENGINE.solveAll(clues).solutions.length !== 1) return false;
+    }
+    return true;
+  })(), "first 40 re-solved");
+
+  // --- guards
+  t("a 0 clue forbids all four of its sides", (() => {
+    const B = [[0, null], [null, null]];
+    for (const s of ENGINE.solveAll(B).solutions) {
+      for (const e of ENGINE.cellEdges(2, 2, 0, 0)) if (s[e]) return false;
+    }
+    return true;
+  })());
+
+  t("a board of all zeros has no solution, because a loop needs segments",
+    ENGINE.solveAll([[0, 0], [0, 0]]).solutions.length === 0);
+
+  t("a 4 forces the loop to be that one cell's perimeter and nothing else", (() => {
+    const B = [[4, null], [null, null]];
+    const sols = ENGINE.solveAll(B).solutions;
+    if (sols.length !== 1) return false;
+    const ring = ENGINE.cellEdges(2, 2, 0, 0);
+    return ENGINE.edgesOn(sols[0]) === 4 && ring.every((e) => sols[0][e]);
+  })(), "4 is satisfiable - standard puzzles omit it because it solves itself");
+
+  t("but a 3 alone on a 1x1 board is unsatisfiable - three sides is an open path",
+    ENGINE.solveAll([[3]]).solutions.length === 0 &&
+    ENGINE.solveAll([[4]]).solutions.length === 1,
+    "the only loop a single cell admits is all four of its sides");
+});
+</script>
+</body>
+</html>
